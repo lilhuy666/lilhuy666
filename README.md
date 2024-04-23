@@ -1,21 +1,24 @@
-Если вы получаете ошибку "Could not identify launch activity: Default Activity not found" при попытке запустить приложение в Android Studio, то вам понадобно указать активити, которую нужно запустить при старте приложения.
+Для создания приложения "Счастливый билет" вам необходимо добавить в файл AndroidManifest.xml две активити, одна из которых будет отображать результат проверки билета, а другая будет предоставлять интерфейс для ввода номера билета. 
 
-1. Убедитесь, что у вас есть активити, которая должна быть запущена при старте приложения. Если у вас нет активити, которая должна быть стартовой, то создайте новую или выберите одну из уже существующих активити.
+Пример кода для добавления двух активити в AndroidManifest.xml:
 
-2. Откройте файл AndroidManifest.xml в вашем проекте в Android Studio.
+```xml
+<application
+    ...
+    >
+    <activity android:name=".MainActivity">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent-filter>
+    </activity>
+    
+    <activity android:name=".TicketCheckActivity"/>
+</application>
+```
 
-3. Найдите нужную активити и добавьте к ней intent filter, чтобы указать, что она является лаунчер активити. Пример:
+В этом примере предполагается, что MainActivity будет активностью, запускаемой при старте приложения, а TicketCheckActivity будет активностью, отображающей результат проверки билета. 
 
-<activity android:name=".YourLauncherActivity">
-    <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-    </intent-filter>
-</activity>
+Помимо этого, вам также понадобится создать layout файлы для обеих активити (activity_main.xml и activity_ticket_check.xml) и написать соответствующий Java (или Kotlin) код для обработки логики вашего приложения "Счастливый билет". 
 
-
-4. Убедитесь, что вы правильно указали имя вашей активити в атрибуте android:name и заменили "YourLauncherActivity" на имя вашей активити.
-
-5. Сохраните изменения в файле AndroidManifest.xml.
-
-После этого попробуйте перезапустить приложение в Android Studio. Теперь ваше приложение должно успешно запуститься без ошибки "Default Activity not found".
+Пожалуйста, убедитесь, что соответствующие layout файлы и классы активити также созданы и правильно настроены в вашем проекте.
