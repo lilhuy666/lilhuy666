@@ -1,60 +1,76 @@
-Конечно, вот пример кода для приложения Android Studio, которое определяет, является ли введенный пользователем номер билета счастливым:
+Вот пример кода на Kotlin и макета разметки XML для решения этой задачи в Android Studio:
 
-<!-- activity_main.xml -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+1. Создайте макет разметки в файле activity_main.xml следующим образом:
+
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    tools:context=".MainActivity">
 
     <EditText
-        android:id="@+id/editText"
+        android:id="@+id/editTextTicketNumber"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Введите номер билета" />
+        android:hint="Введите 6 цифр"
+        android:inputType="number"/>
 
     <Button
-        android:id="@+id/button"
+        android:id="@+id/buttonCheckTicket"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Проверить" />
-
+        android:layout_below="@id/editTextTicketNumber"
+        android:text="Проверить билет"/>
+    
     <TextView
-        android:id="@+id/textView"
-        android:layout_width="match_parent"
+        android:id="@+id/textViewResult"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Результат проверки" />
+        android:layout_below="@id/buttonCheckTicket"
+        android:layout_centerHorizontal="true"/>
+</RelativeLayout>
 
-</LinearLayout>
 
+2. В вашем файле MainActivity.kt добавьте следующий код:
 
-// MainActivity.kt
 import android.os.Bundle
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import kotlinx.android.synthetic.main.activity_main.*
 
 class MainActivity : AppCompatActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        button.setOnClickListener {
-            val ticketNumber = editText.text.toString()
+        val editTextTicketNumber = findViewById<EditText>(R.id.editTextTicketNumber)
+        val buttonCheckTicket = findViewById<Button>(R.id.buttonCheckTicket)
+        val textViewResult = findViewById<TextView>(R.id.textViewResult)
 
-            val numbers = ticketNumber.map { it.toString().toInt() }
-            val middleIndex = numbers.size / 2
+        buttonCheckTicket.setOnClickListener {
+            val input = editTextTicketNumber.text.toString()
 
-            val firstHalfSum = numbers.take(middleIndex).sum()
-            val secondHalfSum = numbers.drop(middleIndex).sum()
+            if (input.length == 6) {
+                val firstHalf = input.substring(0, 3)
+                val secondHalf = input.substring(3)
 
-            if (firstHalfSum == secondHalfSum) {
-                textView.text = "Это счастливый билет!"
+                val sumFirstHalf = firstHalf.map { it.toString().toInt() }.sum()
+                val sumSecondHalf = secondHalf.map { it.toString().toInt() }.sum()
+
+                if (sumFirstHalf == sumSecondHalf) {
+                    textViewResult.text = "Билет счастливый!"
+                } else {
+                    textViewResult.text = "Билет не счастливый."
+                }
             } else {
-                textView.text = "Это обычный билет :("
+                textViewResult.text = "Некорректный ввод."
             }
         }
     }
 }
 
 
-Не забудьте добавить зависимости и импорты в свой проект. Данный код позволит пользователю ввести номер билета в EditText, нажать на кнопку "Проверить", и затем отобразит результат проверки в TextView. Пожалуйста, дайте знать, если вам нужна любая дополнительная помощь!
+Этот код позволяет пользователю ввести номер билета, после чего проверяет его на счастливость (сумма первых трех цифр равна сумме оставшихся трех цифр).
+
+Убедитесь, что у вас есть корректный макет разметки и код MainActivity, затем запустите приложение в Android Studio.
