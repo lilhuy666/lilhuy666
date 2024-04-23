@@ -1,23 +1,12 @@
 fun main() {
-    val ticketNumber = "123456"
+    val ticketNumber = "123321"
 
-    if (isTicketHappy(ticketNumber)) {
+    val firstHalfSum = ticketNumber.substring(0, 3).map { it.toString().toInt() }.sum()
+    val secondHalfSum = ticketNumber.substring(3).map { it.toString().toInt() }.sum()
+
+    if (firstHalfSum == secondHalfSum) {
         println("Это счастливый билет!")
     } else {
         println("Это обычный билет :(")
     }
-}
-
-fun isTicketHappy(ticketNumber: String): Boolean {
-    if (ticketNumber.length != 6) {
-        return false
-    }
-
-    val firstHalf = ticketNumber.substring(0, 3)
-    val secondHalf = ticketNumber.substring(3)
-
-    val sumFirstHalf = firstHalf.toCharArray().map { it.toString().toInt() }.sum()
-    val sumSecondHalf = secondHalf.toCharArray().map { it.toString().toInt() }.sum()
-
-    return sumFirstHalf == sumSecondHalf
 }
