@@ -1,8 +1,10 @@
 fun main() {
     val ticketNumber = "123321"
+    val firstHalf = ticketNumber.substring(0, 3).toList().map { it.toString().toInt() }
+    val secondHalf = ticketNumber.substring(3).toList().map { it.toString().toInt() }
 
-    val firstHalfSum = ticketNumber.substring(0, 3).map { it.toString().toInt() }.sum()
-    val secondHalfSum = ticketNumber.substring(3).map { it.toString().toInt() }.sum()
+    val firstHalfSum = firstHalf.sum()
+    val secondHalfSum = secondHalf.sum()
 
     if (firstHalfSum == secondHalfSum) {
         println("Это счастливый билет!")
