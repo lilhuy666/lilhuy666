@@ -1,67 +1,61 @@
-Пример решения задачи на Java с использованием рекурсии и ввода двумерного массива из консоли:
+Пример решения задачи на Java с использованием рекурсии для определения количества городов:
 
 import java.util.Scanner;
 
-public class SettlementsGraph {
-
-    private static int[][] graph;
-    private static boolean[] visited;
-    private static int settlements;
-    private static int cities;
-
+public class Main {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-
-        // Вводим количество поселков и городов
-        System.out.print("Введите количество поселков: ");
-        settlements = scanner.nextInt();
-        System.out.print("Введите количество городов: ");
-        cities = scanner.nextInt();
-
-        // Создаем граф для поселков и городов
-        graph = new int[settlements + cities][settlements + cities];
-        visited = new boolean[settlements + cities];
-
-        // Вводим информацию о дорогах
-        System.out.println("Введите информацию о дорогах:");
-        for (int i = 0; i < cities; i++) {
-            int settlement = scanner.nextInt();
-            int city = scanner.nextInt();
-            graph[settlement][city] = 1;
-        }
-
-        // Поиск одиночного города
-        boolean found = false;
-        for (int i = 0; i < cities; i++) {
-            if (hasNoOutgoingRoad(i)) {
-                System.out.println("Ответ: " + i);
-                found = true;
-                break;
+        
+        System.out.print("Введите количество поселков и городов: ");
+        int numPoints = scanner.nextInt();
+        
+        int[][] roads = new int[numPoints][numPoints];
+        
+        System.out.println("Введите данные о дорогах:");
+        for (int i = 0; i < numPoints; i++) {
+            for (int j = 0; j < numPoints; j++) {
+                roads[i][j] = scanner.nextInt();
             }
         }
-
-        if (!found) {
-            System.out.println("Ответ: -1");
+        
+        int numCities = countCities(roads, numPoints);
+        
+        System.out.println("Количество городов: " + numCities);
+    }
+    
+    public static int countCities(int[][] roads, int numPoints) {
+        boolean[] visited = new boolean[numPoints];
+        int numCities = 0;
+        
+        for (int i = 0; i < numPoints; i++) {
+            if (!visited[i]) {
+                numCities++;
+                exploreCities(roads, visited, numPoints, i);
+            }
+        }
+        
+        if (numCities == 1) {
+            return -1;
+        } else {
+            return numCities;
         }
     }
-
-    private static boolean hasNoOutgoingRoad(int node) {
-        visited[node] = true;
-
-        for (int i = 0; i < cities + settlements; i++) {
-            if (graph[node][i] == 1 && !visited[i]) {
-                return false;
+    
+    public static void exploreCities(int[][] roads, boolean[] visited, int numPoints, int point) {
+        visited[point] = true;
+        
+        for (int i = 0; i < numPoints; i++) {
+            if (roads[point][i] == 1 && !visited[i]) {
+                exploreCities(roads, visited, numPoints, i);
             }
         }
-
-        return true;
     }
 }
 
 
 Объяснение:
-- Пользователь вводит количество поселков и городов.
-- Далее вводится информация о дорогах, где каждый ввод представляет собой связь между поселком и городом.
-- В программе используется рекурсивная функция hasNoOutgoingRoad, которая проверяет отсутствие исходящей дороги из заданной точки.
-- После проверки всех городов определяется одиночный город (если таковой есть), если же такого города нет, выводится -1.
-- Решение позволяет определить ситуацию, когда все поселки соединены со всеми городами однонаправленными дорогами, за исключением одного изолированного города.
+- В данном примере мы сначала вводим количество поселков и городов через консоль.
+- Затем пользователь вводит информацию о дорогах между каждой парой поселков и городов.
+- Функция countCities определяет количество городов, путем исследования соединений между точками с помощью рекурсивной функции exploreCities.
+- Если количество городов равно 1, то программа выводит "Количество городов: -1", иначе выводится фактическое количество городов.
+- После выполнения программы пользователь получает информацию о количестве городов в зависимости от соединений по данным дорогам.
