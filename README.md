@@ -1,36 +1,37 @@
-```xml
-<RelativeLayout>
-    <EditText
-        android:id="@+id/editText1"/>
-    <EditText
-        android:id="@+id/editText2"/>
-    <EditText
-        android:id="@+id/editText3"/>
-    <EditText
-        android:id="@+id/editText4"/>
-    <EditText
-        android:id="@+id/editText5"/>
-    <Button
-        android:id="@+id/btnSubmit"/>
-</RelativeLayout>
-```
+Вот простой пример реализации паттерна "Observer" на Java:
 
-activitysecond.xml:
+import java.util.Observable;
+import java.util.Observer;
 
-<RelativeLayout>
-    <TextView
-        android:id="@+id/textView1"/>
-    <TextView
-        android:id="@+id/textView2"/>
-    <TextView
-        android:id="@+id/textView3"/>
-    <TextView
-        android:id="@+id/textView4"/>
-    <TextView
-        android:id="@+id/textView5"/>
-    <Button
-        android:id="@+id/btnBack"/>
-</RelativeLayout>
+// Наблюдаемый объект
+class ObservableObject extends Observable {
+    private String message;
 
+    public String getMessage() {
+        return message;
+    }
 
-Этот код создает две активности - MainActivity и SecondActivity. Пользователь вводит значения в EditText на MainActivity, нажимает на кнопку Submit, данные передаются в виде JSON объекта на SecondActivity, где они выводятся в TextView. На SecondActivity есть кнопка Back, которая возвращает пользователя на MainActivity с введенными ранее данными.
+    public void setMessage(String message) {
+        this.message = message;
+        setChanged();
+        notifyObservers(message);
+    }
+}
+
+// Наблюдатель
+class ObserverExample implements Observer {
+    @Override
+    public void update(Observable o, Object arg) {
+        System.out.println("Received update: " + arg);
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        ObservableObject observable = new ObservableObject();
+        ObserverExample observer = new ObserverExample();
+
+        observable.addObserver(observer);
+        observable.setMessage("Hello, World!");
+    }
+}
