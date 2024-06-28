@@ -1,61 +1,49 @@
-Пример решения задачи на Java с использованием рекурсии для определения количества городов:
-
 import java.util.Scanner;
 
-public class Main {
+public class SettlementsGraph {
+
+    private static int[][] graph;
+    private static boolean[] visited;
+
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        
-        System.out.print("Введите количество поселков и городов: ");
-        int numPoints = scanner.nextInt();
-        
-        int[][] roads = new int[numPoints][numPoints];
-        
-        System.out.println("Введите данные о дорогах:");
-        for (int i = 0; i < numPoints; i++) {
-            for (int j = 0; j < numPoints; j++) {
-                roads[i][j] = scanner.nextInt();
-            }
+
+        // Вводим количество поселков и дорог
+        System.out.print("Введите количество поселков: ");
+        int settlements = scanner.nextInt();
+        System.out.print("Введите количество дорог: ");
+        int roads = scanner.nextInt();
+
+        graph = new int[settlements][settlements];
+        visited = new boolean[settlements];
+
+        // Вводим информацию о дорогах
+        System.out.println("Введите информацию о дорогах:");
+        for (int i = 0; i < roads; i++) {
+            int from = scanner.nextInt();
+            int to = scanner.nextInt();
+            graph[from][to] = 1;
         }
-        
-        int numCities = countCities(roads, numPoints);
-        
-        System.out.println("Количество городов: " + numCities);
-    }
-    
-    public static int countCities(int[][] roads, int numPoints) {
-        boolean[] visited = new boolean[numPoints];
-        int numCities = 0;
-        
-        for (int i = 0; i < numPoints; i++) {
+
+        // Выполняем поиск для определения одиночного города
+        for (int i = 0; i < settlements; i++) {
             if (!visited[i]) {
-                numCities++;
-                exploreCities(roads, visited, numPoints, i);
+                if (!hasAdjacent(i)) {
+                    System.out.println("Ответ: " + i);
+                    return;
+                }
             }
         }
-        
-        if (numCities == 1) {
-            return -1;
-        } else {
-            return numCities;
-        }
+        System.out.println("Ответ: -1");
     }
-    
-    public static void exploreCities(int[][] roads, boolean[] visited, int numPoints, int point) {
-        visited[point] = true;
-        
-        for (int i = 0; i < numPoints; i++) {
-            if (roads[point][i] == 1 && !visited[i]) {
-                exploreCities(roads, visited, numPoints, i);
+
+    private static boolean hasAdjacent(int settlement) {
+        visited[settlement] = true;
+        for (int i = 0; i < graph[settlement].length; i++) {
+            if (graph[settlement][i] == 1 && !visited[i]) {
+                return true;
             }
         }
+        return false;
     }
 }
-
-
-Объяснение:
-- В данном примере мы сначала вводим количество поселков и городов через консоль.
-- Затем пользователь вводит информацию о дорогах между каждой парой поселков и городов.
-- Функция countCities определяет количество городов, путем исследования соединений между точками с помощью рекурсивной функции exploreCities.
-- Если количество городов равно 1, то программа выводит "Количество городов: -1", иначе выводится фактическое количество городов.
-- После выполнения программы пользователь получает информацию о количестве городов в зависимости от соединений по данным дорогам.
