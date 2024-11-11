@@ -1,69 +1,181 @@
-Для создания инструментированных тестов в Android вы можете использовать фреймворк Espresso, который позволяет писать тесты пользовательского интерфейса. Ниже приведён пример кода для запуска инструментированного теста в вашем приложении.
-
-### Пример инструментарного теста с использованием Espresso
-
-Создайте новый класс теста в каталоге src/androidTest/java/ваш_пакет/:
-
-package com.example.raspisanieurokov; // Замените на ваш пакет
-
-import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.test.rule.ActivityTestRule;
-
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-
-import static androidx.test.espresso.Espresso.onView;
-import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.action.ViewActions.typeText;
-import static androidx.test.espresso.assertion.ViewAssertions.matches;
-import static androidx.test.espresso.matcher.ViewMatchers.withId;
-import static androidx.test.espresso.matcher.ViewMatchers.withText;
-
-@RunWith(AndroidJUnit4.class)
-public class ExampleInstrumentedTest {
-
-    @Rule
-    public ActivityTestRule<MainActivity> activityRule =
-            new ActivityTestRule<>(MainActivity.class);
-
-    @Test
-    public void testButtonClick() {
-        // Ввод текста в EditText
-        onView(withId(R.id.editTextName)) // Замените на ID вашего EditText
-                .perform(typeText("Hello, World!"));
-
-        // Нажатие на кнопку
-        onView(withId(R.id.buttonSubmit)) // Замените на ID вашей кнопки
-                .perform(click());
-
-        // Проверка текста на TextView
-        onView(withId(R.id.textViewResult)) // Замените на ID вашего TextView
-                .check(matches(withText("Hello, World!"))); // Ожидаемый результат
-    }
-}
-
-
-### Описание кода:
-
-1. Импорт необходимых классов: Импортируются классы, необходимые для написания теста и использования Espresso.
-
-2. Анотация @RunWith: Указывает, что тест будет запускаться с использованием JUnit4.
-
-3. ActivityTestRule: Это специальный класс, который управляет жизненным циклом активности, позволяя запускать тесты в контексте MainActivity.
-
-4. Тест: 
-   - onView(withId(R.id.editTextName)): Находит элемент EditText по его ID и вводит текст "Hello, World!".
-   - onView(withId(R.id.buttonSubmit)): Находит кнопку по её ID и выполняет клик.
-   - onView(withId(R.id.textViewResult)): Находит элемент TextView и проверяет, соответствует ли его текст ожидаемому.
-
-### Замечания:
-
-- Не забудьте заменить R.id.editTextName, R.id.buttonSubmit и R.id.textViewResult на реальные идентификаторы ваших элементов пользовательского интерфейса.
-- Убедитесь, что у вас установлены необходимые зависимости для Espresso в вашем файле build.gradle:
-  
-androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
-androidTestImplementation 'androidx.test.ext:junit:1.1.3'
-
-
-Этот пример является базовым и может быть адаптирован в зависимости от функциональности вашего приложения.
+<!--?xml
+02.
+version="1.0" encoding="utf-8"?-->
+03.
+<android.support.design.widget.coordinatorlayout
+04.
+xmlns:android="http://schemas.android.com/apk/res/android"
+05.
+xmlns:app="http://schemas.android.com/apk/res-auto"
+06.
+xmlns:tools="http://schemas.android.com/tools"
+07.
+android:id="@+id/main_content"
+08.
+android:layout_width="match_parent"
+09.
+android:layout_height="match_parent"
+10.
+android:fitssystemwindows="true"
+11.
+tools:context="ru.maxfad.myraspisanie.Main11Activity">
+12.
+ 
+13.
+<android.support.design.widget.appbarlayout
+14.
+android:id="@+id/appbar"
+15.
+android:layout_width="match_parent"
+16.
+android:layout_height="wrap_content"
+17.
+android:paddingtop="@dimen/appbar_padding_top"
+18.
+android:theme="@style/AppTheme.AppBarOverlay">
+19.
+ 
+20.
+<android.support.v7.widget.toolbar
+21.
+android:id="@+id/toolbar"
+22.
+android:layout_width="match_parent"
+23.
+android:layout_height="?attr/actionBarSize"
+24.
+android:layout_weight="1"
+25.
+android:background="?attr/colorPrimary"
+26.
+app:layout_scrollflags="scroll|enterAlways"
+27.
+app:popuptheme="@style/AppTheme.PopupOverlay"
+28.
+app:title="@string/app_name">
+29.
+ 
+30.
+</android.support.v7.widget.toolbar>
+31.
+ 
+32.
+<android.support.design.widget.tablayout
+33.
+android:id="@+id/tabs"
+34.
+android:layout_width="match_parent"
+35.
+android:layout_height="wrap_content">
+36.
+ 
+37.
+<android.support.design.widget.tabitem
+38.
+android:id="@+id/tabItem"
+39.
+android:layout_width="wrap_content"
+40.
+android:layout_height="wrap_content"
+41.
+android:text="@string/tab_text_1">
+42.
+ 
+43.
+<android.support.design.widget.tabitem
+44.
+android:id="@+id/tabItem2"
+45.
+android:layout_width="wrap_content"
+46.
+android:layout_height="wrap_content"
+47.
+android:text="@string/tab_text_2">
+48.
+ 
+49.
+<android.support.design.widget.tabitem
+50.
+android:id="@+id/tabItem3"
+51.
+android:layout_width="wrap_content"
+52.
+android:layout_height="wrap_content"
+53.
+android:text="@string/tab_text_3">
+54.
+ 
+55.
+<android.support.design.widget.tabitem
+56.
+android:id="@+id/tabItem4"
+57.
+android:layout_width="wrap_content"
+58.
+android:layout_height="wrap_content"
+59.
+android:text="@string/tab_text_4">
+60.
+ 
+61.
+<android.support.design.widget.tabitem
+62.
+android:id="@+id/tabItem5"
+63.
+android:layout_width="wrap_content"
+64.
+android:layout_height="wrap_content"
+65.
+android:text="@string/tab_text_5">
+66.
+ 
+67.
+</android.support.design.widget.tabitem>
+68.
+</android.support.design.widget.tabitem>
+69.
+</android.support.design.widget.tabitem>
+70.
+</android.support.design.widget.tabitem>
+71.
+</android.support.design.widget.tabitem>
+72.
+</android.support.design.widget.tablayout>
+73.
+</android.support.design.widget.appbarlayout>
+74.
+ 
+75.
+<android.support.v4.view.viewpager
+76.
+android:id="@+id/container"
+77.
+android:layout_width="match_parent"
+78.
+android:layout_height="match_parent"
+79.
+app:layout_behavior="@string/appbar_scrolling_view_behavior">
+80.
+ 
+81.
+<android.support.design.widget.floatingactionbutton
+82.
+android:id="@+id/fab"
+83.
+android:layout_width="wrap_content"
+84.
+android:layout_height="wrap_content"
+85.
+android:layout_gravity="end|bottom"
+86.
+android:layout_margin="@dimen/fab_margin"
+87.
+app:srccompat="@android:drawable/ic_dialog_email">
+88.
+ 
+89.
+</android.support.design.widget.floatingactionbutton>
+90.
+</android.support.v4.view.viewpager>
+91.
+</android.support.design.widget.coordinatorlayout>
