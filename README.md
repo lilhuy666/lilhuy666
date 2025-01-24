@@ -1,33 +1,36 @@
- int numPeople1 = -1;
-        while (numPeople1 > 50)
-        while (numPeople1 < 0) {
-            System.out.print("kollichestvo lud 1 avtobusa: ");
-            try {
-                numPeople1 = Integer.parseInt(scanner.nextLine());
-                if (numPeople1 > 50)
-                if (numPeople1 < 0) {
-                    System.out.println("ne mojet bit otricatelnim");
-                }
-            } catch (NumberFormatException e) {
-                System.out.println("Oshibka!!!");
-            }
-        }
-        bus1.occupySeats(numPeople1);
+ ▎ Ограничение ввода
 
-        // Вводим количество людей для второго автобуса
-        int numPeople2 = -1;
-        while (numPeople2 < 0) {
-            System.out.print("kollichestvo lud 1 avtobusa: ");
-            try {
-                numPeople2 = Integer.parseInt(scanner.nextLine());
-                if (numPeople2 < 0) {
-                    System.out.println("ne mojet bit otricatelnim");
-                }
-            } catch (NumberFormatException e) {
-                System.out.println("Oshibka!!!");
-            }
-        }
-        bus2.occupySeats(numPeople2);
+Чтобы ограничить пользователя вводить количество мест не больше 50, необходимо добавить проверку после считывания данных. Если введенное число превышает 50, программа должна сообщать об ошибке и запрашивать ввод снова. Вот обновленный код:
+
+import java.util.Scanner;
+
+public class TouristBus {
+    private int totalSeats; // Общее количество мест
+    private double seatPrice; // Стоимость одного места
+    private int occupiedSeats; // Занятые места
+
+    // Конструктор по умолчанию
+    public TouristBus() {
+        this(50, 100.0); // Значения по умолчанию
+    }
+
+    // Конструктор с параметрами
+    public TouristBus(int totalSeats, double seatPrice) {
+        this.totalSeats = totalSeats;
+        this.seatPrice = seatPrice;
+        this.occupiedSeats = 0; // Автобус изначально пуст
+    }
+
+    // Конструктор копирования
+    public TouristBus(TouristBus bus) {
+        this.totalSeats = bus.totalSeats;
+        this.seatPrice = bus.seatPrice;
+        this.occupiedSeats = bus.occupiedSeats;
+    }
+
+    // Метод для занятия мест
+    public void occupySeats(int seats) {
+        if (occupiedSeats + seats <= totalSeats) {
             occupiedSeats += seats;
         }
     }
@@ -66,12 +69,14 @@
 
         // Вводим количество людей для первого автобуса
         int numPeople1 = -1;
-        while (numPeople1 < 0) {
-            System.out.print("Введите количество людей для первого автобуса: ");
+        while (numPeople1 < 0 || numPeople1 > 50) {
+            System.out.print("Введите количество людей для первого автобуса (макс. 50): ");
             try {
                 numPeople1 = Integer.parseInt(scanner.nextLine());
                 if (numPeople1 < 0) {
                     System.out.println("Количество людей не может быть отрицательным. Пожалуйста, попробуйте снова.");
+                } else if (numPeople1 > 50) {
+                    System.out.println("Количество людей не может превышать 50. Пожалуйста, попробуйте снова.");
                 }
             } catch (NumberFormatException e) {
                 System.out.println("Ошибка: введите целое число.");
@@ -81,12 +86,14 @@
 
         // Вводим количество людей для второго автобуса
         int numPeople2 = -1;
-        while (numPeople2 < 0) {
-            System.out.print("Введите количество людей для второго автобуса: ");
+        while (numPeople2 < 0 || numPeople2 > 50) {
+            System.out.print("Введите количество людей для второго автобуса (макс. 50): ");
             try {
                 numPeople2 = Integer.parseInt(scanner.nextLine());
                 if (numPeople2 < 0) {
                     System.out.println("Количество людей не может быть отрицательным. Пожалуйста, попробуйте снова.");
+                } else if (numPeople2 > 50) {
+                    System.out.println("Количество людей не может превышать 50. Пожалуйста, попробуйте снова.");
                 }
             } catch (NumberFormatException e) {
                 System.out.println("Ошибка: введите целое число.");
@@ -99,14 +106,3 @@
         System.out.println("Цена за поездку для первой группы: " + bus1.calculateTotalCost());
 
         System.out.println("Свободные места во втором автобусе: " + bus2.getFreeSeats());
-        System.out.println("Цена за поездку для второй группы: " + bus2.calculateTotalCost());
-
-        scanner.close();
-    }
-}
-
-
-▎ Изменения в коде
-
-1. Добавлены циклы while для повторного запроса ввода, если введены некорректные данные.
-2. Используется try-catch блок для обработки исключений, выбрасываемых при неверном формате ввода (например, когда вводятся буквы).
