@@ -1,6 +1,6 @@
-▎ Класс «Туристический автобус»
+▎ Обработка ввода
 
-Вот реализация класса «туристический автобус» с добавлением необходимой логики для создания объектов и ввода данных с клавиатуры:
+Для того чтобы обрабатывать ошибочные входные данные (например, когда вводятся буквы вместо чисел), можно использовать цикл и блок try-catch. Внесем изменения в код:
 
 import java.util.Scanner;
 
@@ -60,13 +60,6 @@ public class TouristBus {
         return occupiedSeats * seatPrice;
     }
 
-    // Метод для установки количества занятых мест
-    public void setOccupiedSeats(int seats) {
-        if (seats <= totalSeats) {
-            occupiedSeats = seats;
-        }
-    }
-
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
@@ -74,13 +67,34 @@ public class TouristBus {
         TouristBus bus1 = new TouristBus(50, 500);
         TouristBus bus2 = new TouristBus(50, 600);
 
-        // Вводим количество людей для каждого автобуса
-        System.out.print("Введите количество людей для первого автобуса: ");
-        int numPeople1 = scanner.nextInt();
+        // Вводим количество людей для первого автобуса
+        int numPeople1 = -1;
+        while (numPeople1 < 0) {
+            System.out.print("Введите количество людей для первого автобуса: ");
+            try {
+                numPeople1 = Integer.parseInt(scanner.nextLine());
+                if (numPeople1 < 0) {
+                    System.out.println("Количество людей не может быть отрицательным. Пожалуйста, попробуйте снова.");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Ошибка: введите целое число.");
+            }
+        }
         bus1.occupySeats(numPeople1);
 
-        System.out.print("Введите количество людей для второго автобуса: ");
-        int numPeople2 = scanner.nextInt();
+        // Вводим количество людей для второго автобуса
+        int numPeople2 = -1;
+        while (numPeople2 < 0) {
+            System.out.print("Введите количество людей для второго автобуса: ");
+            try {
+                numPeople2 = Integer.parseInt(scanner.nextLine());
+                if (numPeople2 < 0) {
+                    System.out.println("Количество людей не может быть отрицательным. Пожалуйста, попробуйте снова.");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Ошибка: введите целое число.");
+            }
+        }
         bus2.occupySeats(numPeople2);
 
         // Выводим количество оставшихся свободных мест и цену за поездку
@@ -95,9 +109,7 @@ public class TouristBus {
 }
 
 
-В этой реализации:
+▎ Изменения в коде
 
-1. Создан класс TouristBus с необходимыми конструкторами и методами.
-2. В методе main() создаются два объекта автобусов с заданными ценами.
-3. Считывается количество людей для каждого автобуса.
-4. Выводится количество свободных мест и стоимость поездки для групп туристов.
+1. Добавлены циклы while для повторного запроса ввода, если введены некорректные данные.
+2. Используется try-catch блок для обработки исключений, выбрасываемых при неверном формате ввода (например, когда вводятся буквы).
