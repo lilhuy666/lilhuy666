@@ -1,36 +1,33 @@
-▎ Обработка ввода
+ int numPeople1 = -1;
+        while (numPeople1 > 50)
+        while (numPeople1 < 0) {
+            System.out.print("kollichestvo lud 1 avtobusa: ");
+            try {
+                numPeople1 = Integer.parseInt(scanner.nextLine());
+                if (numPeople1 > 50)
+                if (numPeople1 < 0) {
+                    System.out.println("ne mojet bit otricatelnim");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Oshibka!!!");
+            }
+        }
+        bus1.occupySeats(numPeople1);
 
-Для того чтобы обрабатывать ошибочные входные данные (например, когда вводятся буквы вместо чисел), можно использовать цикл и блок try-catch. Внесем изменения в код:
-
-import java.util.Scanner;
-
-public class TouristBus {
-    private int totalSeats; // Общее количество мест
-    private double seatPrice; // Стоимость одного места
-    private int occupiedSeats; // Занятые места
-
-    // Конструктор по умолчанию
-    public TouristBus() {
-        this(50, 100.0); // Значения по умолчанию
-    }
-
-    // Конструктор с параметрами
-    public TouristBus(int totalSeats, double seatPrice) {
-        this.totalSeats = totalSeats;
-        this.seatPrice = seatPrice;
-        this.occupiedSeats = 0; // Автобус изначально пуст
-    }
-
-    // Конструктор копирования
-    public TouristBus(TouristBus bus) {
-        this.totalSeats = bus.totalSeats;
-        this.seatPrice = bus.seatPrice;
-        this.occupiedSeats = bus.occupiedSeats;
-    }
-
-    // Метод для занятия мест
-    public void occupySeats(int seats) {
-        if (occupiedSeats + seats <= totalSeats) {
+        // Вводим количество людей для второго автобуса
+        int numPeople2 = -1;
+        while (numPeople2 < 0) {
+            System.out.print("kollichestvo lud 1 avtobusa: ");
+            try {
+                numPeople2 = Integer.parseInt(scanner.nextLine());
+                if (numPeople2 < 0) {
+                    System.out.println("ne mojet bit otricatelnim");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Oshibka!!!");
+            }
+        }
+        bus2.occupySeats(numPeople2);
             occupiedSeats += seats;
         }
     }
