@@ -1,77 +1,58 @@
-<!--?xml version="1.0" encoding="utf-8"?-->
-<android.support.constraint.constraintlayout
-xmlns:android="http://schemas.android.com/apk/res/android"
-xmlns:app="http://schemas.android.com/apk/res-auto"
-xmlns:tools="http://schemas.android.com/tools"
-android:layout_width="match_parent"
-android:layout_height="match_parent"
-tools:context="ru.maxfad.myraspisanie.MainActivity">
+▎ Класс «Туристический автобус»
 
-<relativelayout
-android:layout_width="match_parent"
-android:layout_height="match_parent">
+Вот более интересная версия реализации класса, описывающего сущность «туристический автобус» на языке Java. Я добавил несколько дополнительных методов и комментариев для улучшения функциональности и читаемости кода:
 
-<button
-android:id="@+id/button11"
-android:layout_width="wrap_content"
-android:layout_height="wrap_content"
-android:layout_alignparentstart="true"
-android:layout_alignparenttop="true"
-android:layout_marginstart="15dp"
-android:layout_margintop="134dp"
-android:text="@string/button11"
-tools:layout_editor_absolutex="7dp"
-tools:layout_editor_absolutey="131dp"></button>
+public class TouristBus {
+    private int totalSeats; // Общее количество мест
+    private double seatPrice; // Стоимость одного места
+    private int occupiedSeats; // Количество занятых мест
 
-<button
-android:id="@+id/button10"
-android:layout_width="wrap_content"
-android:layout_height="wrap_content"
-android:layout_alignbaseline="@+id/button11"
-android:layout_alignbottom="@+id/button11"
-android:layout_marginstart="22dp"
-android:layout_toendof="@+id/button11"
-android:text="@string/button10"
-tools:layout_editor_absolutex="0dp"
-tools:layout_editor_absolutey="0dp"></button>
+    // Конструктор по умолчанию
+    public TouristBus() {
+        this.totalSeats = 50; // Предположим, что по умолчанию 50 мест
+        this.seatPrice = 100.0; // Предположим, что стоимость одного места 100
+        this.occupiedSeats = 0; // Изначально автобус пуст
+    }
 
-<button
-android:id="@+id/button9"
-android:layout_width="wrap_content"
-android:layout_height="wrap_content"
-android:layout_alignbaseline="@+id/button10"
-android:layout_alignbottom="@+id/button10"
-android:layout_marginstart="21dp"
-android:layout_toendof="@+id/button10"
-android:text="@string/button9"></button>
+    // Конструктор с параметрами
+    public TouristBus(int totalSeats, double seatPrice) {
+        this.totalSeats = totalSeats;
+        this.seatPrice = seatPrice;
+        this.occupiedSeats = 0; // Изначально автобус пуст
+    }
 
-<button
-android:id="@+id/button8"
-android:layout_width="wrap_content"
-android:layout_height="wrap_content"
-android:layout_alignstart="@+id/button11"
-android:layout_below="@+id/button11"
-android:layout_margintop="38dp"
-android:text="@string/button8"></button>
+    // Конструктор копирования
+    public TouristBus(TouristBus bus) {
+        this.totalSeats = bus.totalSeats;
+        this.seatPrice = bus.seatPrice;
+        this.occupiedSeats = bus.occupiedSeats;
+    }
 
-<button
-android:id="@+id/button7"
-android:layout_width="wrap_content"
-android:layout_height="wrap_content"
-android:layout_alignbaseline="@+id/button8"
-android:layout_alignbottom="@+id/button8"
-android:layout_alignstart="@+id/button10"
-android:text="@string/button7"></button>
+    // Метод для изменения количества занятых мест
+    public void occupySeats(int seats) {
+        if (occupiedSeats + seats <= totalSeats) {
+            occupiedSeats += seats;
+            System.out.println(seats + " seats occupied. Total occupied: " + occupiedSeats);
+        } else {
+            System.out.println("Недостаточно свободных мест!");
+        }
+    }
 
-<button
-android:id="@+id/button6"
-android:layout_width="wrap_content"
-android:layout_height="wrap_content"
-android:layout_alignbaseline="@+id/button7"
-android:layout_alignbottom="@+id/button7"
-android:layout_alignstart="@+id/button9"
-android:text="@string/button6"></button>
+    // Метод для освобождения мест
+    public void freeSeats(int seats) {
+        if (occupiedSeats - seats >= 0) {
+            occupiedSeats -= seats;
+            System.out.println(seats + " seats freed. Total occupied: " + occupiedSeats);
+        } else {
+            System.out.println("Невозможно освободить больше мест, чем занято!");
+        }
+    }
 
-</relativelayout>
+    // Метод для получения количества занятых мест
+    public int getOccupiedSeats() {
+        return occupiedSeats;
+    }
 
-</android.support.constraint.constraintlayout>
+    // Метод для получения количества свободных мест
+    public int getFreeSeats() {
+        return totalSeats - occupiedSeats
