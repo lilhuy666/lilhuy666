@@ -1,108 +1,104 @@
- ▎ Ограничение ввода
+import java.io.*;
+import java.util.*;
 
-Чтобы ограничить пользователя вводить количество мест не больше 50, необходимо добавить проверку после считывания данных. Если введенное число превышает 50, программа должна сообщать об ошибке и запрашивать ввод снова. Вот обновленный код:
+class Student {
+    String lastName;
+    String firstName;
+    int grade;
+    String subject;
+    int mark;
 
-import java.util.Scanner;
-
-public class TouristBus {
-    private int totalSeats; // Общее количество мест
-    private double seatPrice; // Стоимость одного места
-    private int occupiedSeats; // Занятые места
-
-    // Конструктор по умолчанию
-    public TouristBus() {
-        this(50, 100.0); // Значения по умолчанию
+    public Student(String lastName, String firstName, int grade, String subject, int mark) {
+        this.lastName = lastName;
+        this.firstName = firstName;
+        this.grade = grade;
+        this.subject = subject;
+        this.mark = mark;
     }
+}
 
-    // Конструктор с параметрами
-    public TouristBus(int totalSeats, double seatPrice) {
-        this.totalSeats = totalSeats;
-        this.seatPrice = seatPrice;
-        this.occupiedSeats = 0; // Автобус изначально пуст
-    }
-
-    // Конструктор копирования
-    public TouristBus(TouristBus bus) {
-        this.totalSeats = bus.totalSeats;
-        this.seatPrice = bus.seatPrice;
-        this.occupiedSeats = bus.occupiedSeats;
-    }
-
-    // Метод для занятия мест
-    public void occupySeats(int seats) {
-        if (occupiedSeats + seats <= totalSeats) {
-            occupiedSeats += seats;
-        }
-    }
-
-    // Метод для получения занятых мест
-    public int getOccupiedSeats() {
-        return occupiedSeats;
-    }
-
-    // Метод для получения свободных мест
-    public int getFreeSeats() {
-        return totalSeats - occupiedSeats;
-    }
-
-    // Метод для проверки, пуст ли автобус
-    public boolean isEmpty() {
-        return occupiedSeats == 0;
-    }
-
-    // Метод для проверки, заполнен ли автобус
-    public boolean isFull() {
-        return occupiedSeats == totalSeats;
-    }
-
-    // Метод для расчета общей стоимости занятых мест
-    public double calculateTotalCost() {
-        return occupiedSeats * seatPrice;
-    }
+public class SchoolJournal {
+    private static Map<Integer, List<Student>> classMap = new HashMap<>();
+    private static Map<String, Map<Integer, List<Student>>> subjectMap = new HashMap<>();
 
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
+        readDataFromFile("school.txt");
+        printStudentsByGrade(5, 4); // Пример: выводим учеников 5 класса с оценкой 4
+        sortClassesByAveragePerformance();
+        printStudentsBySubject("Math");
+        writeGradeReports();
+        findStudentClass("Иванов", "Иван");
+        findSubjectWithHighestAverage();
+    }
 
-        // Создаем два объекта «Туристический автобус»
-        TouristBus bus1 = new TouristBus(50, 500);
-        TouristBus bus2 = new TouristBus(50, 600);
+    private static void readDataFromFile(String filename) {
+        try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(" ");
+                String lastName = parts[0];
+                String firstName = parts[1];
+                int grade = Integer.parseInt(parts[2]);
+                String subject = parts[3];
+                int mark = Integer.parseInt(parts[4]);
 
-        // Вводим количество людей для первого автобуса
-        int numPeople1 = -1;
-        while (numPeople1 < 0 || numPeople1 > 50) {
-            System.out.print("Введите количество людей для первого автобуса (макс. 50): ");
-            try {
-                numPeople1 = Integer.parseInt(scanner.nextLine());
-                if (numPeople1 < 0) {
-                    System.out.println("Количество людей не может быть отрицательным. Пожалуйста, попробуйте снова.");
-                } else if (numPeople1 > 50) {
-                    System.out.println("Количество людей не может превышать 50. Пожалуйста, попробуйте снова.");
+                Student student = new Student(lastName, firstName, grade, subject, mark);
+                classMap.computeIfAbsent(grade, k -> new ArrayList<>()).add(student);
+                subjectMap.computeIfAbsent(subject, k -> new HashMap<>())
+                        .computeIfAbsent(grade, k -> new ArrayList<>()).add(student);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void printStudentsByGrade(int grade, int mark) {
+        List<Student> students = classMap.get(grade);
+        if (students != null) {
+            System.out.println("Учащиеся " + grade + " класса с оценкой " + mark + ":");
+            for (Student student : students) {
+                if (student.mark == mark) {
+                    System.out.println(student.lastName + " " + student.firstName + " - " + student.mark);
                 }
-            } catch (NumberFormatException e) {
-                System.out.println("Ошибка: введите целое число.");
             }
         }
-        bus1.occupySeats(numPeople1);
+    }
 
-        // Вводим количество людей для второго автобуса
-        int numPeople2 = -1;
-        while (numPeople2 < 0 || numPeople2 > 50) {
-            System.out.print("Введите количество людей для второго автобуса (макс. 50): ");
-            try {
-                numPeople2 = Integer.parseInt(scanner.nextLine());
-                if (numPeople2 < 0) {
-                    System.out.println("Количество людей не может быть отрицательным. Пожалуйста, попробуйте снова.");
-                } else if (numPeople2 > 50) {
-                    System.out.println("Количество людей не может превышать 50. Пожалуйста, попробуйте снова.");
-                }
-            } catch (NumberFormatException e) {
-                System.out.println("Ошибка: введите целое число.");
+    private static void sortClassesByAveragePerformance() {
+        Map<Integer, Double> averageMap = new HashMap<>();
+        for (Map.Entry<Integer, List<Student>> entry : classMap.entrySet()) {
+            int grade = entry.getKey();
+            List<Student> students = entry.getValue();
+            double average = students.stream().mapToInt(s -> s.mark).average().orElse(0);
+            averageMap.put(grade, average);
+        }
+        averageMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue())
+                .forEach(entry -> System.out.println("Класс " + entry.getKey() + " - Средняя оценка: " + entry.getValue()));
+    }
+
+    private static void printStudentsBySubject(String subject) {
+        List<Student> allStudents = new ArrayList<>();
+        for (Map<Integer, List<Student>> gradeMap : subjectMap.values()) {
+            List<Student> students = gradeMap.get(subject);
+            if (students != null) {
+                allStudents.addAll(students);
             }
         }
-        bus2.occupySeats(numPeople2);
+        allStudents.sort(Comparator.comparing(s -> s.lastName));
+        System.out.println("Учащиеся по предмету " + subject + ":");
+        for (Student student : allStudents) {
+            System.out.println(student.lastName + " " + student.firstName + " - " + student.mark);
+        }
+    }
 
-        // Выводим количество оставшихся свободных мест и цену за поездку
-        System.out.println("Свободные места в первом автобусе: " + bus1.getFreeSeats());
-        System.out.println("Цена за поездку для первой группы: " + bus1.calculateTotalCost());
-
-        System.out.println("Свободные места во втором автобусе: " + bus2.getFreeSeats());
+    private static void writeGradeReports() {
+        for (Map.Entry<Integer, List<Student>> entry : classMap.entrySet()) {
+            int grade = entry.getKey();
+            List<Student> students = entry.getValue();
+            try (BufferedWriter bw = new BufferedWriter(new FileWriter("grade_report_" + grade + ".txt"))) {
+                for (Student student : students) {
+                    bw.write(student.lastName + " " + student.firstName + " - " + student.subject + ": " + student.mark);
+                    bw.newLine();
+                }
+            } catch (IOException
