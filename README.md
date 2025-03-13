@@ -1,6 +1,7 @@
-Вот пример кода на Java, который выполняет указанные действия. Более подробные комментарии добавлены для понимания:
+Вот пример реализации программы на Java, которая выполняет заданные действия с данными о школьниках. Перед началом убедитесь, что файл data_school.txt находится в рабочем каталоге.
 
 import java.io.*;
+import java.nio.file.*;
 import java.util.*;
 
 public class SchoolJournal {
@@ -11,7 +12,7 @@ public class SchoolJournal {
         String subject;
         int mark;
 
-        public Student(String lastName, String firstName, int grade, String subject, int mark) {
+        Student(String lastName, String firstName, int grade, String subject, int mark) {
             this.lastName = lastName;
             this.firstName = firstName;
             this.grade = grade;
@@ -21,107 +22,58 @@ public class SchoolJournal {
     }
 
     public static void main(String[] args) {
-        List<Student> students = new ArrayList<>();
-        readStudentsFromFile("data school.txt", students);
-        
-        Map<Integer, List<Student>> classes = new TreeMap<>();
-        for (Student student : students) {
-            classes.putIfAbsent(student.grade, new ArrayList<>());
-            classes.get(student.grade).add(student);
-        }
+        List<Student> students = readStudentsFromFile("data_school.txt");
+        Scanner scanner = new Scanner(System.in);
+        int choice;
 
-        // 1. Вывод списка учеников с заданной оценкой
-        int targetMark = 5; // Например, заданная оценка
-        for (Map.Entry<Integer, List<Student>> entry : classes.entrySet()) {
-            System.out.println("Класс " + entry.getKey() + ":");
-            for (Student student : entry.getValue()) {
-                if (student.mark == targetMark) {
-                    System.out.println(student.lastName + " " + student.firstName + " - " + student.mark);
-                }
+        do {
+            System.out.println("Меню:");
+            System.out.println("1. Список учеников по заданной оценке");
+            System.out.println("2. Сортировка классов по средней успеваемости");
+            System.out.println("3. Список учеников по предмету, отсортированный по фамилии");
+            System.out.println("4. Вывести ведомости заданного класса по каждому предмету");
+            System.out.println("5. Определить класс ученика по имени и фамилии");
+            System.out.println("6. Определить предмет с самой высокой средней успеваемостью");
+            System.out.println("0. Выход");
+            System.out.print("Выберите опцию: ");
+            choice = scanner.nextInt();
+            scanner.nextLine(); // Считываем новую строку
+
+            switch (choice) {
+                case 1:
+                    listStudentsByGrade(scanner, students);
+                    break;
+                case 2:
+                    sortClassesByAverageScore(students);
+                    break;
+                case 3:
+                    listStudentsBySubject(scanner, students);
+                    break;
+                case 4:
+                    createClassStatementsBySubject(scanner, students);
+                    break;
+                case 5:
+                    findClassByStudentName(scanner, students);
+                    break;
+                case 6:
+                    findSubjectWithHighestAverageMark(students);
+                    break;
+                case 0:
+                    System.out.println("Выход из программы");
+                    break;
+                default:
+                    System.out.println("Неверный выбор, попробуйте снова.");
             }
-        }
+        } while (choice != 0);
 
-        // 2. Сортировка классов по средней успеваемости
-        classes.entrySet()
-               .stream()
-               .sorted(Comparator.comparingDouble(entry -> {
-                   return entry.getValue().stream().mapToInt(stud -> stud.mark).average().orElse(0);
-               }))
-               .forEach(entry -> {
-                   System.out.println("Класс " + entry.getKey() + " - Средняя успеваемость: " +
-                           entry.getValue().stream().mapToInt(stud -> stud.mark).average().orElse(0));
-               });
-
-        // 3. Вывод списка учеников всех классов, отсортированный по фамилии для заданного предмета
-        String targetSubject = "Математика"; // Например, заданный предмет
-        List<Student> sortedStudentsBySubject = new ArrayList<>();
-        for (Student student : students) {
-            if (student.subject.equals(targetSubject)) {
-                sortedStudentsBySubject.add(student);
-            }
-        }
-        sortedStudentsBySubject.sort(Comparator.comparing(stud -> stud.lastName));
-        System.out.println("Список учеников по предмету " + targetSubject + ":");
-        for (Student student : sortedStudentsBySubject) {
-            System.out.println(student.lastName + " " + student.firstName);
-        }
-
-        // 4. Запись ведомостей заданного класса по каждому предмету в файл
-        int targetGrade = 10; // Например, заданный класс
-        Map<String, List<Student>> subjects = new HashMap<>();
-        for (Student student : students) {
-            if (student.grade == targetGrade) {
-                subjects.putIfAbsent(student.subject, new ArrayList<>());
-                subjects.get(student.subject).add(student);
-            }
-        }
-
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter("class_" + targetGrade + "_journal.txt"))) {
-            for (Map.Entry<String, List<Student>> entry : subjects.entrySet()) {
-                writer.write("Предмет: " + entry.getKey() + "\n");
-                for (Student student : entry.getValue()) {
-                    writer.write(student.lastName + " " + student.firstName + " - " + student.mark + "\n");
-                }
-                writer.write("\n");
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        // 5. По имени и фамилии определение класса
-        String queryLastName = "Иванов"; // Замени на нужную фамилию
-        String queryFirstName = "Иван"; // Замени на нужное имя
-        for (Student student : students) {
-        
-            if (student.lastName.equals(queryLastName) && student.firstName.equals(queryFirstName)) {
-                System.out.println("Ученик " + queryFirstName + " " + queryLastName + " учится в классе " + student.grade);
-                break;
-            }
-        }
-
-        // 6. Определение предмета с самой высокой средней успеваемостью
-        Map<String, List<Integer>> subjectMarks = new HashMap<>();
-        for (Student student : students) {
-            subjectMarks.putIfAbsent(student.subject, new ArrayList<>());
-            subjectMarks.get(student.subject).add(student.mark);
-        }
-
-        String topSubject = "";
-        double highestAverage = 0;
-        for (Map.Entry<String, List<Integer>> entry : subjectMarks.entrySet()) {
-            double average = entry.getValue().stream().mapToInt(m -> m).average().orElse(0);
-            if (average > highestAverage) {
-                highestAverage = average;
-                topSubject = entry.getKey();
-            }
-        }
-        System.out.println("Предмет с самой высокой средней успеваемостью: " + topSubject + " - Средняя оценка: " + highestAverage);
+        scanner.close();
     }
 
-    private static void readStudentsFromFile(String fileName, List<Student> students) {
-        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
-            String line;
-            while ((line = br.readLine()) != null) {
+    static List<Student> readStudentsFromFile(String fileName) {
+        List<Student> students = new ArrayList<>();
+        try {
+            List<String> lines = Files.readAllLines(Paths.get(fileName));
+            for (String line : lines) {
                 String[] parts = line.split(" ");
                 String lastName = parts[0];
                 String firstName = parts[1];
@@ -131,19 +83,135 @@ public class SchoolJournal {
                 students.add(new Student(lastName, firstName, grade, subject, mark));
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("Ошибка при чтении файла: " + e.getMessage());
+        }
+        return students;
+    }
+
+    static void listStudentsByGrade(Scanner scanner, List<Student> students) {
+        System.out.print("Введите оценку: ");
+        int mark = scanner.nextInt();
+
+        for (Student student : students) {
+            if (student.mark == mark) {
+                System.out.println(student.lastName + " " + student.firstName + " (Класс " + student.grade + ")");
+            }
+        }
+    }
+
+    static void sortClassesByAverageScore(List<Student> students) {
+        Map<Integer, List<Integer>> grades = new HashMap<>();
+
+        for (Student student : students) {
+            grades.putIfAbsent(student.grade, new ArrayList<>());
+            
+            grades.get(student.grade).add(student.mark);
+        }
+
+        grades.entrySet().stream()
+            .sorted((entry1, entry2) -> {
+                double avg1 = entry1.getValue().stream().mapToInt(Integer::intValue).average().orElse(0);
+                double avg2 = entry2.getValue().stream().mapToInt(Integer::intValue).average().orElse(0);
+                return Double.compare(avg1, avg2);
+            })
+            .forEach(entry -> {
+                int classNumber = entry.getKey();
+                double average = entry.getValue().stream().mapToInt(Integer::intValue).average().orElse(0);
+                System.out.printf("Класс %d: Средняя успеваемость = %.2f%n", classNumber, average);
+            });
+    }
+
+    static void listStudentsBySubject(Scanner scanner, List<Student> students) {
+        System.out.print("Введите предмет: ");
+        String subject = scanner.nextLine();
+
+        students.stream()
+            .filter(student -> student.subject.equalsIgnoreCase(subject))
+            .sorted(Comparator.comparing(student -> student.lastName))
+            .forEach(student -> System.out.println(student.lastName + " " + student.firstName + " (Оценка: " + student.mark + ")"));
+    }
+
+    static void createClassStatementsBySubject(Scanner scanner, List<Student> students) {
+        System.out.print("Введите номер класса: ");
+        int classNumber = scanner.nextInt();
+        Map<String, List<Student>> subjectMap = new HashMap<>();
+
+        for (Student student : students) {
+            if (student.grade == classNumber) {
+                subjectMap.putIfAbsent(student.subject, new ArrayList<>());
+                subjectMap.get(student.subject).add(student);
+            }
+        }
+
+        try {
+            for (Map.Entry<String, List<Student>> entry : subjectMap.entrySet()) {
+                String subject = entry.getKey();
+                List<Student> classStudents = entry.getValue();
+                String fileName = "class_" + classNumber + "_" + subject + ".txt";
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
+                    for (Student student : classStudents) {
+                        writer.write(student.lastName + " " + student.firstName + " " + student.mark);
+                        writer.newLine();
+                    }
+                }
+                System.out.println("Сохранено в " + fileName);
+            }
+        } catch (IOException e) {
+            System.err.println("Ошибка при записи в файл: " + e.getMessage());
+        }
+    }
+
+    static void findClassByStudentName(Scanner scanner, List<Student> students) {
+        System.out.print("Введите фамилию: ");
+        String lastName = scanner.nextLine();
+        System.out.print("Введите имя: ");
+        String firstName = scanner.nextLine();
+
+        for (Student student : students) {
+            if (student.lastName.equalsIgnoreCase(lastName) && student.firstName.equalsIgnoreCase(firstName)) {
+                System.out.println(firstName + " " + lastName + " учится в классе " + student.grade);
+                return;
+            }
+        }
+        System.out.println("Ученик не найден.");
+    }
+
+    static void findSubjectWithHighestAverageMark(List<Student> students) {
+        Map<String, List<Integer>> subjectMarks = new HashMap<>();
+
+        for (Student student : students) {
+            subjectMarks.putIfAbsent(student.subject, new ArrayList<>());
+            subjectMarks.get(student.subject).add(student.mark);
+        }
+
+        String highestSubject = null;
+        double highestAverage = 0;
+
+        for (Map.Entry<String, List<Integer>> entry : subjectMarks.entrySet()) {
+            double avg = entry.getValue().stream().mapToInt(Integer::intValue).average().orElse(0);
+            if (avg > highestAverage) {
+                highestAverage = avg;
+                highestSubject = entry.getKey();
+            }
+        }
+        if (highestSubject != null) {
+        
+            System.out.printf("Предмет с самой высокой средней успеваемостью: %s (Средняя: %.2f)%n", highestSubject, highestAverage);
         }
     }
 }
 
 
-### Пояснение кода:
-1. Структура данных: Определяем класс Student, который хранит данные о школьнике.
-2. Чтение данных: Метод readStudentsFromFile считывает данные из файла и создает объекты Student.
-3. Группировка по классам: Создаем Map для распределения студентов по классам.
-4. Фильтрация и сортировка: Реализованы операции по фильтрации студентов по оценке и по предметам.
-5. Запись результатов: Ведомости записываются в отдельные текстовые файлы для каждого класса.
-6. Поиск по имени: Можем находить класс по имени и фамилии.
-7. Определение успешности предмета: Рассчитываем среднюю успеваемость по предмету.
+### Объяснение кода
+1. Структура данных: Создан класс Student, представляющий информацию о школьниках.
+2. Чтение из файла: Функция readStudentsFromFile загружает данные о школьниках из файла.
+3. Меню: В основном методе реализовано меню для выбора различных функций.
+4. Функции: Каждая задача реализована в своем методе. 
+5. Сохранение в файл: Ведомости по каждому предмету сохраняются в отдельные файлы.
 
-Этот код можно запускать в IntelliJ IDEA, предварительно создав файл "data school.txt" с необходимыми данными.
+### Запуск программы
+1. Откройте вашу среду разработки (например, IntelliJ IDEA).
+2. Создайте новый проект и добавьте файл data_school.txt с данными учеников в корень проекта.
+3. Скомпилируйте и запустите программу.
+
+Программа будет выдавать результаты на консоль и сохранять данные в файлы по мере ваших запросов.
