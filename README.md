@@ -1,70 +1,80 @@
-import csv
+import os
 from collections import defaultdict
 
 # Чтение данных из файла
-students = []
-with open('data school.txt', 'r') as file:
-    reader = csv.reader(file, delimiter=' ')
-    for row in reader:
-        surname, name, class_num, subject, grade = row
-        students.append((surname, name, int(class_num), subject, int(grade)))
+def read_data(file_path):
+    students = []
+    with open(file_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            surname, name, class_num, subject, grade = line.strip().split()
+            students.append((surname, name, int(class_num), subject, int(grade)))
+    return students
 
-# Структурирование данных
-classes = defaultdict(list)
-subjects = defaultdict(lambda: defaultdict(list))
+# Создание структуры данных
+def create_class_journal(students):
+    class_journal = defaultdict(list)
+    for surname, name, class_num, subject, grade in students:
+        class_journal[class_num].append((surname, name, subject, grade))
+    return class_journal
 
-for surname, name, class_num, subject, grade in students:
-    classes[class_num].append((surname, name, grade))
-    subjects[subject][class_num].append(grade)
+# Фильтрация по оценкам
+def filter_by_grade(class_journal, grade):
+    for class_num, students in class_journal.items():
+        filtered_students = [s for s in students if s[3] == grade]
+        if filtered_students:
+            print(f"Class {class_num}:")
+            for surname, name, subject, _ in filtered_students:
+                print(f"{surname} {name}")
 
-# Функция для вывода учеников с заданной оценкой
-def print_students_by_grade(class_num, target_grade):
-    print(f"Class {class_num} with grade {target_grade}:")
-    for surname, name, grade in classes[class_num]:
-        if grade == target_grade:
-            print(f"{surname} {name} - {grade}")
+# Расчет средней успеваемости
+def average_grades(class_journal):
+    averages = {}
+    for class_num, students in class_journal.items():
+        total_grade = sum(s[3] for s in students)
+        average = total_grade / len(students) if students else 0
+        averages[class_num] = average
+    return averages
 
 # Сортировка классов по средней успеваемости
-average_scores = {}
-for class_num, class_students in classes.items():
-    if class_students:  # Проверяем, что есть ученики в классе
-        avg = sum(grade for _, _, grade in class_students) / len(class_students)
-        average_scores[class_num] = avg
+def sort_classes_by_average(averages):
+    return sorted(averages.items(), key=lambda x: x[1], reverse=True)
 
-sorted_classes = dict(sorted(average_scores.items(), key=lambda item: item[1]))
-
-# Вывод учеников по предмету, отсортированный по фамилии
-def print_students_by_subject(subject):
-    all_students = [(surname, name, grade) for class_num in classes for surname, name, grade in classes[class_num] if subject in subjects and class_num in subjects[subject]]
+# Сортировка по фамилии для заданного предмета
+def sort_by_surname(class_journal, subject):
+    all_students = []
+    for students in class_journal.values():
+        for student in students:
+            if student[2] == subject:
+                all_students.append(student)
     all_students.sort(key=lambda x: x[0])  # Сортировка по фамилии
-    for surname, name, grade in all_students:
-        print(f"{surname} {name} - {grade}")
+    return all_students
+
+# Запись ведомостей в файлы
+def write_class_reports(class_journal):
+    for class_num, students in class_journal.items():
+        with open(f'class_{class_num}.txt', 'w', encoding='utf-8') as file:
+            for surname, name, subject, grade in students:
+                file.write(f"{surname} {name} {subject} {grade}\n")
 
 # Поиск класса по имени и фамилии
-def find_class_by_name(surname, name):
-    for class_num, class_students in classes.items():
-        for s, n, _ in class_students:
-            if s == surname and n == name:
+def find_class_by_name(class_journal, surname, name):
+    for class_num, students in class_journal.items():
+        for student in students:
+            if student[0] == surname and student[1] == name:
                 return class_num
     return None
 
 # Определение предмета с самой высокой средней успеваемостью
-def get_best_subject():
-    subject_averages = {}
-    for subject, class_grades in subjects.items():
-        total = 0
-        count = 0
-        for class_num, grades in class_grades.items():
-            total += sum(grades)
-            count += len(grades)
-        subject_averages[subject] = total / count if count > 0 else 0
+def subject_with_highest_average(students):
+    subject_grades = defaultdict(list)
+    for surname, name, class_num, subject, grade in students:
+        subject_grades[subject].append(grade)
     
-    best_subject = max(subject_averages, key=subject_averages.get)
-    return best_subject
+    averages = {subject: sum(grades) / len(grades) for subject, grades in subject_grades.items()}
+    return max(averages.items(), key=lambda x: x[1])
 
-# Пример использования функций
-print_students_by_grade(5, 4)  # Укажите класс и оценку
-print_students_by_subject("Math")  # Укажите предмет
-student_class = find_class_by_name("Иванов", "Иван")  # Укажите ФИО
-best_subject = get_best_subject()
-print(f"Best subject: {best_subject}")
+# Основная функция
+def main():
+    file_path = 'school.txt'
+    students = read_data(file_path)
+    class_journal = create
