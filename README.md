@@ -1,37 +1,30 @@
-Вот пример Java кода, который выполняет указанные задачи с использованием лямбда-выражений:
+```java
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
-import java.util.*;
-import java.util.regex.*;
-import java.util.stream.*;
-
-public class Main {
+public class StringProcessing {
+    
     public static void main(String[] args) {
-        String input = "Привет, это тестовое предложение с числами 5 и 10 и словами, которые заканчиваются на es, такие как roses, buses.";
+        String sentence = "This is a test, with some words ending in 'es', like cases, boxes.";
         
-        // Подсчет слов, заканчивающихся на "es"
-        long countEndsWithEs = Arrays.stream(input.split("[ ,]+"))
+        // Подсчет количества слов, оканчивающихся на 'es'
+        long esWordsCount = Arrays.stream(sentence.split("[\\s,\\.,!?]+"))
                 .filter(word -> word.endsWith("es"))
                 .count();
-
-        // Упорядочивание слов по длине
-        List<String> sortedWords = Arrays.stream(input.split("[ ,]+"))
-                .distinct()
-                .sorted(Comparator.comparingInt(String::length))
-                .collect(Collectors.toList());
-
-        // Подсчет суммы целых чисел
-        int sumOfIntegers = Arrays.stream(Pattern.compile("\\d+").matcher(input).results()
-                .map(MatchResult::group)
-                .mapToInt(Integer::parseInt)
-                .toArray())
-                .sum();
-
-        // Вывод результатов
-        System.out.println("Количество слов, заканчивающихся на 'es': " + countEndsWithEs);
-        System.out.println("Слова, упорядоченные по возрастанию длины: " + sortedWords);
-        System.out.println("Сумма целых чисел: " + sumOfIntegers);
-    }
-}
-
-
-Этот код выполняет все указанные задачи: подсчитывает слова с окончанием "es", упорядочивает слова по длине и суммирует целые числа.
+        System.out.println("Количество слов, оканчивающихся на 'es': " + esWordsCount);
+        
+        // Упорядочить слова по длине
+        Stream<String> sortedByLength = Arrays.stream(sentence.split("[\\s,\\.,!?]+"))
+                .sorted(Comparator.comparingInt(String::length));
+        System.out.println("Слова, отсортированные по длине:");
+        sortedByLength.forEach(System.out::println);
+        
+        // Сумма всех целых чисел в строке
+        Pattern pattern = Pattern.compile("\\d+");
+        Matcher matcher = pattern.matcher(sentence);
+        int sumOfNumbers = 0;
+        while (matcher.find()) {
+            sumOfNumbers += Integer.parseInt(match...
