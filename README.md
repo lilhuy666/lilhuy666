@@ -1,50 +1,63 @@
-import java.util.*;
-import java.util.stream.Collectors;
-
-public class Main {
-    public static void main(String[] args) {
-        // Дневник температуры
-        int[] temperatures = {1, -2, -5, -2, -4, 3, -6, -2, 1, 1, 0, -1, 0, 3, -1, 2, 5, 2, 4, 4, 0, 6, 1, 4, 6, -1, 2, 4, 7, 11};
-
-        long negativeDays = Arrays.stream(temperatures)
-                .filter(t -> t < 0)
-                .count();
-
-        boolean above10 = Arrays.stream(temperatures)
-                .anyMatch(t -> t > 10);
-
-        int maxFirstWeek = Arrays.stream(Arrays.copyOfRange(temperatures, 0, 7))
-                .max()
-                .orElse(Integer.MIN_VALUE);
-
-        double averageTemperature = Arrays.stream(temperatures)
-                .average()
-                .orElse(0);
-        
-        System.out.println("Количество дней с отрицательной температурой: " + negativeDays);
-        System.out.println("Температура выше 10 градусов: " + above10);
-        System.out.println("Максимальная температура в первую неделю: " + maxFirstWeek);
-        System.out.println("Средняя температура за месяц: " + averageTemperature);
-
-        // Предложение
-        String sentence = "They used 233 features including 227 stylometric features and six novel social network-specific features like character-based ones numbers of alphabets, uppercase characters, special characters, word-based ones the total number of words, average word length, the number of words with 1 char, syntactic ones numbers of punctuation marks and functional words, the total number of sentences and many others";
-        List<String> words = Arrays.asList(sentence.split("[ ,]+"));
-        
-        long countEndsWithEs = words.stream()
-                .filter(word -> word.endsWith("es"))
-                .count();
-
-        List<String> sortedWords = words.stream()
-                .sorted(Comparator.comparingInt(String::length))
-                .collect(Collectors.toList());
-
-        int sumOfIntegers = words.stream()
-                .filter(word -> word.matches("-?\\d+"))
-                .mapToInt(Integer::parseInt)
-                .sum();
-
-        System.out.println("Количество слов, заканчивающихся на 'es': " + countEndsWithEs);
-        System.out.println("Слова упорядоченные по длине: " + sortedWords);
-        System.out.println("Сумма целых чисел в предложении: " + sumOfIntegers);
-    }
+package com. pucescus.car;
+import android.os.Bundle;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ListView;
+import androidx.appcompat.app.AppCompatActivity;
+import java. util. ArrayList;
+import java.util. List;
+public class MainActivity extends AppCompatActivity {
+private EditText taskInput;
+private Button addTaskButton;
+private ListView taskListView;
+private List<String> tasks = nеw ArrayList<>();
+private TaskAdapter taskAdapter;
+@Override
+protected void onCreate(Bundle savedInstanceState) {
+super.onCreate(savedInstanceState);
+setContentView(R.layout.activity_main);
+taukInput = findviewById(R.id.toskinput):
+addTaskButton = findViewById(R.ic.eddtoskbutton):
+tasklistView s findViewById(R.id.tesklistview);
+taskAdapter new TaskAdapter( comevt this, tasks);
+tasklistView. setAdapter(taskAdapter);
+addTaskButton.setünClickListener(v ->
+( String task = taskInput.getText().toString();;
+tasks.add(task):
+taskAdapter.notifyDataSetChanged():
+taskInput.setText(**);
+F);
+taskListView. setünItemClickListener((parent, view, position, id) -> { tasks.remove(position);
+taskAdapter.notifyDataSetChanged();
 }
+}
+}
+это Мэйн активити
+
+<LinearLayout xmlnstandraide" http://schenas.andreid.com/apk android: layout_width "match_parent" android: Layout_height="match_parent" android:ariontation "vertical">
+<EditText
+android: id="0+id/taskinput" android: Layout_width="match_parent" android: layout_height"srap_content" android:hint "Enter Task" />
+<Button
+android: id "+id/addtaskbutton" android: Layout_width "wrap_content" android: Layout_height "srap_content" android: text "Add Task" />
+<ListView
+android:id "@+id/tasklistview" android: Layout_width="match_marent" android: layout_height "Odp" android: Layout_weight "1"/>
+</LinearLayout>
+ето активити мейн
+
+package
+com. pucescus.car;
+import |....
+2 usages
+public class TaskAdapter extends ArrayAdapter<String> {
+1 usage
+public TaskAdapter(Context context, List<String> tasks) ( super(context, (esurce 0, tasks):
+@Override
+public View getView(int position, View convertViem, ViewGroup parent) (
+String task = getItem(position);
+if (convertView = null) (
+convertView = LayoutInflater.from(getContext()).inflate(android.R.layout.simple_list_item_1, parenttachToRoot false);
+TextView taskText = convertView.findViewById(android.R.id.texti): taskText.setText(task);
+return convertView:
+}
+}
+и вот ещё хуйня
