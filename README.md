@@ -1,108 +1,51 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
+Вот простой и понятный пример программы на C# в Visual Studio, которая вычисляет площадь и периметр треугольника по координатам его вершин.
 
-    <EditText
-        android:id="@+id/editTextNumber1"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:inputType="number"
-        android:hint="Число 1" />
+using System;
 
-    <EditText
-        android:id="@+id/editTextNumber2"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:inputType="number"
-        android:hint="Число 2" />
+class Triangle
+{
+    static void Main()
+    {
+        // Ввод координат вершин
+        Console.WriteLine("Введите координаты треугольника (x1, y1, x2, y2, x3, y3):");
+        double x1 = double.Parse(Console.ReadLine());
+        double y1 = double.Parse(Console.ReadLine());
+        double x2 = double.Parse(Console.ReadLine());
+        double y2 = double.Parse(Console.ReadLine());
+        double x3 = double.Parse(Console.ReadLine());
+        double y3 = double.Parse(Console.ReadLine());
 
-    <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp">
-
-        <Button
-            android:id="@+id/buttonAdd"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:text="+" />
-
-        <Button
-            android:id="@+id/buttonSubtract"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:text="−" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/textViewResult"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Результат:"
-        android:textSize="18sp"
-        android:layout_marginTop="12dp" />
-</LinearLayout>
-
-
-MainActivity.kt
-package com.example.simplecalculator
-
-import android.os.Bundle
-import android.widget.Button
-import android.widget.EditText
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-
-class MainActivity : AppCompatActivity() {
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        val et1 = findViewById<EditText>(R.id.editTextNumber1)
-        val et2 = findViewById<EditText>(R.id.editTextNumber2)
-        val btnAdd = findViewById<Button>(R.id.buttonAdd)
-        val btnSub = findViewById<Button>(R.id.buttonSubtract)
-        val tvResult = findViewById<TextView>(R.id.textViewResult)
-
-        fun parseIntSafe(edit: EditText): Int? {
-            val txt = edit.text.toString().trim()
-            if (txt.isEmpty()) return null
-            return try {
-                // Используем требуемую конструкцию с Integer.parseInt
-                val N1: Int? = 0
-                Integer.parseInt(txt)
-            } catch (e: NumberFormatException) {
-                null
-            }
+        // Функция для вычисления длины стороны
+        double Distance(double xA, double yA, double xB, double yB)
+        {
+            return Math.Sqrt((xB - xA) * (xB - xA) + (yB - yA) * (yB - yA));
         }
 
-        btnAdd.setOnClickListener {
-            val a = parseIntSafe(et1)
-            val b = parseIntSafe(et2)
-            if (a == null || b == null) {
-                tvResult.text = "Ошибка: введите целые числа"
-            } else {
-                val res = a + b
-                tvResult.text = "Результат: $res"
-            }
-        }
+        double a = Distance(x1, y1, x2, y2);
+        double b = Distance(x2, y2, x3, y3);
+        double c = Distance(x3, y3, x1, y1);
 
-        btnSub.setOnClickListener {
-            val a = parseIntSafe(et1)
-            val b = parseIntSafe(et2)
-            if (a == null || b == null) {
-                tvResult.text = "Ошибка: введите целые числа"
-            } else {
-                val res = a - b
-                tvResult.text = "Результат: $res"
-            }
-        }
+        double perimeter = a + b + c;
+
+        // Полупериметр (для формулы Герона)
+        double s = perimeter / 2;
+
+        // Площадь по формуле Герона
+        double area = Math.Sqrt(s * (s - a) * (s - b) * (s - c));
+
+        Console.WriteLine($"Периметр треугольника: {perimeter:F2}");
+        Console.WriteLine($"Площадь треугольника: {area:F2}");
     }
 }
+
+
+Как пользоваться:
+
+1. Создайте новый консольный проект в Visual Studio.
+2. Вставьте этот код в Program.cs.
+3. Запустите программу, введите поочерёдно координаты трёх вершин — каждый параметр с новой строки.
+4. Программа выведет площадь и периметр треугольника.
+
+Если надо, могу помочь добавить проверку на правильность введённых данных или оформить программу с использованием методов и классов.
+
+Хотите, сделаем более структурированный вариант с методами?
