@@ -1,114 +1,108 @@
-Ваш код выглядит довольно хорошо, но давайте добавим обработку ввода с учетом InputMismatchException, чтобы предотвратить возможные ошибки при вводе неверных данных пользователем. Вот обновленная версия вашего кода с необходимыми изменениями:
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
-import java.util.InputMismatchException;
+    <EditText
+        android:id="@+id/editTextNumber1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number"
+        android:hint="Число 1" />
 
-class Application {
-    private int number;
-    private int score;
+    <EditText
+        android:id="@+id/editTextNumber2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number"
+        android:hint="Число 2" />
 
-    public Application(int number, int score) {
-        this.number = number;
-        this.score = score;
-    }
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp">
 
-    public int getNumber() {
-        return number;
-    }
+        <Button
+            android:id="@+id/buttonAdd"
+            android:layout_weight="1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="+" />
 
-    public int getScore() {
-        return score;
-    }
-}
+        <Button
+            android:id="@+id/buttonSubtract"
+            android:layout_weight="1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="−" />
+    </LinearLayout>
 
-class Contest {
-    private double prizeFund;
-    private List<Application> applications;
+    <TextView
+        android:id="@+id/textViewResult"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Результат:"
+        android:textSize="18sp"
+        android:layout_marginTop="12dp" />
+</LinearLayout>
 
-    public Contest(double prizeFund) {
-        this.prizeFund = prizeFund;
-        this.applications = new ArrayList<>();
-    }
 
-    public void addApplication(Application application) {
-        applications.add(application);
-    }
+MainActivity.kt
+package com.example.simplecalculator
 
-    public List<Application> getWinners() {
-        double averageScore = calculateAverageScore();
-        List<Application> winners = new ArrayList<>();
-        for (Application app : applications) {
-            if (app.getScore() > averageScore) {
-                winners.add(app);
+import android.os.Bundle
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+
+class MainActivity : AppCompatActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        val et1 = findViewById<EditText>(R.id.editTextNumber1)
+        val et2 = findViewById<EditText>(R.id.editTextNumber2)
+        val btnAdd = findViewById<Button>(R.id.buttonAdd)
+        val btnSub = findViewById<Button>(R.id.buttonSubtract)
+        val tvResult = findViewById<TextView>(R.id.textViewResult)
+
+        fun parseIntSafe(edit: EditText): Int? {
+            val txt = edit.text.toString().trim()
+            if (txt.isEmpty()) return null
+            return try {
+                // Используем требуемую конструкцию с Integer.parseInt
+                val N1: Int? = 0
+                Integer.parseInt(txt)
+            } catch (e: NumberFormatException) {
+                null
             }
         }
-        return winners;
-    }
 
-    private double calculateAverageScore() {
-        double totalScore = 0;
-        for (Application app : applications) {
-            totalScore += app.getScore();
-        }
-        return applications.size() > 0 ? totalScore / applications.size() : 0;
-    }
-
-    public void distributePrizes() {
-        List<Application> winners = getWinners();
-        double totalScoreOfWinners = 0;
-        for (Application winner : winners) {
-            totalScoreOfWinners += winner.getScore();
-        }
-
-        for (Application winner : winners) {
-            double prize = (winner.getScore() / totalScoreOfWinners) * prizeFund;
-            System.out.printf("Заявка #%d: Оценка = %d, Премия = %.2f%n", winner.getNumber(), winner.getScore(), prize);
-        }
-    }
-}
-
-public class Main {
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-
-        try {
-            System.out.print("Введите размер премиального фонда первого конкурса: ");
-            double prizeFund1 = scanner.nextDouble();
-            Contest contest1 = new Contest(prizeFund1);
-
-            System.out.print("Введите количество заявок первого конкурса: ");
-            int numberOfApplications1 = scanner.nextInt();
-            for (int i = 1; i <= numberOfApplications1; i++) {
-                System.out.printf("Введите оценку для заявки #%d: ", i);
-                int score = scanner.nextInt();
-                contest1.addApplication(new Application(i, score));
+        btnAdd.setOnClickListener {
+            val a = parseIntSafe(et1)
+            val b = parseIntSafe(et2)
+            if (a == null || b == null) {
+                tvResult.text = "Ошибка: введите целые числа"
+            } else {
+                val res = a + b
+                tvResult.text = "Результат: $res"
             }
+        }
 
-            System.out.print("Введите размер премиального фонда второго конкурса: ");
-            double prizeFund2 = scanner.nextDouble();
-            Contest contest2 = new Contest(prizeFund2);
-
-            System.out.print("Введите количество заявок второго конкурса: ");
-            int numberOfApplications2 = scanner.nextInt();
-            for (int i = 1; i <= numberOfApplications2; i++) {
-                System.out.printf("Введите оценку для заявки #%d: ", i);
-                int score = scanner.nextInt();
-                contest2.addApplication(new Application(i, score));
+        btnSub.setOnClickListener {
+            val a = parseIntSafe(et1)
+            val b = parseIntSafe(et2)
+            if (a == null || b == null) {
+                tvResult.text = "Ошибка: введите целые числа"
+            } else {
+                val res = a - b
+                tvResult.text = "Результат: $res"
             }
-
-            System.out.println("\nПобедители первого конкурса:");
-            contest1.distributePrizes();
-
-            System.out.println("\nПобедители второго конкурса:");
-            contest2.distributePrizes();
-        } catch (InputMismatchException e) {
-            System.out.println("Ошибка ввода: пожалуйста, вводите только числовые значения.");
-        } catch (Exception e) {
-            System.out.println("Произошла ошибка ввода данных. Пожалуйста, убедитесь, что вы вводите правильные значения.");
-        } finally {
-            scanner.close();
         }
     }
 }
