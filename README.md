@@ -1,8 +1,8 @@
 class Dog:
     def __init__(self, color, breed, age):
-        self.color = color
-        self.breed = breed
-        self.age = age
+        self._color = color
+        self._breed = breed
+        self._age = age
 
     @property
     def color(self):
@@ -31,8 +31,8 @@ class Dog:
 class DomesticDog(Dog):
     def __init__(self, color, breed, age, name, owner):
         super().__init__(color, breed, age)
-        self.name = name
-        self.owner = owner
+        self._name = name
+        self._owner = owner
 
     @property
     def name(self):
@@ -53,7 +53,7 @@ class DomesticDog(Dog):
 class WildDog(Dog):
     def __init__(self, color, breed, age, habitat):
         super().__init__(color, breed, age)
-        self.habitat = habitat
+        self._habitat = habitat
 
     @property
     def habitat(self):
