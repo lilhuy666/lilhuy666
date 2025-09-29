@@ -1,117 +1,91 @@
-Конечно, вот улучшенный вариант кода на Python, который соответствует вашему запросу, оптимизирован для Visual Studio Code и включает использование декоратора `@property` для более "питонического" доступа к атрибутам.
 
 class Dog:
-    """
-    Базовый класс для собак.
-    Содержит общие атрибуты: цвет, порода, возраст.
-    """
-    def __init__(self, color: str, breed: str, age: int):
-        """
-        Инициализатор класса Dog.
-
-        Args:
-            color (str): Цвет собаки.
-            breed (str): Порода собаки.
-            age (int): Возраст собаки.
-        """
-        self._color = color # Используем префикс _ для обозначения "приватности"
+    def __init__(self, color, breed, age):
+        self._color = color
         self._breed = breed
         self._age = age
 
     @property
-    def color(self) -&gt; str:
-        """ Свойство для получения цвета собаки. """
+    def color(self):
         return self._color
 
-    @property
-    def breed(self) -&gt; str:
-        """ Свойство для получения породы собаки. """
-        return self._breed
-
-    @property
-    def age(self) -&gt; int:
-        """ Свойство для получения возраста собаки. """
-        return self._age
-
-    # Для демонстрации, можно добавить сеттеры, если нужно менять атрибуты после создания объекта
     @color.setter
-    def color(self, value: str):
-        """ Устанавливает новый цвет собаки. """
-        if not isinstance(value, str) or not value:
-            raise ValueError("Цвет должен быть непустой строкой.")
+    def color(self, value):
+        if not isinstance(value, str):
+            raise ValueError("Цвет должен быть строкой")
         self._color = value
 
+    @property
+    def breed(self):
+        return self._breed
+
+    @breed.setter
+    def breed(self, value):
+        if not isinstance(value, str):
+            raise ValueError("Порода должна быть строкой")
+        self._breed = value
+
+    @property
+    def age(self):
+        return self._age
+
     @age.setter
-    def age(self, value: int):
-        """ Устанавливает новый возраст собаки. """
-        if not isinstance(value, int) or value &lt; 0:
-            raise ValueError("Возраст должен быть неотрицательным целым числом.")
+    def age(self, value):
+        if not isinstance(value, int) or value < 0:
+            raise ValueError("Возраст должен быть неотрицательным целым числом")
         self._age = value
 
-    def __str__(self) -&gt; str:
-        """ Возвращает строковое представление объекта Dog. """
-        return f"Собака: Порода - {self.breed}, Цвет - {self.color}, Возраст - {self.age} лет."
-
-class Pet(Dog):
-    """
-    Класс для домашних собак. Наследует от Dog.
-    Добавляет атрибуты: имя, хозяин.
-    """
-    def __init__(self, color: str, breed: str, age: int, name: str, owner: str):
-        """
-        Инициализатор класса Pet.
-
-        Args:
-            color (str): Цвет собаки.
-            breed (str): Порода собаки.
-            age (int): Возраст собаки.
-            name (str): Имя домашней собаки.
-            owner (str): Имя хозяина.
-        """
-        super().__init__(color, breed, age) # Вызов инициализатора родительского класса
+class DomesticDog(Dog):
+    def __init__(self, color, breed, age, name, owner):
+        super().__init__(color, breed, age)
         self._name = name
         self._owner = owner
 
     @property
-    def name(self) -&gt; str:
-        """ Свойство для получения имени домашней собаки. """
+    def name(self):
         return self._name
 
     @name.setter
-    def name(self, value: str):
-        """ Устанавливает новое имя собаки. """
-        if not isinstance(value, str) or not value:
-            raise ValueError("Имя должно быть непустой строкой.")
+    def name(self, value):
+        if not isinstance(value, str):
+            raise ValueError("Имя должно быть строкой")
         self._name = value
 
     @property
-    def owner(self) -&gt; str:
-        """ Свойство для получения имени хозяина. """
+    def owner(self):
         return self._owner
 
     @owner.setter
-    def owner(self, value: str):
-        """ Устанавливает нового хозяина. """
-        if not isinstance(value, str) or not value:
-            raise ValueError("Имя хозяина должно быть непустой строкой.")
+    def owner(self, value):
+        if not isinstance(value, str):
+            raise ValueError("Имя хозяина должно быть строкой")
         self._owner = value
 
-    def __str__(self) -&gt; str:
-        """ Возвращает строковое представление объекта Pet. """
-        # Используем свойства родительского класса через self.color, self.breed, self.age
-        return (f"Домашняя собака: Имя - {self.name}, Хозяин - {self.owner}, "
-                f"Порода - {self.breed}, Цвет - {self.color}, Возраст - {self.age} лет.")
-
 class WildDog(Dog):
-    """
-    Класс для диких собак. Наследует от Dog.
-    Добавляет атрибут: место жительства.
-    """
-    def __init__(self, color: str, breed: str, age: int, habitat: str):
-        """
-        Инициализатор класса WildDog.
+    def __init__(self, color, breed, age, habitat):
+        super().__init__(color, breed, age)
+        self._habitat = habitat
 
-        Args:
-            color (str): Цвет собаки.
-            breed (str): Порода собаки.
-            age (int): Возраст
+    @property
+    def habitat(self):
+        return self._habitat
+
+    @habitat.setter
+    def habitat(self, value):
+        if not isinstance(value, str):
+            raise ValueError("Место жительства должно быть строкой")
+        self._habitat = value
+
+# Пример использования
+if __name__ == "__main__":
+    domestic = DomesticDog("коричневый", "лайка", 5, "Рекс", "Иван")
+    print(domestic.name, domestic.owner, domestic.color, domestic.breed, domestic.age)
+
+    wild = WildDog("серый", "волкособ", 3, "лес")
+    print(wild.habitat, wild.color, wild.breed, wild.age)
+
+
+- В коде 3 класса: Dog (базовый), DomesticDog (домашняя собака) и WildDog (дикая собака)
+- Добавлены свойства (property) для всех полей с валидацией
+- Классы удобно использовать и расширять в VS Code или любом другом IDE
+- В конце приведён пример создания объектов и доступа к свойствам
