@@ -16,6 +16,12 @@ class Dog:
     def age(self):
         return self.__age
 
+    @age.setter
+    def age(self, value):
+        if value >= 0:
+            self.__age = value
+        else:
+            raise ValueError("Age cannot be negative")
 
 class WildDog(Dog):
     def __init__(self, color, breed, age, sleep_address):
@@ -25,7 +31,6 @@ class WildDog(Dog):
     @property
     def sleep_address(self):
         return self.__sleep_address
-
 
 class DomesticDog(Dog):
     def __init__(self, color, breed, age, owner, name):
@@ -37,14 +42,17 @@ class DomesticDog(Dog):
     def owner(self):
         return self.__owner
 
+    @owner.setter
+    def owner(self, value):
+        self.__owner = value
+
     @property
     def name(self):
         return self.__name
 
-
 if __name__ == "__main__":
     wild_dog = WildDog("white", "wolf", 4, "forest")
-    domestic_dog = DomesticDog("black", "chihua", 3, "Leha Stena", "molly")
+    domestic_dog = DomesticDog("black", "chihuahua", 3, "Leha Stena", "Molly")
 
     # Вывод информации о дикой собаке
     print("Wild Dog Info:")
