@@ -1,71 +1,64 @@
 class Dog:
     def __init__(self, color, breed, age):
-        self._color = color
-        self._breed = breed
-        self._age = age
+        self.__color = color
+        self.__breed = breed
+        self.__age = age
 
     @property
     def color(self):
-        return self._color
-
-    @color.setter
-    def color(self, value):
-        self._color = value
+        return self.__color
 
     @property
     def breed(self):
-        return self._breed
-
-    @breed.setter
-    def breed(self, value):
-        self._breed = value
+        return self.__breed
 
     @property
     def age(self):
-        return self._age
+        return self.__age
 
-    @age.setter
-    def age(self, value):
-        self._age = value
 
-class DomesticDog(Dog):
-    def __init__(self, color, breed, age, name, owner):
+class WildDog(Dog):
+    def __init__(self, color, breed, age, sleep_address):
         super().__init__(color, breed, age)
-        self._name = name
-        self._owner = owner
+        self.__sleep_address = sleep_address
 
     @property
-    def name(self):
-        return self._name
+    def sleep_address(self):
+        return self.__sleep_address
 
-    @name.setter
-    def name(self, value):
-        self._name = value
+
+class DomesticDog(Dog):
+    def __init__(self, color, breed, age, owner, name):
+        super().__init__(color, breed, age)
+        self.__owner = owner
+        self.__name = name
 
     @property
     def owner(self):
-        return self._owner
-
-    @owner.setter
-    def owner(self, value):
-        self._owner = value
-
-class WildDog(Dog):
-    def __init__(self, color, breed, age, habitat):
-        super().__init__(color, breed, age)
-        self._habitat = habitat
+        return self.__owner
 
     @property
-    def habitat(self):
-        return self._habitat
+    def name(self):
+        return self.__name
 
-    @habitat.setter
-    def habitat(self, value):
-        self._habitat = value
 
-# Пример использования
-domestic_dog = DomesticDog("brown", "Labrador", 5, "Buddy", "Alice")
-wild_dog = WildDog("gray", "Wolf", 3, "Forests")
+if __name__ == "__main__":
+    wild_dog = WildDog("white", "wolf", 4, "forest")
+    domestic_dog = DomesticDog("black", "chihua", 3, "Leha Stena", "molly")
 
-print(f"Domestic Dog - Name: {domestic_dog.name}, Owner: {domestic_dog.owner}, Color: {domestic_dog.color}, Breed: {domestic_dog.breed}, Age: {domestic_dog.age}")
-print(f"Wild Dog - Habitat: {wild_dog.habitat}, Color: {wild_dog.color}, Breed: {wild_dog.breed}, Age: {wild_dog.age}")
+    # Вывод информации о дикой собаке
+    print("Wild Dog Info:")
+    print(f"Breed: {wild_dog.breed}")
+    print(f"Color: {wild_dog.color}")
+    print(f"Age: {wild_dog.age} years")
+    print(f"Sleep Address: {wild_dog.sleep_address}")
+
+    print()
+
+    # Вывод информации о домашней собаке
+    print("Domestic Dog Info:")
+    print(f"Breed: {domestic_dog.breed}")
+    print(f"Color: {domestic_dog.color}")
+    print(f"Age: {domestic_dog.age} years")
+    print(f"Name: {domestic_dog.name}")
+    print(f"Owner: {domestic_dog.owner}")
