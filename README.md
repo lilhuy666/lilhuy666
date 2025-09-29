@@ -5,6 +5,7 @@ class Dog:
         self._breed = breed
         self._age = age
 
+    # Свойство color
     @property
     def color(self):
         return self._color
@@ -15,6 +16,7 @@ class Dog:
             raise ValueError("Цвет должен быть строкой")
         self._color = value
 
+    # Свойство breed
     @property
     def breed(self):
         return self._breed
@@ -25,6 +27,7 @@ class Dog:
             raise ValueError("Порода должна быть строкой")
         self._breed = value
 
+    # Свойство age
     @property
     def age(self):
         return self._age
@@ -41,6 +44,7 @@ class DomesticDog(Dog):
         self._name = name
         self._owner = owner
 
+    # Свойство name
     @property
     def name(self):
         return self._name
@@ -51,6 +55,7 @@ class DomesticDog(Dog):
             raise ValueError("Имя должно быть строкой")
         self._name = value
 
+    # Свойство owner
     @property
     def owner(self):
         return self._owner
@@ -66,6 +71,7 @@ class WildDog(Dog):
         super().__init__(color, breed, age)
         self._habitat = habitat
 
+    # Свойство habitat (место жительства)
     @property
     def habitat(self):
         return self._habitat
@@ -78,14 +84,17 @@ class WildDog(Dog):
 
 # Пример использования
 if __name__ == "__main__":
-    domestic = DomesticDog("коричневый", "лайка", 5, "Рекс", "Иван")
-    print(domestic.name, domestic.owner, domestic.color, domestic.breed, domestic.age)
+    dom_dog = DomesticDog("черный", "дворняга", 4, "Барон", "Алексей")
+    print(f"Домашняя собака: {dom_dog.name}, хозяин: {dom_dog.owner}, цвет: {dom_dog.color}, порода: {dom_dog.breed}, возраст: {dom_dog.age}")
 
-    wild = WildDog("серый", "волкособ", 3, "лес")
-    print(wild.habitat, wild.color, wild.breed, wild.age)
+    wild_dog = WildDog("серый", "волк", 6, "тайга")
+    print(f"Дикая собака, место жительства: {wild_dog.habitat}, цвет: {wild_dog.color}, порода: {wild_dog.breed}, возраст: {wild_dog.age}")
 
 
-- В коде 3 класса: Dog (базовый), DomesticDog (домашняя собака) и WildDog (дикая собака)
-- Добавлены свойства (property) для всех полей с валидацией
-- Классы удобно использовать и расширять в VS Code или любом другом IDE
-- В конце приведён пример создания объектов и доступа к свойствам
+- Класс Dog включает три метода (свойства): цвет, порода, возраст.
+- Классы DomesticDog и WildDog наследуют Dog и добавляют свои характеристики:
+- DomesticDog — имя собаки и её хозяина
+- WildDog — место жительства
+
+- Использованы свойства (property) с проверкой типов для удобного и безопасного доступа к атрибутам.
+- Код готов для запуска в Visual Studio Code.
