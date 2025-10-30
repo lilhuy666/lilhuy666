@@ -1,8 +1,13 @@
+
+// Создайте проект Windows Forms в Visual Studio
+// Добавьте на форму 4 TextBox для ввода a, b, c, d (textBoxA, textBoxB, textBoxC, textBoxD)
+// Добавьте кнопку (buttonProcess)
+// Добавьте 4 Label для вывода результатов (labelA, labelB, labelC, labelD)
+
 using System;
-using System.Linq;
 using System.Windows.Forms;
 
-namespace NumberReplacement
+namespace NumberProcessingApp
 {
     public partial class Form1 : Form
     {
@@ -11,42 +16,53 @@ namespace NumberReplacement
             InitializeComponent();
         }
 
-        private void buttonCalculate_Click(object sender, EventArgs e)
+        private void buttonProcess_Click(object sender, EventArgs e)
         {
-            try
+            // Считываем значения и проверяем корректность ввода
+            if (double.TryParse(textBoxA.Text, out double a) &&
+                double.TryParse(textBoxB.Text, out double b) &&
+                double.TryParse(textBoxC.Text, out double c) &&
+                double.TryParse(textBoxD.Text, out double d))
             {
-                double a = double.Parse(textBoxA.Text);
-                double b = double.Parse(textBoxB.Text);
-                double c = double.Parse(textBoxC.Text);
-                double d = double.Parse(textBoxD.Text);
-
-                double[] numbers = { a, b, c, d };
-
-                // Проверяем условия
-                if (a <= b && b <= c && c >= d)
+                // Условие 1: a ≤ b ≤ c ≤ d
+                if (a <= b && b <= c && c <= d)
                 {
-                    double max = numbers.Max();
+                    double max = d; // d - самое большое число в этом случае
                     a = b = c = d = max;
                 }
+                // Условие 2: a > b > c > d
                 else if (a > b && b > c && c > d)
                 {
-                    // Оставляем без изменений
+                    // Ничего не меняем
                 }
                 else
                 {
-                    a = Math.Pow(a, 2);
-                    b = Math.Pow(b, 2);
-                    c = Math.Pow(c, 2);
-                    d = Math.Pow(d, 2);
+                    // Иначе заменяем все числа их квадратами
+                    a = a * a;
+                    b = b * b;
+                    c = c * c;
+                    d = d * d;
                 }
 
-                // Выводим результат
-                textBoxResult.Text = $"a = {a}, b = {b}, c = {c}, d = {d}";
+                // Вывод результатов в метки
+                labelA.Text = $"a = {a}";
+                labelB.Text = $"b = {b}";
+                labelC.Text = $"c = {c}";
+                labelD.Text = $"d = {d}";
             }
-            catch
+            else
             {
-                MessageBox.Show("Введите корректные числа!", "Ошибка ввода", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Введите корректные действительные числа для a, b, c, d.", "Ошибка ввода", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
 }
+
+
+Коротко
+
+- При a ≤ b ≤ c ≤ d все числа заменяются максимальным (d).
+- При строго убывающей последовательности a > b > c > d ничего не меняется.
+- В остальных случаях числа заменяются на их квадраты.
+
+Подключите этот код к вашей форме, чтобы реализовать указанную логику.
