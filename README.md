@@ -1,7 +1,8 @@
 using System;
+using System.Linq;
 using System.Windows.Forms;
 
-namespace NumberTransformApp
+namespace NumberReplacement
 {
     public partial class Form1 : Form
     {
@@ -10,7 +11,7 @@ namespace NumberTransformApp
             InitializeComponent();
         }
 
-        private void buttonExecute_Click(object sender, EventArgs e)
+        private void buttonCalculate_Click(object sender, EventArgs e)
         {
             try
             {
@@ -19,39 +20,32 @@ namespace NumberTransformApp
                 double c = double.Parse(textBoxC.Text);
                 double d = double.Parse(textBoxD.Text);
 
-                string resultMessage;
+                double[] numbers = { a, b, c, d };
 
-                if (a <= b && b <= c && c <= d)
+                // Проверяем условия
+                if (a <= b && b <= c && c >= d)
                 {
-                    double max = Math.Max(Math.Max(a, b), Math.Max(c, d));
+                    double max = numbers.Max();
                     a = b = c = d = max;
-                    resultMessage = "Все числа заменены на наибольшее.";
                 }
                 else if (a > b && b > c && c > d)
                 {
-                    resultMessage = "Числа остались без изменений.";
+                    // Оставляем без изменений
                 }
                 else
                 {
-                    a *= a;
-                    b *= b;
-                    c *= c;
-                    d *= d;
-                    resultMessage = "Все числа заменены их квадратами.";
+                    a = Math.Pow(a, 2);
+                    b = Math.Pow(b, 2);
+                    c = Math.Pow(c, 2);
+                    d = Math.Pow(d, 2);
                 }
 
-                // Обновляем текстовые поля
-                textBoxA.Text = a.ToString();
-                textBoxB.Text = b.ToString();
-                textBoxC.Text = c.ToString();
-                textBoxD.Text = d.ToString();
-
-                // Показываем результат
-                labelResult.Text = resultMessage;
+                // Выводим результат
+                textBoxResult.Text = $"a = {a}, b = {b}, c = {c}, d = {d}";
             }
             catch
             {
-                MessageBox.Show("Введите корректные числа!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Введите корректные числа!", "Ошибка ввода", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
