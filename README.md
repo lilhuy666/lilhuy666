@@ -1,105 +1,293 @@
-Подробный 7-дневный отчёт по практике с большим количеством текста
-Разработка программного обеспечения “LogiCalc Pro – интеллектуальная система расчёта логистических перевозок”
-📅 День 1 — Постановка задачи, анализ предметной области и проектирование архитектуры приложения
-Первый день практики был посвящён всестороннему анализу будущей разработки. Мне необходимо было создать полнофункциональное настольное приложение, которое позволит производить расчёт стоимости логистических перевозок на основе расстояния между городами, веса груза, выбранного типа транспорта и дополнительных коэффициентов. Помимо основного функционала, в приложении должны быть реализованы дополнительные модули: учёт клиентов, история заказов, система оплаты, генерация QR-кода, визуально удобный интерфейс и статистический блок.
-На этом этапе я подробно изучил предметную область логистики. Мне было важно понять, какие параметры влияют на стоимость перевозки: расстояние между точками погрузки и выгрузки, тип транспортного средства, лимит его грузоподъёмности, топливные расходы, коэффициенты сезонности и прочие нюансы. После этого я изучил доступные библиотеки Python, которые помогут реализовать поставленную задачу.
-Составил архитектуру приложения, разделив его на логические модули:
-модуль расчёта расстояния (формула хаверсина);
-модуль транспорта (параметры, тарифы, ограничения);
-модуль работы с интерфейсом (окна, страницы, кнопки, события);
-модуль истории и клиентов;
-модуль оплаты и генерации QR-кодов.
-Также подготовил структуру проекта, создал базовый файл и задал параметры окна приложения. Начал формировать дизайн-концепцию тёмного интерфейса, чтобы приложение выглядело современно и профессионально.
-📅 День 2 — Программирование модулей расчёта расстояния и справочной части
-На второй день я сосредоточился на математическом функционале программы. Так как стоимость перевозки напрямую зависит от километража, мне необходимо было корректно реализовать формулу Хаверсина — алгоритм, позволяющий вычислять расстояние между двумя точками на поверхности Земли по их географическим координатам.
-Формула учитывает кривизну Земли и значительно точнее стандартных евклидовых вычислений, что важно для логистической сферы. Я тщательно протестировал реализацию, сравнивая результаты с картографическими сервисами. В процессе отладки я многократно проверял корректность вычислений на разных парах городов, чтобы исключить систематические ошибки.
-Кроме этого, я создал справочные структуры: список городов с координатами, список доступных типов транспорта, их грузоподъёмности и тарифов. Эти данные стали основой для всех будущих расчётов.
-Таким образом, ко второму дню был полностью готов фундамент математической логики приложения.
-📅 День 3 — Разработка интерфейса и навигационных элементов приложения
-На третий день я начал реализацию пользовательского интерфейса.
-В ходе работы я создал:
-основную структуру окна;
-верхний декоративный заголовок;
-левое навигационное меню;
-систему переключения страниц;
-цветовую схему (Dark UI) на основе словаря цветов.
-Отдельное внимание уделил визуальному стилю — тёмные оттенки, контрастные акценты, анимация нажатия, удобство выравнивания элементов. Я распределил элементы интерфейса в соответствии с функциональной логикой, чтобы все страницы выглядели единообразно и были максимально удобны для пользователя.
-Создал функции show_calc_frame, show_clients_frame, show_history_frame, позволяющие мгновенно перерисовывать центральную область интерфейса и отображать нужную страницу. Добавил статистический блок, который показывает количество клиентов, число заказов и общую сумму оплаченных перевозок.
-Таким образом, к концу дня у меня был полностью готов визуальный каркас приложения и полноценная навигация.
-📅 День 4 — Форма расчёта, логика вычисления стоимости, обработка ошибок
-Четвёртый день стал одним из самых насыщенных. Я полностью реализовал страницу расчёта перевозки, включив следующие элементы:
-выбор города отправления и назначения;
-выбор типа транспорта;
-ввод имени клиента;
-выбор способа оплаты;
-ползунок веса с динамическим значением;
-проверка корректности введённых данных.
-Далее реализовал логику вычисления стоимости, где учитывались:
-расстояние (по формуле Хаверсина),
-тариф выбранной машины,
-базовая комиссия,
-небольшой коэффициент случайной корректировки (имитация изменения топливных расходов).
-Добавил множество проверок: совпадение городов, превышение грузоподъёмности, незаполненные поля. При ошибках система выводит подробные предупреждения.
-Также реализовал автоматическую генерацию уникального ID заказа, который используется для оплаты и записи в историю.
-К концу дня сформировался рабочий модуль расчёта — основа всего приложения.
-📅 День 5 — Реализация системы оплаты и генерации QR-кода
-Пятый день целиком был посвящён реализации модуля оплаты. Это технически сложная часть, так как требуется не только отобразить графику, но и корректно обработать ввод чувствительных данных.
-Я создал дополнительное окно оплаты через Toplevel(), выделенное визуально и стилистически. Далее реализовал два сценария:
-1. Оплата по QR-коду
-Используя библиотеку qrcode, создал генерацию изображения, содержащего сведения о заказе. Настроил:
-визуальные параметры QR-кода,
-цветовую гамму, соответствующую интерфейсу,
-загрузку изображения в Tkinter.
-Пользователь может нажать кнопку «Оплачено», после чего система меняет статус заказа.
-2. Оплата банковской картой
-Реализовал форму с полями:
-номер карты,
-срок действия,
-CVC,
-имя владельца.
-Добавил детальную валидацию:
-строгие ограничения по длине,
-проверка формата даты MM/YY,
-запрет букв в числовых полях,
-обработка пустых значений.
-После успешной проверки статус заказа обновляется, а окно закрывается.
-📅 День 6 — История заказов, база клиентов и связанные механизмы
-На шестой день я сосредоточился на функционале учёта данных. Было реализовано два ключевых модуля:
-1. История заказов
-Приложение хранит каждый расчёт перевозки в списке словарей, включая:
-ID заказа,
-клиента,
-маршрут,
-транспорт,
-вес,
-цену,
-статус оплаты,
-время создания.
-Страница истории отображает все эти данные в удобном текстовом формате. Это позволяет пользователю контролировать состояние заказов и анализировать выполненные перевозки.
-2. База клиентов
-Я реализовал автоматическое добавление клиента в список при создании заказа. Дубликаты исключаются. На отдельной странице отображается полный список всех клиентов.
-Дополнительно связал обновление статистики со всеми действиями пользователя:
-общая выручка, количество заказов, число клиентов — всё обновляется автоматически.
-📅 День 7 — Полное тестирование, оптимизация, рефакторинг и улучшение UX
-Последний день был посвящён финальной корректировке и улучшению приложения. Я провёл комплексное тестирование:
-проверил корректность всех расчётов,
-протестировал все варианты оплаты,
-проверил отображение интерфейса на разных размерах окна,
-устранил логические ошибки в обработке данных,
-улучшил визуальные отступы, выравнивания и читабельность.
-Особое внимание уделил UX:
-улучшил визуальное разделение блоков,
-увеличил контрастность некоторых элементов,
-добавил подсказки и улучшил структуру текста,
-обеспечил корректную работу кнопок и курсоров.
-После завершения тестирования приложение стало полностью готовым к использованию и демонстрации.
-🎯 Итог практики
-За семь дней мною было разработано полностью функциональное профессиональное приложение для расчёта стоимости логистических перевозок. Программа сочетает в себе:
-современный интерфейс;
-математически корректные расчёты;
-гибкую систему оплаты;
-ведение базы клиентов;
-историю заказов;
-статистические данные;
-адаптивный дизайн.
-Разработка дала мне практический опыт в Python, GUI на Tkinter, работе со сторонними библиотеками, создании архитектуры приложения и решении прикладных логистических задач.
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+import java.util.ArrayList;
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.data.category.DefaultCategoryDataset;
+
+public class FuelApp {
+
+    static Connection conn;
+    static String currentUser = null;
+
+    public static void main(String[] args) {
+        connectDB();
+        createTables();
+        new LoginWindow();
+    }
+
+    // ---------------- БАЗА ----------------
+    static void connectDB() {
+        try {
+            conn = DriverManager.getConnection("jdbc:sqlite:fuel_app.db");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    static void createTables() {
+        try {
+            Statement st = conn.createStatement();
+
+            st.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT,
+                    password TEXT
+                )
+            """);
+
+            st.execute("""
+                CREATE TABLE IF NOT EXISTS history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user TEXT,
+                    transport TEXT,
+                    distance REAL,
+                    fuel REAL,
+                    price REAL,
+                    result REAL,
+                    cost REAL
+                )
+            """);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ---------------- LOGIN ----------------
+    static class LoginWindow extends JFrame {
+
+        JTextField loginField = new JTextField(15);
+        JPasswordField passField = new JPasswordField(15);
+
+        LoginWindow() {
+            setTitle("Вход");
+            setSize(300, 200);
+            setLayout(new FlowLayout());
+
+            add(new JLabel("Логин"));
+            add(loginField);
+            add(new JLabel("Пароль"));
+            add(passField);
+
+            JButton loginBtn = new JButton("Войти");
+            JButton regBtn = new JButton("Регистрация");
+
+            add(loginBtn);
+            add(regBtn);
+
+            loginBtn.addActionListener(e -> login());
+            regBtn.addActionListener(e -> register());
+
+            setDefaultCloseOperation(EXIT_ON_CLOSE);
+            setVisible(true);
+        }
+
+        void register() {
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "SELECT * FROM users WHERE username=?");
+                ps.setString(1, loginField.getText());
+
+                if (ps.executeQuery().next()) {
+                    JOptionPane.showMessageDialog(this, "Пользователь существует");
+                    return;
+                }
+
+                ps = conn.prepareStatement(
+                        "INSERT INTO users(username, password) VALUES (?, ?)");
+                ps.setString(1, loginField.getText());
+                ps.setString(2, new String(passField.getPassword()));
+                ps.executeUpdate();
+
+                JOptionPane.showMessageDialog(this, "Успех");
+
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+
+        void login() {
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "SELECT * FROM users WHERE username=? AND password=?");
+
+                ps.setString(1, loginField.getText());
+                ps.setString(2, new String(passField.getPassword()));
+
+                if (ps.executeQuery().next()) {
+                    currentUser = loginField.getText();
+                    new MainWindow();
+                    dispose();
+                } else {
+                    JOptionPane.showMessageDialog(this, "Ошибка входа");
+                }
+
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    // ---------------- MAIN ----------------
+    static class MainWindow extends JFrame {
+
+        JTextField distanceField = new JTextField(10);
+        JTextField fuelField = new JTextField(10);
+        JTextField priceField = new JTextField(10);
+
+        JComboBox<String> transportBox =
+                new JComboBox<>(new String[]{"Легковой", "Грузовой", "Мотоцикл"});
+
+        JLabel resultLabel = new JLabel("");
+
+        MainWindow() {
+            setTitle("Fuel Analytics");
+            setSize(400, 350);
+            setLayout(new FlowLayout());
+
+            add(new JLabel("Пользователь: " + currentUser));
+
+            add(new JLabel("Транспорт"));
+            add(transportBox);
+
+            add(new JLabel("Дистанция"));
+            add(distanceField);
+
+            add(new JLabel("Топливо"));
+            add(fuelField);
+
+            add(new JLabel("Цена"));
+            add(priceField);
+
+            JButton calcBtn = new JButton("Рассчитать");
+            JButton histBtn = new JButton("История");
+            JButton analBtn = new JButton("Аналитика");
+
+            add(calcBtn);
+            add(histBtn);
+            add(analBtn);
+            add(resultLabel);
+
+            calcBtn.addActionListener(e -> calculate());
+            histBtn.addActionListener(e -> showHistory());
+            analBtn.addActionListener(e -> showAnalytics());
+
+            setDefaultCloseOperation(EXIT_ON_CLOSE);
+            setVisible(true);
+        }
+
+        void calculate() {
+            try {
+                double distance = Double.parseDouble(distanceField.getText());
+                double fuel = Double.parseDouble(fuelField.getText());
+                double price = Double.parseDouble(priceField.getText());
+
+                double consumption = (fuel / distance) * 100;
+                double cost = fuel * price;
+
+                resultLabel.setText(
+                        String.format("%.2f л/100км | %.2f руб", consumption, cost));
+
+                PreparedStatement ps = conn.prepareStatement("""
+                        INSERT INTO history(user, transport, distance, fuel, price, result, cost)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                """);
+
+                ps.setString(1, currentUser);
+                ps.setString(2, transportBox.getSelectedItem().toString());
+                ps.setDouble(3, distance);
+                ps.setDouble(4, fuel);
+                ps.setDouble(5, price);
+                ps.setDouble(6, consumption);
+                ps.setDouble(7, cost);
+
+                ps.executeUpdate();
+
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Ошибка ввода");
+            }
+        }
+
+        void showHistory() {
+            JFrame win = new JFrame("История");
+            win.setSize(400, 300);
+
+            DefaultTableModel model = new DefaultTableModel();
+            model.addColumn("Тип");
+            model.addColumn("Расход");
+            model.addColumn("Стоимость");
+
+            JTable table = new JTable(model);
+
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "SELECT transport, result, cost FROM history WHERE user=?");
+                ps.setString(1, currentUser);
+
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    model.addRow(new Object[]{
+                            rs.getString(1),
+                            rs.getDouble(2),
+                            rs.getDouble(3)
+                    });
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            win.add(new JScrollPane(table));
+            win.setVisible(true);
+        }
+
+        void showAnalytics() {
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "SELECT result FROM history WHERE user=?");
+                ps.setString(1, currentUser);
+
+                ResultSet rs = ps.executeQuery();
+
+                ArrayList<Double> values = new ArrayList<>();
+
+                while (rs.next()) {
+                    values.add(rs.getDouble(1));
+                }
+
+                if (values.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Нет данных");
+                    return;
+                }
+
+                double avg = values.stream().mapToDouble(a -> a).average().getAsDouble();
+                JOptionPane.showMessageDialog(this,
+                        "Средний расход: " + avg);
+
+                // график
+                DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+
+                for (int i = 0; i < values.size(); i++) {
+                    dataset.addValue(values.get(i), "Расход", String.valueOf(i));
+                }
+
+                JFreeChart chart = ChartFactory.createLineChart(
+                        "История", "Поездки", "л/100км", dataset);
+
+                JFrame chartFrame = new JFrame("График");
+                chartFrame.add(new ChartPanel(chart));
+                chartFrame.setSize(500, 400);
+                chartFrame.setVisible(true);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
