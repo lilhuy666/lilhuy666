@@ -1,115 +1,175 @@
-package com.fuelapp;
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpExchange;
 
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.io.FileWriter;
+import java.io.*;
+import java.net.InetSocketAddress;
+import java.nio.file.*;
+import java.util.*;
 
-public class FuelAppSwing {
+public class Main {
 
-    public static void main(String[] args) {
+    static final String FILE = "history.txt";
 
-        JFrame frame = new JFrame("⛽ Fuel Calculator");
-        frame.setSize(420, 420);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setLocationRelativeTo(null); // центр экрана
+    public static void main(String[] args) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
 
-        JPanel panel = new JPanel();
-        panel.setLayout(new GridLayout(0, 1, 8, 8));
-        panel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
-        panel.setBackground(new Color(245, 250, 245));
+        server.createContext("/", Main::index);
+        server.createContext("/calculate", Main::calculate);
+        server.createContext("/history", Main::history);
+        server.createContext("/profile", Main::profile);
 
-        Font font = new Font("Arial", Font.PLAIN, 14);
+        server.setExecutor(null);
+        server.start();
 
-        JLabel userLabel = new JLabel("👤 Пользователь: Гость", JLabel.CENTER);
-        userLabel.setFont(new Font("Arial", Font.BOLD, 14));
-
-        JTextField distanceField = new JTextField();
-        JTextField fuelField = new JTextField();
-        JTextField priceField = new JTextField();
-
-        distanceField.setFont(font);
-        fuelField.setFont(font);
-        priceField.setFont(font);
-
-        JLabel resultLabel = new JLabel("Результат появится здесь", JLabel.CENTER);
-        resultLabel.setFont(new Font("Arial", Font.BOLD, 14));
-
-        JButton calcBtn = new JButton("🧮 Рассчитать");
-        JButton saveBtn = new JButton("💾 Сохранить");
-
-        styleButton(calcBtn, new Color(76, 175, 80));
-        styleButton(saveBtn, new Color(56, 142, 60));
-
-        // расчет
-        calcBtn.addActionListener((ActionEvent e) -> {
-            try {
-                double d = Double.parseDouble(distanceField.getText());
-                double f = Double.parseDouble(fuelField.getText());
-                double p = Double.parseDouble(priceField.getText());
-
-                if (d == 0) {
-                    resultLabel.setText("❌ Дистанция не может быть 0");
-                    return;
-                }
-
-                double consumption = (f / d) * 100;
-                double cost = f * p;
-
-                resultLabel.setText(String.format(
-                        "<html>⛽ Расход: %.2f л/100км<br>💰 Стоимость: %.2f</html>",
-                        consumption, cost
-                ));
-
-            } catch (Exception ex) {
-                resultLabel.setText("❌ Проверь ввод данных");
-            }
-        });
-
-        // сохранение
-        saveBtn.addActionListener(e -> {
-            try (FileWriter writer = new FileWriter("history.txt", true)) {
-
-                writer.write(
-                        "Км: " + distanceField.getText() +
-                        ", Литры: " + fuelField.getText() +
-                        ", Цена: " + priceField.getText() +
-                        " -> " + resultLabel.getText().replaceAll("<.*?>", "") + "\n"
-                );
-
-                resultLabel.setText("✅ Сохранено");
-
-            } catch (Exception ex) {
-                resultLabel.setText("❌ Ошибка сохранения");
-            }
-        });
-
-        // добавление элементов
-        panel.add(userLabel);
-        panel.add(createLabel("🚗 Километры:"));
-        panel.add(distanceField);
-        panel.add(createLabel("⛽ Литры:"));
-        panel.add(fuelField);
-        panel.add(createLabel("💵 Цена за литр:"));
-        panel.add(priceField);
-        panel.add(calcBtn);
-        panel.add(saveBtn);
-        panel.add(resultLabel);
-
-        frame.add(panel);
-        frame.setVisible(true);
+        System.out.println("http://localhost:8080");
     }
 
-    private static JLabel createLabel(String text) {
-        JLabel label = new JLabel(text);
-        label.setFont(new Font("Arial", Font.PLAIN, 13));
-        return label;
+    static void index(HttpExchange ex) throws IOException {
+        send(ex, htmlPage("", ""));
     }
 
-    private static void styleButton(JButton button, Color color) {
-        button.setBackground(color);
-        button.setForeground(Color.WHITE);
-        button.setFocusPainted(false);
-        button.setFont(new Font("Arial", Font.BOLD, 13));
+    static void calculate(HttpExchange ex) throws IOException {
+        if ("POST".equals(ex.getRequestMethod())) {
+            String body = new String(ex.getRequestBody().readAllBytes());
+            Map<String, String> data = parse(body);
+
+            double d = Double.parseDouble(data.get("distance"));
+            double f = Double.parseDouble(data.get("fuel"));
+
+            double result = (f / d) * 100;
+
+            String record = d + " км | " + f + " л | " + result + " л/100км\n";
+            Files.writeString(Paths.get(FILE), record, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+
+            send(ex, htmlPage("<h2>Расход: " + result + " л/100км</h2>", ""));
+        }
+    }
+
+    static void history(HttpExchange ex) throws IOException {
+        String content = "";
+
+        if (Files.exists(Paths.get(FILE))) {
+            content = Files.readString(Paths.get(FILE)).replace("\n", "<br>");
+        }
+
+        send(ex, htmlPage("<h2>История</h2><div class='card'>" + content + "</div>", ""));
+    }
+
+    static void profile(HttpExchange ex) throws IOException {
+        String profile = """
+        <h2>Личный кабинет</h2>
+        <div class='card'>
+            <p><b>Имя:</b> Студент</p>
+            <p><b>Email:</b> student@mail.com</p>
+            <p><b>Проект:</b> Калькулятор расхода топлива</p>
+        </div>
+        """;
+
+        send(ex, htmlPage(profile, ""));
+    }
+
+    static Map<String, String> parse(String body) {
+        Map<String, String> map = new HashMap<>();
+        for (String p : body.split("&")) {
+            String[] kv = p.split("=");
+            map.put(kv[0], kv[1]);
+        }
+        return map;
+    }
+
+    static void send(HttpExchange ex, String response) throws IOException {
+        ex.sendResponseHeaders(200, response.getBytes().length);
+        OutputStream os = ex.getResponseBody();
+        os.write(response.getBytes());
+        os.close();
+    }
+
+    static String htmlPage(String dynamic, String script) {
+        return """
+        <html>
+        <head>
+        <meta charset="UTF-8">
+        <title>Fuel App</title>
+
+        <style>
+        body {
+            margin:0;
+            font-family: Arial;
+            background: linear-gradient(135deg,#1e3c72,#2a5298);
+            color:white;
+        }
+
+        .menu {
+            display:flex;
+            justify-content:center;
+            gap:20px;
+            padding:15px;
+            background: rgba(0,0,0,0.3);
+        }
+
+        .menu a {
+            color:white;
+            text-decoration:none;
+            font-weight:bold;
+        }
+
+        .container {
+            text-align:center;
+            margin-top:50px;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.1);
+            padding:20px;
+            margin:20px auto;
+            width:300px;
+            border-radius:15px;
+            backdrop-filter: blur(10px);
+        }
+
+        input {
+            padding:10px;
+            margin:5px;
+            width:200px;
+            border:none;
+            border-radius:5px;
+        }
+
+        button {
+            padding:10px 20px;
+            background:#00c6ff;
+            border:none;
+            border-radius:5px;
+            color:white;
+            cursor:pointer;
+        }
+        </style>
+
+        </head>
+
+        <body>
+
+        <div class="menu">
+            <a href="/">Главная</a>
+            <a href="/history">История</a>
+            <a href="/profile">Профиль</a>
+        </div>
+
+        <div class="container">
+            <h1>Калькулятор расхода топлива</h1>
+
+            <form method="post" action="/calculate">
+                <input name="distance" placeholder="Км"><br>
+                <input name="fuel" placeholder="Литры"><br>
+                <button>Рассчитать</button>
+            </form>
+
+            """ + dynamic + """
+
+        </div>
+
+        </body>
+        </html>
+        """;
     }
 }
