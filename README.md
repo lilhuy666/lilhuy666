@@ -1,34 +1,38 @@
-import javafx.application.Application;
-import javafx.geometry.Insets;
-import javafx.scene.Scene;
-import javafx.scene.control.*;
-import javafx.scene.layout.VBox;
-import javafx.stage.Stage;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.io.FileWriter;
 
-public class Main extends Application {
+public class FuelAppSwing {
 
-    private User currentUser = new User("Гость");
+    public static void main(String[] args) {
+        JFrame frame = new JFrame("Fuel Calculator");
+        frame.setSize(400, 400);
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-    @Override
-    public void start(Stage stage) {
-        stage.setTitle("Fuel Calculator App");
+        JPanel panel = new JPanel();
+        panel.setLayout(new GridLayout(8, 1, 10, 10));
+        panel.setBackground(new Color(232, 245, 233)); // светло-зеленый
 
-        TextField distanceField = new TextField();
-        distanceField.setPromptText("Км");
+        JTextField distanceField = new JTextField();
+        JTextField fuelField = new JTextField();
+        JTextField priceField = new JTextField();
 
-        TextField fuelField = new TextField();
-        fuelField.setPromptText("Литры");
+        JLabel resultLabel = new JLabel("Результат:");
+        JLabel userLabel = new JLabel("Пользователь: Гость");
 
-        TextField priceField = new TextField();
-        priceField.setPromptText("Цена за литр");
+        JButton calcBtn = new JButton("Рассчитать");
+        JButton saveBtn = new JButton("Сохранить");
 
-        Label resultLabel = new Label();
-        Label historyLabel = new Label("История:");
+        // стиль кнопок
+        calcBtn.setBackground(new Color(76, 175, 80));
+        calcBtn.setForeground(Color.WHITE);
 
-        Button calcBtn = new Button("Рассчитать");
-        Button saveBtn = new Button("Сохранить");
+        saveBtn.setBackground(new Color(56, 142, 60));
+        saveBtn.setForeground(Color.WHITE);
 
-        calcBtn.setOnAction(e -> {
+        // расчет
+        calcBtn.addActionListener((ActionEvent e) -> {
             try {
                 double d = Double.parseDouble(distanceField.getText());
                 double f = Double.parseDouble(fuelField.getText());
@@ -37,45 +41,36 @@ public class Main extends Application {
                 double consumption = (f / d) * 100;
                 double cost = f * p;
 
-                String result = String.format(
-                        "Расход: %.2f л/100км | Стоимость: %.2f",
-                        consumption, cost
+                resultLabel.setText(
+                        String.format("Расход: %.2f | Стоимость: %.2f", consumption, cost)
                 );
-
-                resultLabel.setText(result);
-                currentUser.addHistory(result);
 
             } catch (Exception ex) {
                 resultLabel.setText("Ошибка ввода");
             }
         });
 
-        saveBtn.setOnAction(e -> {
-            DataManager.save(currentUser);
-            historyLabel.setText("Сохранено!");
+        // сохранение
+        saveBtn.addActionListener(e -> {
+            try (FileWriter writer = new FileWriter("history.txt", true)) {
+                writer.write(resultLabel.getText() + "\n");
+            } catch (Exception ex) {
+                resultLabel.setText("Ошибка сохранения");
+            }
         });
 
-        VBox root = new VBox(10,
-                new Label("Пользователь: " + currentUser.getName()),
-                distanceField,
-                fuelField,
-                priceField,
-                calcBtn,
-                resultLabel,
-                saveBtn,
-                historyLabel
-        );
+        panel.add(userLabel);
+        panel.add(new JLabel("Км:"));
+        panel.add(distanceField);
+        panel.add(new JLabel("Литры:"));
+        panel.add(fuelField);
+        panel.add(new JLabel("Цена за литр:"));
+        panel.add(priceField);
+        panel.add(calcBtn);
+        panel.add(saveBtn);
+        panel.add(resultLabel);
 
-        root.setPadding(new Insets(20));
-
-        Scene scene = new Scene(root, 400, 400);
-        scene.getStylesheets().add("style.css");
-
-        stage.setScene(scene);
-        stage.show();
-    }
-
-    public static void main(String[] args) {
-        launch();
+        frame.add(panel);
+        frame.setVisible(true);
     }
 }
