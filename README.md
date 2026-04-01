@@ -1,80 +1,105 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 
 public class Main {
-
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new FuelCalculatorApp());
+        SwingUtilities.invokeLater(FuelCalculatorUI::new);
     }
 }
 
-class FuelCalculatorApp extends JFrame {
+class FuelCalculatorUI extends JFrame {
 
-    private JTextField distanceField;
-    private JTextField fuelField;
-    private JTextField priceField;
+    private JTextField distanceField, fuelField, priceField;
+    private JLabel consumptionLabel, costLabel, perKmLabel;
 
-    private JLabel consumptionResult;
-    private JLabel costResult;
-    private JLabel costPerKmResult;
-
-    public FuelCalculatorApp() {
+    public FuelCalculatorUI() {
         setTitle("Калькулятор расхода топлива");
-        setSize(400, 400);
+        setSize(700, 450);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-
         setLayout(new BorderLayout());
 
-        JPanel mainPanel = new JPanel();
-        mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+        // 🔷 Верхняя панель
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setBackground(new Color(30, 60, 90));
+        topPanel.setPreferredSize(new Dimension(0, 50));
 
-        // Ввод данных
-        mainPanel.add(createLabel("Ввод данных"));
+        JLabel title = new JLabel("Калькулятор расхода топлива");
+        title.setForeground(Color.WHITE);
+        title.setFont(new Font("Arial", Font.BOLD, 18));
+        title.setBorder(BorderFactory.createEmptyBorder(0, 15, 0, 0));
 
-        distanceField = createInput(mainPanel, "Пробег (км):");
-        fuelField = createInput(mainPanel, "Топливо (л):");
-        priceField = createInput(mainPanel, "Цена за литр:");
+        topPanel.add(title, BorderLayout.WEST);
+        add(topPanel, BorderLayout.NORTH);
 
-        // Кнопка
-        JButton calculateButton = new JButton("Рассчитать");
-        calculateButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        calculateButton.setBackground(Color.ORANGE);
-        calculateButton.setFocusPainted(false);
-        calculateButton.setFont(new Font("Arial", Font.BOLD, 16));
-        calculateButton.addActionListener(new CalculateAction());
+        // 🔷 Правая панель (меню)
+        JPanel rightMenu = new JPanel();
+        rightMenu.setLayout(new GridLayout(3, 1, 10, 10));
+        rightMenu.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        rightMenu.setPreferredSize(new Dimension(180, 0));
 
-        mainPanel.add(Box.createVerticalStrut(10));
-        mainPanel.add(calculateButton);
+        JButton profileBtn = new JButton("Личный кабинет");
+        JButton homeBtn = new JButton("Главная");
+        JButton historyBtn = new JButton("История");
 
-        // Результаты
-        mainPanel.add(Box.createVerticalStrut(20));
-        mainPanel.add(createLabel("Результаты"));
+        rightMenu.add(profileBtn);
+        rightMenu.add(homeBtn);
+        rightMenu.add(historyBtn);
 
-        consumptionResult = new JLabel("Расход топлива: -");
-        costResult = new JLabel("Стоимость поездки: -");
-        costPerKmResult = new JLabel("Цена за 1 км: -");
+        add(rightMenu, BorderLayout.EAST);
 
-        mainPanel.add(consumptionResult);
-        mainPanel.add(costResult);
-        mainPanel.add(costPerKmResult);
+        // 🔷 Центральная часть
+        JPanel centerPanel = new JPanel(new GridLayout(1, 2, 15, 0));
+        centerPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
 
-        add(mainPanel);
+        // 🟦 Панель ввода
+        JPanel inputPanel = new JPanel();
+        inputPanel.setLayout(new BoxLayout(inputPanel, BoxLayout.Y_AXIS));
+        inputPanel.setBorder(BorderFactory.createTitledBorder("Ввод данных"));
+
+        distanceField = createField(inputPanel, "Пробег (км):");
+        fuelField = createField(inputPanel, "Топливо (л):");
+        priceField = createField(inputPanel, "Цена (руб/л):");
+
+        JButton calcButton = new JButton("Рассчитать");
+        calcButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        calcButton.setBackground(Color.ORANGE);
+        calcButton.addActionListener(this::calculate);
+
+        inputPanel.add(Box.createVerticalStrut(15));
+        inputPanel.add(calcButton);
+
+        // 🟦 Панель результатов
+        JPanel resultPanel = new JPanel();
+        resultPanel.setLayout(new BoxLayout(resultPanel, BoxLayout.Y_AXIS));
+        resultPanel.setBorder(BorderFactory.createTitledBorder("Результаты"));
+
+        consumptionLabel = new JLabel("Расход: -");
+        costLabel = new JLabel("Стоимость: -");
+        perKmLabel = new JLabel("Цена за км: -");
+
+        resultPanel.add(Box.createVerticalStrut(20));
+        resultPanel.add(consumptionLabel);
+        resultPanel.add(Box.createVerticalStrut(10));
+        resultPanel.add(costLabel);
+        resultPanel.add(Box.createVerticalStrut(10));
+        resultPanel.add(perKmLabel);
+
+        // 👉 одинаковый размер
+        inputPanel.setPreferredSize(new Dimension(250, 300));
+        resultPanel.setPreferredSize(new Dimension(250, 300));
+
+        centerPanel.add(inputPanel);
+        centerPanel.add(resultPanel);
+
+        add(centerPanel, BorderLayout.CENTER);
+
         setVisible(true);
     }
 
-    private JLabel createLabel(String text) {
-        JLabel label = new JLabel(text);
-        label.setFont(new Font("Arial", Font.BOLD, 16));
-        label.setAlignmentX(Component.CENTER_ALIGNMENT);
-        return label;
-    }
-
-    private JTextField createInput(JPanel panel, String labelText) {
-        JPanel row = new JPanel(new BorderLayout());
+    private JTextField createField(JPanel panel, String labelText) {
+        JPanel row = new JPanel(new BorderLayout(5, 5));
         JLabel label = new JLabel(labelText);
         JTextField field = new JTextField();
 
@@ -87,25 +112,22 @@ class FuelCalculatorApp extends JFrame {
         return field;
     }
 
-    class CalculateAction implements ActionListener {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-            try {
-                double distance = Double.parseDouble(distanceField.getText());
-                double fuel = Double.parseDouble(fuelField.getText());
-                double price = Double.parseDouble(priceField.getText());
+    private void calculate(ActionEvent e) {
+        try {
+            double distance = Double.parseDouble(distanceField.getText());
+            double fuel = Double.parseDouble(fuelField.getText());
+            double price = Double.parseDouble(priceField.getText());
 
-                double consumption = (fuel / distance) * 100;
-                double totalCost = fuel * price;
-                double costPerKm = totalCost / distance;
+            double consumption = (fuel / distance) * 100;
+            double totalCost = fuel * price;
+            double costPerKm = totalCost / distance;
 
-                consumptionResult.setText("Расход топлива: " + String.format("%.2f", consumption) + " л/100км");
-                costResult.setText("Стоимость поездки: " + String.format("%.2f", totalCost) + " руб.");
-                costPerKmResult.setText("Цена за 1 км: " + String.format("%.2f", costPerKm) + " руб/км");
+            consumptionLabel.setText("Расход: " + String.format("%.2f", consumption) + " л/100км");
+            costLabel.setText("Стоимость: " + String.format("%.2f", totalCost) + " руб.");
+            perKmLabel.setText("Цена за км: " + String.format("%.2f", costPerKm) + " руб/км");
 
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(null, "Введите корректные данные!");
-            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Ошибка ввода данных!");
         }
     }
 }
