@@ -206,4 +206,7 @@ entry_login.pack()
 entry_password = ttk.Entry(frame, show="*")
 entry_password.pack()
 
-ttk.Button(frame, text="Войти"
+ttk.Button(frame, text="Войти", command=login).pack(pady=5)
+ttk.Button(frame, text="Регистрация", command=register).pack()
+
+login_window.mainloop()
