@@ -31,10 +31,11 @@ public class Main {
 
         public List<Article> searchByKeyword(String keyword) {
             List<Article> result = new ArrayList<>();
+            String lowerKeyword = keyword.toLowerCase();
 
             for (Article article : articles) {
-                if (article.getTitle().toLowerCase().contains(keyword.toLowerCase()) ||
-                    article.getContent().toLowerCase().contains(keyword.toLowerCase())) {
+                if (article.getTitle().toLowerCase().contains(lowerKeyword) ||
+                    article.getContent().toLowerCase().contains(lowerKeyword)) {
                     result.add(article);
                 }
             }
@@ -48,9 +49,10 @@ public class Main {
                 return;
             }
 
+            int index = 1;
             for (Article article : list) {
-                System.out.println("Заголовок: " + article.getTitle());
-                System.out.println("Текст: " + article.getContent());
+                System.out.println(index++ + ". " + article.getTitle());
+                System.out.println(article.getContent());
                 System.out.println("-------------------------");
             }
         }
@@ -59,29 +61,56 @@ public class Main {
     public static void main(String[] args) {
         NewsAggregator aggregator = new NewsAggregator();
 
-        aggregator.addArticle(new Article(
-                "Технологии будущего",
-                "Искусственный интеллект развивается очень быстро"
-        ));
+        String[] keywords = {
+            "технологии","искусственный интеллект","роботы","интернет","программирование",
+            "java","python","разработка","стартап","инновации",
+            "спорт","футбол","баскетбол","теннис","олимпиада",
+            "здоровье","медицина","вакцина","питание","фитнес",
+            "экономика","деньги","инвестиции","бизнес","рынок",
+            "политика","выборы","правительство","закон","реформа",
+            "образование","школа","университет","курсы","обучение",
+            "наука","космос","физика","химия","биология",
+            "природа","экология","климат","животные","лес",
+            "путешествия","туризм","отпуск","страны","город",
+            "еда","ресторан","кухня","рецепт","напитки",
+            "музыка","фильмы","сериалы","игры","развлечения",
+            "культура","искусство","театр","музей","выставка",
+            "авто","машины","транспорт","дороги","электромобили",
+            "безопасность","кибербезопасность","данные","хакеры","пароли",
+            "погода","зима","лето","осень","весна",
+            "работа","карьера","резюме","собеседование","офис",
+            "дом","ремонт","дизайн","интерьер","мебель",
+            "финансы","кредит","банк","налоги","страхование"
+        };
 
-        aggregator.addArticle(new Article(
-                "Спорт сегодня",
-                "Футбольная команда выиграла матч"
-        ));
+        // создаём 100 статей
+        for (int i = 0; i < keywords.length; i++) {
+            String keyword = keywords[i];
 
-        aggregator.addArticle(new Article(
-                "Новости экономики",
-                "Курс валют изменился"
-        ));
+            String title = "Новость про " + keyword;
+            String content = "Это статья о теме: " + keyword +
+                    ". Здесь обсуждаются " + keyword +
+                    " и связанные вопросы. Также слово " + keyword +
+                    " используется для поиска.";
+
+            aggregator.addArticle(new Article(title, content));
+        }
 
         Scanner scanner = new Scanner(System.in);
 
         System.out.print("Введите ключевое слово: ");
         String keyword = scanner.nextLine();
 
+        if (keyword.trim().isEmpty()) {
+            System.out.println("Введите непустое слово!");
+            return;
+        }
+
         List<Article> result = aggregator.searchByKeyword(keyword);
 
         System.out.println("\nРезультаты поиска:");
         aggregator.printArticles(result);
+
+        scanner.close();
     }
 }
