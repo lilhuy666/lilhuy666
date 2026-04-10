@@ -1,43 +1,87 @@
-.root {
-    -fx-background-color: #f5f5f5;
-    -fx-font-family: "Segoe UI", sans-serif;
-}
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
 
-.title {
-    -fx-font-size: 24px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #2c3e50;
-}
+public class Main {
 
-.label {
-    -fx-font-size: 15px;
-    -fx-text-fill: #333;
-}
+    static class Article {
+        private String title;
+        private String content;
 
-.text-field {
-    -fx-font-size: 16px;
-    -fx-padding: 8px 12px;
-    -fx-background-color: #fff;
-    -fx-border-color: #ddd;
-    -fx-border-radius: 6px;
-    -fx-background-radius: 6px;
-}
+        public Article(String title, String content) {
+            this.title = title;
+            this.content = content;
+        }
 
-.main-button {
-    -fx-background-color: #3498db;
-    -fx-text-fill: white;
-    -fx-font-size: 16px;
-    -fx-padding: 10px 20px;
-    -fx-border-radius: 8px;
-    -fx-cursor: hand;
-}
-.main-button:hover {
-    -fx-background-color: #2980b9;
-}
+        public String getTitle() {
+            return title;
+        }
 
-.result-text {
-    -fx-font-size: 18px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #27ae60;
-    -fx-margin-top: 10px;
+        public String getContent() {
+            return content;
+        }
+    }
+
+    static class NewsAggregator {
+        private List<Article> articles = new ArrayList<>();
+
+        public void addArticle(Article article) {
+            articles.add(article);
+        }
+
+        public List<Article> searchByKeyword(String keyword) {
+            List<Article> result = new ArrayList<>();
+
+            for (Article article : articles) {
+                if (article.getTitle().toLowerCase().contains(keyword.toLowerCase()) ||
+                    article.getContent().toLowerCase().contains(keyword.toLowerCase())) {
+                    result.add(article);
+                }
+            }
+
+            return result;
+        }
+
+        public void printArticles(List<Article> list) {
+            if (list.isEmpty()) {
+                System.out.println("Ничего не найдено.");
+                return;
+            }
+
+            for (Article article : list) {
+                System.out.println("Заголовок: " + article.getTitle());
+                System.out.println("Текст: " + article.getContent());
+                System.out.println("-------------------------");
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        NewsAggregator aggregator = new NewsAggregator();
+
+        aggregator.addArticle(new Article(
+                "Технологии будущего",
+                "Искусственный интеллект развивается очень быстро"
+        ));
+
+        aggregator.addArticle(new Article(
+                "Спорт сегодня",
+                "Футбольная команда выиграла матч"
+        ));
+
+        aggregator.addArticle(new Article(
+                "Новости экономики",
+                "Курс валют изменился"
+        ));
+
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.print("Введите ключевое слово: ");
+        String keyword = scanner.nextLine();
+
+        List<Article> result = aggregator.searchByKeyword(keyword);
+
+        System.out.println("\nРезультаты поиска:");
+        aggregator.printArticles(result);
+    }
 }
