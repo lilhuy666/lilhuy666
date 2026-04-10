@@ -1,116 +1,98 @@
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
+aggregator.addArticle(new Article("Будущее медицины", "Новые технологии помогают лечить сложные заболевания"));
+aggregator.addArticle(new Article("Зеленая энергия", "Солнечные панели становятся доступнее"));
+aggregator.addArticle(new Article("Космические исследования", "Человечество стремится к Марсу"));
+aggregator.addArticle(new Article("Умные города", "Технологии делают города комфортнее"));
+aggregator.addArticle(new Article("Развитие робототехники", "Роботы помогают в производстве"));
+aggregator.addArticle(new Article("Кибербезопасность", "Защита данных становится приоритетом"));
+aggregator.addArticle(new Article("Облачные технологии", "Хранение данных переходит в облако"));
+aggregator.addArticle(new Article("Блокчейн решения", "Децентрализация меняет финансы"));
+aggregator.addArticle(new Article("Автономные автомобили", "Машины учатся ездить без водителя"));
+aggregator.addArticle(new Article("Дополненная реальность", "AR меняет восприятие информации"));
 
-public class Main {
+aggregator.addArticle(new Article("Виртуальная реальность", "VR используется в обучении и играх"));
+aggregator.addArticle(new Article("Биотехнологии", "Генетика открывает новые возможности"));
+aggregator.addArticle(new Article("Нанотехнологии", "Микроскопические устройства меняют науку"));
+aggregator.addArticle(new Article("Финтех инновации", "Цифровые платежи становятся нормой"));
+aggregator.addArticle(new Article("Электронная коммерция", "Онлайн покупки продолжают расти"));
+aggregator.addArticle(new Article("Мобильные приложения", "Приложения упрощают повседневную жизнь"));
+aggregator.addArticle(new Article("Big Data аналитика", "Данные становятся новым ресурсом"));
+aggregator.addArticle(new Article("Интернет вещей", "Устройства соединяются в единую сеть"));
+aggregator.addArticle(new Article("Образование онлайн", "Учиться можно из любой точки мира"));
+aggregator.addArticle(new Article("Геймдев индустрия", "Игры становятся всё реалистичнее"));
 
-    static class Article {
-        private String title;
-        private String content;
+aggregator.addArticle(new Article("Электромобили", "Переход на электротранспорт ускоряется"));
+aggregator.addArticle(new Article("Устойчивое развитие", "Экология выходит на первый план"));
+aggregator.addArticle(new Article("Цифровая трансформация", "Бизнес меняется под влиянием технологий"));
+aggregator.addArticle(new Article("Социальные сети", "Коммуникация становится мгновенной"));
+aggregator.addArticle(new Article("Стриминговые сервисы", "Видео и музыка доступны онлайн"));
+aggregator.addArticle(new Article("Искусственный интеллект в медицине", "Алгоритмы помогают диагностике"));
+aggregator.addArticle(new Article("Автоматизация процессов", "Компании сокращают ручной труд"));
+aggregator.addArticle(new Article("Дроны технологии", "Беспилотники используются в доставке"));
+aggregator.addArticle(new Article("Умные дома", "Техника управляется голосом"));
+aggregator.addArticle(new Article("Квантовые вычисления", "Новые компьютеры решают сложные задачи"));
 
-        public Article(String title, String content) {
-            this.title = title;
-            this.content = content;
-        }
+aggregator.addArticle(new Article("Цифровая экономика", "Онлайн сервисы меняют рынок"));
+aggregator.addArticle(new Article("Технологии образования", "EdTech развивается стремительно"));
+aggregator.addArticle(new Article("Здоровый образ жизни", "Люди больше заботятся о себе"));
+aggregator.addArticle(new Article("Фитнес технологии", "Трекеры помогают следить за здоровьем"));
+aggregator.addArticle(new Article("Развитие стартапов", "Инновации рождаются в небольших командах"));
+aggregator.addArticle(new Article("Глобализация", "Мир становится более связанным"));
+aggregator.addArticle(new Article("Экологические инициативы", "Снижение выбросов становится целью"));
+aggregator.addArticle(new Article("Альтернативная энергетика", "Ветер и солнце заменяют нефть"));
+aggregator.addArticle(new Article("Развитие транспорта", "Скорость и удобство растут"));
+aggregator.addArticle(new Article("Цифровое искусство", "Художники используют технологии"));
 
-        public String getTitle() {
-            return title;
-        }
+aggregator.addArticle(new Article("Криптовалюты", "Цифровые деньги набирают популярность"));
+aggregator.addArticle(new Article("Умные устройства", "Гаджеты становятся умнее"));
+aggregator.addArticle(new Article("Космический туризм", "Путешествия в космос становятся реальностью"));
+aggregator.addArticle(new Article("3D печать", "Производство выходит на новый уровень"));
+aggregator.addArticle(new Article("Развитие науки", "Открытия происходят быстрее"));
+aggregator.addArticle(new Article("Цифровые платформы", "Сервисы объединяют пользователей"));
+aggregator.addArticle(new Article("Онлайн обучение", "Курсы доступны каждому"));
+aggregator.addArticle(new Article("Креативные индустрии", "Идеи становятся бизнесом"));
+aggregator.addArticle(new Article("Управление данными", "Информация требует структурирования"));
+aggregator.addArticle(new Article("Развитие ИТ", "Технологии проникают во все сферы"));
 
-        public String getContent() {
-            return content;
-        }
-    }
+aggregator.addArticle(new Article("Будущее работы", "Удалённая работа становится нормой"));
+aggregator.addArticle(new Article("Гибридные офисы", "Компании меняют подход к работе"));
+aggregator.addArticle(new Article("Цифровая безопасность", "Защита информации важна как никогда"));
+aggregator.addArticle(new Article("Новые профессии", "Появляются новые специальности"));
+aggregator.addArticle(new Article("Развитие коммуникаций", "Связь становится быстрее"));
+aggregator.addArticle(new Article("Голосовые помощники", "ИИ помогает в быту"));
+aggregator.addArticle(new Article("Машинное обучение", "Алгоритмы обучаются на данных"));
+aggregator.addArticle(new Article("Развитие интерфейсов", "Пользовательский опыт улучшается"));
+aggregator.addArticle(new Article("Цифровая культура", "Технологии влияют на общество"));
+aggregator.addArticle(new Article("Онлайн сервисы", "Все больше услуг переходят в интернет"));
 
-    static class NewsAggregator {
-        private List<Article> articles = new ArrayList<>();
+aggregator.addArticle(new Article("Управление проектами", "Гибкие методологии набирают популярность"));
+aggregator.addArticle(new Article("Развитие бизнеса", "Компании адаптируются к рынку"));
+aggregator.addArticle(new Article("Технологии будущего транспорта", "Гиперлуп и дроны меняют логистику"));
+aggregator.addArticle(new Article("Инновации в сельском хозяйстве", "Технологии повышают урожайность"));
+aggregator.addArticle(new Article("Цифровое здравоохранение", "Телемедицина становится доступной"));
+aggregator.addArticle(new Article("Развитие инфраструктуры", "Города становятся умнее"));
+aggregator.addArticle(new Article("Новые материалы", "Создаются прочные и легкие сплавы"));
+aggregator.addArticle(new Article("Энергосбережение", "Эффективность ресурсов растет"));
+aggregator.addArticle(new Article("Развитие логистики", "Доставка становится быстрее"));
+aggregator.addArticle(new Article("Автоматизация бизнеса", "Процессы оптимизируются"));
 
-        public void addArticle(Article article) {
-            articles.add(article);
-        }
+aggregator.addArticle(new Article("Цифровые технологии", "Они меняют повседневную жизнь"));
+aggregator.addArticle(new Article("Инновации в образовании", "Новые методы обучения появляются"));
+aggregator.addArticle(new Article("Глобальные тренды", "Мир меняется стремительно"));
+aggregator.addArticle(new Article("Развитие интернета", "Скорости продолжают расти"));
+aggregator.addArticle(new Article("Технологии связи", "5G открывает новые возможности"));
+aggregator.addArticle(new Article("Экономика будущего", "Цифровизация ускоряет рост"));
+aggregator.addArticle(new Article("Развитие медицины", "Лечение становится точнее"));
+aggregator.addArticle(new Article("Умные технологии", "Интеллект встроен в устройства"));
+aggregator.addArticle(new Article("Развитие общества", "Технологии влияют на людей"));
+aggregator.addArticle(new Article("Новые открытия", "Наука движется вперед"));
 
-        public List<Article> searchByKeyword(String keyword) {
-            List<Article> result = new ArrayList<>();
-            String lowerKeyword = keyword.toLowerCase();
-
-            for (Article article : articles) {
-                if (article.getTitle().toLowerCase().contains(lowerKeyword) ||
-                    article.getContent().toLowerCase().contains(lowerKeyword)) {
-                    result.add(article);
-                }
-            }
-
-            return result;
-        }
-
-        public void printArticles(List<Article> list) {
-            if (list.isEmpty()) {
-                System.out.println("Ничего не найдено.");
-                return;
-            }
-
-            int index = 1;
-            for (Article article : list) {
-                System.out.println(index++ + ". " + article.getTitle());
-                System.out.println(article.getContent());
-                System.out.println("-------------------------");
-            }
-        }
-    }
-
-    public static void main(String[] args) {
-        NewsAggregator aggregator = new NewsAggregator();
-
-        String[] keywords = {
-            "технологии","искусственный интеллект","роботы","интернет","программирование",
-            "java","python","разработка","стартап","инновации",
-            "спорт","футбол","баскетбол","теннис","олимпиада",
-            "здоровье","медицина","вакцина","питание","фитнес",
-            "экономика","деньги","инвестиции","бизнес","рынок",
-            "политика","выборы","правительство","закон","реформа",
-            "образование","школа","университет","курсы","обучение",
-            "наука","космос","физика","химия","биология",
-            "природа","экология","климат","животные","лес",
-            "путешествия","туризм","отпуск","страны","город",
-            "еда","ресторан","кухня","рецепт","напитки",
-            "музыка","фильмы","сериалы","игры","развлечения",
-            "культура","искусство","театр","музей","выставка",
-            "авто","машины","транспорт","дороги","электромобили",
-            "безопасность","кибербезопасность","данные","хакеры","пароли",
-            "погода","зима","лето","осень","весна",
-            "работа","карьера","резюме","собеседование","офис",
-            "дом","ремонт","дизайн","интерьер","мебель",
-            "финансы","кредит","банк","налоги","страхование"
-        };
-
-        // создаём 100 статей
-        for (int i = 0; i < keywords.length; i++) {
-            String keyword = keywords[i];
-
-            String title = "Новость про " + keyword;
-            String content = "Это статья о теме: " + keyword +
-                    ". Здесь обсуждаются " + keyword +
-                    " и связанные вопросы. Также слово " + keyword +
-                    " используется для поиска.";
-
-            aggregator.addArticle(new Article(title, content));
-        }
-
-        Scanner scanner = new Scanner(System.in);
-
-        System.out.print("Введите ключевое слово: ");
-        String keyword = scanner.nextLine();
-
-        if (keyword.trim().isEmpty()) {
-            System.out.println("Введите непустое слово!");
-            return;
-        }
-
-        List<Article> result = aggregator.searchByKeyword(keyword);
-
-        System.out.println("\nРезультаты поиска:");
-        aggregator.printArticles(result);
-
-        scanner.close();
-    }
-}
+aggregator.addArticle(new Article("Инновационные решения", "Компании внедряют новые подходы"));
+aggregator.addArticle(new Article("Технологический прогресс", "Скорость изменений растет"));
+aggregator.addArticle(new Article("Цифровые инновации", "Развитие не останавливается"));
+aggregator.addArticle(new Article("Будущее технологий", "ИИ и роботы меняют мир"));
+aggregator.addArticle(new Article("Интернет будущего", "Сети становятся быстрее и надежнее"));
+aggregator.addArticle(new Article("Развитие искусственного интеллекта", "ИИ становится частью жизни"));
+aggregator.addArticle(new Article("Технологии анализа", "Данные помогают принимать решения"));
+aggregator.addArticle(new Article("Развитие платформ", "Экосистемы растут"));
+aggregator.addArticle(new Article("Новые сервисы", "Услуги становятся удобнее"));
+aggregator.addArticle(new Article("Цифровое будущее", "Технологии определяют развитие мира"));
