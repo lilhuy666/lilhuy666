@@ -89,3 +89,5 @@ if __name__ == "__main__":
     85a73564e3764f2baedb52f1422a3603
 
   8659598412:AAGidVRLwWRllRe38IOMjbHpzi_Rnry0CM4  
+
+pip install python-telegram-bot requests
