@@ -1,21 +1,87 @@
-Список использованных источников
-Министерство цифрового развития, связи и массовых коммуникаций РФ
-Федеральный закон №149-ФЗ «Об информации, информационных технологиях и о защите информации» (ред. 2023 г.). — URL: https://www.consultant.ru
-Государственная Дума Российской Федерации
-Федеральный закон №152-ФЗ «О персональных данных» (ред. 2024 г.). — URL: https://www.consultant.ru
-Python Software Foundation
-Документация Python 3. — 2024. — URL: https://docs.python.org
-Telegram Messenger LLP
-Telegram Bot API Documentation. — 2024. — URL: https://core.telegram.org/bots/api
-NewsAPI
-News API Documentation. — 2024. — URL: https://newsapi.org/docs
-Fluent Python, 2nd Edition
-Ramalho L. Fluent Python. — 2nd ed. — O’Reilly Media, 2022.
-Python Crash Course, 2nd Edition
-Matthes E. Python Crash Course. — 2nd ed. — No Starch Press, 2021.
-Clean Code
-Martin R. C. Clean Code: A Handbook of Agile Software Craftsmanship. — Updated edition, 2020.
-Postman
-Postman Learning Center. — 2023. — URL: https://learning.postman.com
-ISO
-ISO/IEC 12207:2020 — Systems and software engineering — Software life cycle processes.
+import requests
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+# ==========================
+# 🔑 НАСТРОЙКИ
+# ==========================
+TELEGRAM_TOKEN = "8659598412:AAGidVRLwWRllRe38IOMjbHpzi_Rnry0CM4"
+NEWS_API_KEY = "85a73564e3764f2baedb52f1422a3603"
+
+# ==========================
+# 📡 МОДУЛЬ АГРЕГАЦИИ НОВОСТЕЙ
+# ==========================
+def get_news(keyword: str):
+    url = "https://newsapi.org/v2/everything"
+
+    params = {
+        "q": keyword,
+        "language": "ru",
+        "sortBy": "publishedAt",
+        "apiKey": NEWS_API_KEY,
+        "pageSize": 5
+    }
+
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    articles = []
+
+    if data.get("status") == "ok":
+        for article in data["articles"]:
+            title = article["title"]
+            url = article["url"]
+            source = article["source"]["name"]
+
+            articles.append(f"📰 {title}\nИсточник: {source}\n{url}\n")
+
+    return articles
+
+
+# ==========================
+# 🤖 КОМАНДЫ БОТА
+# ==========================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Привет! 👋\n\n"
+        "Напиши команду:\n"
+        "/news слово\n\n"
+        "Например:\n"
+        "/news технологии"
+    )
+
+
+async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❗ Укажи ключевое слово\nПример: /news AI")
+        return
+
+    keyword = " ".join(context.args)
+
+    await update.message.reply_text(f"🔎 Ищу новости по запросу: {keyword}...")
+
+    articles = get_news(keyword)
+
+    if not articles:
+        await update.message.reply_text("😔 Новости не найдены")
+        return
+
+    for article in articles:
+        await update.message.reply_text(article)
+
+
+# ==========================
+# 🚀 ЗАПУСК БОТА
+# ==========================
+def main():
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("news", news))
+
+    print("Бот запущен...")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
