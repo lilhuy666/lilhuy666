@@ -1,1 +1,1 @@
-8659598412:AAGidVRLwWRllRe38IOMjbHpzi_Rnry0CM4
+C:\Users\Кирилл\AppData\Local\Programs\Python\
