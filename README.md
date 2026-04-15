@@ -1,87 +1,248 @@
-import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import tkinter as tk
+from tkinter import ttk, messagebox
+import psycopg2
+import bcrypt
 
-# ==========================
-# 🔑 НАСТРОЙКИ
-# ==========================
-TELEGRAM_TOKEN = "8659598412:AAGidVRLwWRllRe38IOMjbHpzi_Rnry0CM4"
-NEWS_API_KEY = "85a73564e3764f2baedb52f1422a3603"
+# ===============================
+# 🔌 Подключение БД
+# ===============================
+conn = psycopg2.connect(
+    dbname="fuelcalc",
+    user="postgres",
+    password="1234",
+    host="localhost",
+    port="5432"
+)
+cursor = conn.cursor()
 
-# ==========================
-# 📡 МОДУЛЬ АГРЕГАЦИИ НОВОСТЕЙ
-# ==========================
-def get_news(keyword: str):
-    url = "https://newsapi.org/v2/everything"
+current_user = None
+current_role = None
 
-    params = {
-        "q": keyword,
-        "language": "ru",
-        "sortBy": "publishedAt",
-        "apiKey": NEWS_API_KEY,
-        "pageSize": 5
-    }
+# ===============================
+# 🚗 Транспорт
+# ===============================
+vehicles = {
+    "Легковой автомобиль": {"city": 10, "highway": 6},
+    "Кроссовер": {"city": 12, "highway": 8},
+    "Грузовик": {"city": 30, "highway": 22},
+    "Автобус": {"city": 35, "highway": 25},
+}
 
-    response = requests.get(url, params=params)
-    data = response.json()
+FUEL_PRICE = 55
 
-    articles = []
+# ===============================
+# 🖥️ UI
+# ===============================
+root = tk.Tk()
+root.title("FuelCalc Pro")
+root.geometry("1000x700")
 
-    if data.get("status") == "ok":
-        for article in data["articles"]:
-            title = article["title"]
-            url = article["url"]
-            source = article["source"]["name"]
+# ===============================
+# 🔐 Регистрация
+# ===============================
+def show_register():
+    root_clear()
 
-            articles.append(f"📰 {title}\nИсточник: {source}\n{url}\n")
+    frame = tk.Frame(root)
+    frame.place(relx=0.5, rely=0.5, anchor="center")
 
-    return articles
+    tk.Label(frame, text="Регистрация").pack()
 
+    user_entry = tk.Entry(frame)
+    user_entry.pack()
 
-# ==========================
-# 🤖 КОМАНДЫ БОТА
-# ==========================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Привет! 👋\n\n"
-        "Напиши команду:\n"
-        "/news слово\n\n"
-        "Например:\n"
-        "/news технологии"
-    )
+    pass_entry = tk.Entry(frame, show="*")
+    pass_entry.pack()
 
+    role_var = tk.StringVar(value="user")
+    ttk.Combobox(frame, textvariable=role_var,
+                 values=["user", "admin"]).pack()
 
-async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("❗ Укажи ключевое слово\nПример: /news AI")
+    def register():
+        username = user_entry.get()
+        password = pass_entry.get()
+        role = role_var.get()
+
+        if not username or not password:
+            messagebox.showerror("Ошибка", "Заполните поля")
+            return
+
+        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+
+        try:
+            cursor.execute(
+                "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+                (username, hashed.decode(), role)
+            )
+            conn.commit()
+            messagebox.showinfo("Успех", "Пользователь создан")
+            show_login()
+        except:
+            messagebox.showerror("Ошибка", "Пользователь уже существует")
+
+    tk.Button(frame, text="Создать", command=register).pack()
+    tk.Button(frame, text="Назад", command=show_login).pack()
+
+# ===============================
+# 🔐 Вход
+# ===============================
+def show_login():
+    root_clear()
+
+    frame = tk.Frame(root)
+    frame.place(relx=0.5, rely=0.5, anchor="center")
+
+    tk.Label(frame, text="Вход").pack()
+
+    user_entry = tk.Entry(frame)
+    user_entry.pack()
+
+    pass_entry = tk.Entry(frame, show="*")
+    pass_entry.pack()
+
+    def login():
+        global current_user, current_role
+
+        username = user_entry.get()
+        password = pass_entry.get()
+
+        cursor.execute("SELECT password, role FROM users WHERE username=%s", (username,))
+        result = cursor.fetchone()
+
+        if result:
+            db_pass, role = result
+            if bcrypt.checkpw(password.encode(), db_pass.encode()):
+                current_user = username
+                current_role = role
+                show_main()
+                return
+
+        messagebox.showerror("Ошибка", "Неверный логин или пароль")
+
+    tk.Button(frame, text="Войти", command=login).pack()
+    tk.Button(frame, text="Регистрация", command=show_register).pack()
+
+# ===============================
+# 🧮 Калькулятор
+# ===============================
+def build_calc():
+    clear_main()
+
+    tk.Label(main_frame, text=f"Пользователь: {current_user} ({current_role})").pack()
+
+    combo = ttk.Combobox(main_frame, values=list(vehicles.keys()))
+    combo.pack()
+
+    dist = tk.Entry(main_frame)
+    dist.pack()
+
+    city = tk.Entry(main_frame)
+    city.insert(0, "50")
+    city.pack()
+
+    highway = tk.Entry(main_frame)
+    highway.insert(0, "50")
+    highway.pack()
+
+    result = tk.Label(main_frame, text="")
+    result.pack()
+
+    def calc():
+        try:
+            v = vehicles[combo.get()]
+            d = float(dist.get())
+            c = float(city.get())
+            h = float(highway.get())
+
+            if c + h != 100:
+                raise ValueError
+
+            avg = v["city"]*(c/100) + v["highway"]*(h/100)
+            fuel = d/100*avg
+            cost = fuel*FUEL_PRICE
+
+            result.config(text=f"{fuel:.2f} л | {cost:.2f} ₽")
+
+            # 💾 Сохраняем в БД
+            cursor.execute("""
+                INSERT INTO history
+                (username, vehicle, distance, fuel, cost, city_percent, highway_percent)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """, (current_user, combo.get(), d, fuel, cost, c, h))
+            conn.commit()
+
+        except:
+            messagebox.showerror("Ошибка", "Проверь ввод")
+
+    tk.Button(main_frame, text="Рассчитать", command=calc).pack()
+
+# ===============================
+# 📜 История
+# ===============================
+def show_history():
+    clear_main()
+
+    cursor.execute("SELECT * FROM history WHERE username=%s", (current_user,))
+    rows = cursor.fetchall()
+
+    for r in rows:
+        text = f"{r[2]} | {r[3]} км | {r[5]:.2f} ₽"
+        tk.Label(main_frame, text=text).pack(anchor='w')
+
+# ===============================
+# 👨‍💼 Админ панель
+# ===============================
+def admin_panel():
+    clear_main()
+
+    if current_role != "admin":
+        tk.Label(main_frame, text="Нет доступа").pack()
         return
 
-    keyword = " ".join(context.args)
+    cursor.execute("SELECT username, role FROM users")
+    users = cursor.fetchall()
 
-    await update.message.reply_text(f"🔎 Ищу новости по запросу: {keyword}...")
+    for u in users:
+        tk.Label(main_frame, text=f"{u[0]} ({u[1]})").pack(anchor='w')
 
-    articles = get_news(keyword)
+# ===============================
+# 🧭 Главное окно
+# ===============================
+def show_main():
+    root_clear()
 
-    if not articles:
-        await update.message.reply_text("😔 Новости не найдены")
-        return
+    global main_frame
 
-    for article in articles:
-        await update.message.reply_text(article)
+    container = tk.Frame(root)
+    container.pack(fill="both", expand=True)
 
+    menu = tk.Frame(container, width=200)
+    menu.pack(side="left", fill="y")
 
-# ==========================
-# 🚀 ЗАПУСК БОТА
-# ==========================
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    main_frame = tk.Frame(container)
+    main_frame.pack(side="right", expand=True, fill="both")
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("news", news))
+    tk.Button(menu, text="Калькулятор", command=build_calc).pack(pady=10)
+    tk.Button(menu, text="История", command=show_history).pack(pady=10)
+    tk.Button(menu, text="Админ", command=admin_panel).pack(pady=10)
 
-    print("Бот запущен...")
-    app.run_polling()
+    tk.Button(menu, text="Выход", command=show_login).pack(pady=20)
 
+    build_calc()
 
-if __name__ == "__main__":
-    main()
+# ===============================
+# 🧹 Утилиты
+# ===============================
+def root_clear():
+    for w in root.winfo_children():
+        w.destroy()
+
+def clear_main():
+    for w in main_frame.winfo_children():
+        w.destroy()
+
+# ===============================
+# ▶️ Старт
+# ===============================
+show_login()
+root.mainloop()
