@@ -105,7 +105,7 @@ def show_login():
 
         username = user_entry.get()
         password = pass_entry.get()
-
+        
         cursor.execute("SELECT password, role FROM users WHERE username=%s", (username,))
         result = cursor.fetchone()
 
@@ -246,3 +246,6 @@ def clear_main():
 # ===============================
 show_login()
 root.mainloop()
+
+
+python -m pip install psycopg2-binary bcrypt
