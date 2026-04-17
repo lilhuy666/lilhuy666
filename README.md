@@ -1,236 +1,240 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import bcrypt
+from datetime import datetime
 
 # ===============================
-# 💾 "База данных" в памяти
+# 🎨 Цвета интерфейса
 # ===============================
-users_db = {}
-history_db = []
-
-current_user = None
-current_role = None
-
-# ===============================
-# 🚗 Транспорт
-# ===============================
-vehicles = {
-    "Легковой автомобиль": {"city": 10, "highway": 6},
-    "Кроссовер": {"city": 12, "highway": 8},
-    "Грузовик": {"city": 30, "highway": 22},
-    "Автобус": {"city": 35, "highway": 25},
+COLORS = {
+    "primary": "#3b82f6",
+    "secondary": "#1e40af",
+    "accent": "#06b6d4",
+    "background": "#0f172a",
+    "surface": "#1e293b",
+    "text": "#f8fafc",
+    "text_secondary": "#94a3b8",
+    "success": "#10b981",
 }
 
-FUEL_PRICE = 55
+# ===============================
+# 💾 Данные
+# ===============================
+history = []
+clients = []
 
 # ===============================
-# 🖥️ UI
+# 🖥️ Главное окно
 # ===============================
 root = tk.Tk()
-root.title("FuelCalc Pro")
-root.geometry("1000x700")
+root.title("⛽ FuelCalc Pro - Калькулятор расхода топлива")
+root.geometry("1100x700")
+root.configure(bg=COLORS["background"])
+
+style = ttk.Style()
+style.theme_use('clam')
 
 # ===============================
-# 🔐 Регистрация
+# Header
 # ===============================
-def show_register():
-    root_clear()
+header = tk.Frame(root, bg=COLORS["surface"], height=80)
+header.pack(fill="x")
 
-    frame = tk.Frame(root)
-    frame.place(relx=0.5, rely=0.5, anchor="center")
-
-    tk.Label(frame, text="Регистрация").pack()
-
-    user_entry = tk.Entry(frame)
-    user_entry.pack()
-
-    pass_entry = tk.Entry(frame, show="*")
-    pass_entry.pack()
-
-    role_var = tk.StringVar(value="user")
-    ttk.Combobox(frame, textvariable=role_var,
-                 values=["user", "admin"]).pack()
-
-    def register():
-        username = user_entry.get()
-        password = pass_entry.get()
-        role = role_var.get()
-
-        if not username or not password:
-            messagebox.showerror("Ошибка", "Заполните поля")
-            return
-
-        if username in users_db:
-            messagebox.showerror("Ошибка", "Пользователь уже существует")
-            return
-
-        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-
-        users_db[username] = {
-            "password": hashed,
-            "role": role
-        }
-
-        messagebox.showinfo("Успех", "Пользователь создан")
-        show_login()
-
-    tk.Button(frame, text="Создать", command=register).pack()
-    tk.Button(frame, text="Назад", command=show_login).pack()
+tk.Label(header, text="⛽ FuelCalc Pro",
+         bg=COLORS["surface"], fg=COLORS["text"],
+         font=("Arial", 20, "bold")).pack(pady=20)
 
 # ===============================
-# 🔐 Вход
+# Основной контейнер
 # ===============================
-def show_login():
-    root_clear()
+container = tk.Frame(root, bg=COLORS["background"])
+container.pack(expand=True, fill="both", padx=20, pady=10)
 
-    frame = tk.Frame(root)
-    frame.place(relx=0.5, rely=0.5, anchor="center")
+menu_frame = tk.Frame(container, bg=COLORS["surface"], width=220)
+menu_frame.pack(side="left", fill="y", padx=(0, 10))
+menu_frame.pack_propagate(False)
 
-    tk.Label(frame, text="Вход").pack()
+main_frame = tk.Frame(container, bg=COLORS["background"])
+main_frame.pack(side="left", expand=True, fill="both")
 
-    user_entry = tk.Entry(frame)
-    user_entry.pack()
+# ===============================
+# Очистка экрана
+# ===============================
+def clear_main_frame():
+    for widget in main_frame.winfo_children():
+        widget.destroy()
 
-    pass_entry = tk.Entry(frame, show="*")
-    pass_entry.pack()
+# ===============================
+# 📈 Статистика
+# ===============================
+stats_frame = tk.Frame(menu_frame, bg=COLORS["surface"])
+stats_frame.pack(pady=10, padx=10, fill='x')
 
-    def login():
-        global current_user, current_role
+def update_stats():
+    for widget in stats_frame.winfo_children():
+        widget.destroy()
 
-        username = user_entry.get()
-        password = pass_entry.get()
+    total_clients = len(clients)
+    total_orders = len(history)
+    total_fuel = sum(h['fuel_used'] for h in history)
 
-        user = users_db.get(username)
+    tk.Label(stats_frame, text="📈 Статистика",
+             bg=COLORS["surface"], fg=COLORS["accent"],
+             font=("Arial", 12, "bold")).pack(anchor='w', pady=5)
 
-        if user and bcrypt.checkpw(password.encode(), user["password"]):
-            current_user = username
-            current_role = user["role"]
-            show_main()
-            return
+    data = [
+        ("👥 Клиенты:", total_clients),
+        ("🚗 Поездки:", total_orders),
+        ("⛽ Топливо:", f"{total_fuel:.1f} л")
+    ]
 
-        messagebox.showerror("Ошибка", "Неверный логин или пароль")
+    for label, value in data:
+        frame = tk.Frame(stats_frame, bg=COLORS["surface"])
+        frame.pack(fill='x', pady=2)
 
-    tk.Button(frame, text="Войти", command=login).pack()
-    tk.Button(frame, text="Регистрация", command=show_register).pack()
+        tk.Label(frame, text=label,
+                 bg=COLORS["surface"], fg=COLORS["text_secondary"]).pack(side='left')
+        tk.Label(frame, text=value,
+                 bg=COLORS["surface"], fg=COLORS["text"]).pack(side='right')
 
 # ===============================
 # 🧮 Калькулятор
 # ===============================
-def build_calc():
-    clear_main()
+def show_calc():
+    clear_main_frame()
 
-    tk.Label(main_frame, text=f"Пользователь: {current_user} ({current_role})").pack()
+    tk.Label(main_frame, text="🧮 Расчет расхода топлива",
+             bg=COLORS["background"], fg=COLORS["text"],
+             font=("Arial", 20, "bold")).pack(pady=20)
 
-    combo = ttk.Combobox(main_frame, values=list(vehicles.keys()))
-    combo.pack()
+    form = tk.Frame(main_frame, bg=COLORS["surface"], padx=20, pady=20)
+    form.pack(pady=10)
 
-    dist = tk.Entry(main_frame)
-    dist.pack()
+    labels = [
+        "📏 Расстояние (км):",
+        "⛽ Расход (л/100 км):",
+        "💰 Цена топлива:",
+        "🚗 Тип транспорта:",
+        "👤 Клиент:"
+    ]
 
-    city = tk.Entry(main_frame)
-    city.insert(0, "50")
-    city.pack()
+    entries = []
 
-    highway = tk.Entry(main_frame)
-    highway.insert(0, "50")
-    highway.pack()
+    for i, text in enumerate(labels):
+        tk.Label(form, text=text,
+                 bg=COLORS["surface"], fg=COLORS["text"]).grid(row=i, column=0, pady=10, sticky='w')
 
-    result = tk.Label(main_frame, text="")
-    result.pack()
+        if i == 3:
+            combo = ttk.Combobox(form,
+                                 values=["Легковой", "SUV", "Грузовик", "Фура"],
+                                 state="readonly", width=25)
+            combo.grid(row=i, column=1, pady=10)
+            entries.append(combo)
+        else:
+            entry = tk.Entry(form, width=28,
+                             bg=COLORS["secondary"], fg=COLORS["text"])
+            entry.grid(row=i, column=1, pady=10)
+            entries.append(entry)
 
-    def calc():
+    def calculate():
         try:
-            v = vehicles[combo.get()]
-            d = float(dist.get())
-            c = float(city.get())
-            h = float(highway.get())
+            distance = float(entries[0].get())
+            consumption = float(entries[1].get())
+            fuel_price = float(entries[2].get())
+            vehicle = entries[3].get()
+            client = entries[4].get()
 
-            if c + h != 100:
-                raise ValueError
+            if not all([distance, consumption, fuel_price, vehicle, client]):
+                messagebox.showwarning("Ошибка", "Заполните все поля!")
+                return
 
-            avg = v["city"] * (c / 100) + v["highway"] * (h / 100)
-            fuel = d / 100 * avg
-            cost = fuel * FUEL_PRICE
+            fuel_used = (distance / 100) * consumption
+            total_cost = fuel_used * fuel_price
 
-            result.config(text=f"{fuel:.2f} л | {cost:.2f} ₽")
+            record = {
+                "client": client,
+                "vehicle": vehicle,
+                "distance": distance,
+                "fuel_used": round(fuel_used, 2),
+                "price": round(total_cost, 2),
+                "date": datetime.now().strftime("%d.%m.%Y %H:%M")
+            }
 
-            # 💾 Сохраняем историю
-            history_db.append({
-                "username": current_user,
-                "vehicle": combo.get(),
-                "distance": d,
-                "fuel": fuel,
-                "cost": cost,
-                "city": c,
-                "highway": h
-            })
+            history.append(record)
+
+            if client not in clients:
+                clients.append(client)
+
+            update_stats()
+
+            messagebox.showinfo(
+                "Результат",
+                f"🚗 {vehicle}\n"
+                f"⛽ Расход: {fuel_used:.2f} л\n"
+                f"💰 Стоимость: {total_cost:.2f} ₽"
+            )
 
         except:
-            messagebox.showerror("Ошибка", "Проверь ввод")
+            messagebox.showerror("Ошибка", "Введите корректные данные!")
 
-    tk.Button(main_frame, text="Рассчитать", command=calc).pack()
+    tk.Button(main_frame, text="Рассчитать",
+              command=calculate,
+              bg=COLORS["accent"], fg=COLORS["text"],
+              font=("Arial", 12, "bold"),
+              width=20).pack(pady=20)
 
 # ===============================
-# 📜 История
+# 👥 Клиенты
+# ===============================
+def show_clients():
+    clear_main_frame()
+
+    tk.Label(main_frame, text="👥 Клиенты",
+             bg=COLORS["background"], fg=COLORS["text"],
+             font=("Arial", 20, "bold")).pack(pady=20)
+
+    for i, c in enumerate(clients, 1):
+        tk.Label(main_frame, text=f"{i}. {c}",
+                 bg=COLORS["background"], fg=COLORS["text"]).pack(anchor='w')
+
+# ===============================
+# 📊 История
 # ===============================
 def show_history():
-    clear_main()
+    clear_main_frame()
 
-    for r in history_db:
-        if r["username"] == current_user:
-            text = f"{r['vehicle']} | {r['distance']} км | {r['cost']:.2f} ₽"
-            tk.Label(main_frame, text=text).pack(anchor='w')
+    tk.Label(main_frame, text="📊 История поездок",
+             bg=COLORS["background"], fg=COLORS["text"],
+             font=("Arial", 20, "bold")).pack(pady=20)
 
-# ===============================
-# 👨‍💼 Админ панель
-# ===============================
-def admin_panel():
-    clear_main()
-
-    if current_role != "admin":
-        tk.Label(main_frame, text="Нет доступа").pack()
-        return
-
-    for username, data in users_db.items():
-        tk.Label(main_frame, text=f"{username} ({data['role']})").pack(anchor='w')
+    for h in history:
+        tk.Label(main_frame,
+                 text=f"{h['client']} | {h['vehicle']} | {h['distance']} км | "
+                      f"{h['fuel_used']} л | {h['price']} ₽",
+                 bg=COLORS["background"], fg=COLORS["text"]).pack(anchor='w')
 
 # ===============================
-# 🧭 Главное окно
+# 📋 Меню
 # ===============================
-def show_main():
-    root_clear()
+tk.Label(menu_frame, text="Меню",
+         bg=COLORS["surface"], fg=COLORS["accent"],
+         font=("Arial", 14, "bold")).pack(pady=15)
 
-    global main_frame
+tk.Button(menu_frame, text="🧮 Калькулятор",
+          command=show_calc,
+          bg=COLORS["surface"], fg=COLORS["text"]).pack(fill='x', pady=5, padx=10)
 
-    container = tk.Frame(root)
-    container.pack(fill="both", expand=True)
+tk.Button(menu_frame, text="👥 Клиенты",
+          command=show_clients,
+          bg=COLORS["surface"], fg=COLORS["text"]).pack(fill='x', pady=5, padx=10)
 
-    menu = tk.Frame(container, width=200)
-    menu.pack(side="left", fill="y")
-
-    main_frame = tk.Frame(container)
-    main_frame.pack(side="right", expand=True, fill="both")
-
-    tk.Button(menu, text="Калькулятор", command=build_calc).pack(pady=10)
-    tk.Button(menu, text="История", command=show_history).pack(pady=10)
-    tk.Button(menu, text="Админ", command=admin_panel).pack(pady=10)
-    tk.Button(menu, text="Выход", command=show_login).pack(pady=20)
-
-    build_calc()
+tk.Button(menu_frame, text="📊 История",
+          command=show_history,
+          bg=COLORS["surface"], fg=COLORS["text"]).pack(fill='x', pady=5, padx=10)
 
 # ===============================
-# 🧹 Утилиты
+# 🚀 Старт
 # ===============================
-def root_clear():
-    for w in root.winfo_children():
-        w.destroy()
+show_calc()
+update_stats()
 
-def clear_main():
-    for w in main_frame.winfo_children():
-        w.destroy()
-
-# ===============================
-# ▶️ Старт
-# ===============================
-show_login()
 root.mainloop()
