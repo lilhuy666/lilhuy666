@@ -33,7 +33,7 @@ def load_data():
 
 def save_data():
     with open("data.json", "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False)
+        json.dump(users, f, ensure_ascii=False, indent=2)
 
 # ===============================
 # 🖥️ Окно
@@ -85,60 +85,104 @@ def clear():
 def show_calc():
     clear()
 
-    tk.Label(main_frame, text="Калькулятор топлива",
+    tk.Label(main_frame, text="Калькулятор",
              bg=COLORS["bg"], fg=COLORS["text"],
-             font=("Arial", 22)).pack(pady=20)
+             font=("Arial", 22)).pack(pady=10)
 
-    frame = tk.Frame(main_frame, bg=COLORS["card"], padx=30, pady=30)
+    if not current_user:
+        tk.Label(main_frame, text="Сначала войдите в профиль",
+                 bg=COLORS["bg"], fg="red").pack()
+        return
+
+    user = users[current_user]
+
+    # выбор авто
+    tk.Label(main_frame, text="Выберите авто",
+             bg=COLORS["bg"], fg=COLORS["text"]).pack()
+
+    car_var = tk.StringVar()
+    car_var.set(user["cars"][0]["name"] if user["cars"] else "")
+
+    cars = [c["name"] for c in user["cars"]]
+    tk.OptionMenu(main_frame, car_var, *cars).pack(pady=5)
+
+    # выбор режима
+    mode = tk.StringVar(value="1")
+
+    tk.Radiobutton(main_frame, text="Средний расход",
+                   variable=mode, value="1",
+                   bg=COLORS["bg"], fg=COLORS["text"]).pack()
+
+    tk.Radiobutton(main_frame, text="Расход и стоимость",
+                   variable=mode, value="2",
+                   bg=COLORS["bg"], fg=COLORS["text"]).pack()
+
+    frame = tk.Frame(main_frame, bg=COLORS["card"], padx=20, pady=20)
     frame.pack(pady=20)
 
     def field(label):
         tk.Label(frame, text=label,
-                 bg=COLORS["card"], fg=COLORS["text"],
-                 font=("Arial", 14)).pack(anchor="w", pady=5)
-        entry = tk.Entry(frame, width=30, font=("Arial", 14))
-        entry.pack(pady=5)
-        return entry
+                 bg=COLORS["card"], fg=COLORS["text"]).pack()
+        e = tk.Entry(frame)
+        e.pack(pady=5)
+        return e
 
+    # поля
+    fuel = field("Топливо (л)")
     distance = field("Расстояние (км)")
-    consumption = field("Расход (л/100 км)")
-    fuel_used = field("Потраченное топливо (л)")
+    price = field("Цена за литр")
+
+    unit = tk.StringVar(value="л/100км")
+    tk.OptionMenu(frame, unit, "л/100км", "км/л").pack(pady=5)
+
+    currency = tk.StringVar(value="€")
+    tk.OptionMenu(frame, currency, "€", "$", "₽").pack(pady=5)
 
     def calc():
         try:
             d = float(distance.get())
+            p = float(price.get())
+            f = float(fuel.get())
 
-            if consumption.get():
-                c = float(consumption.get())
-                fuel = (d / 100) * c
+            car = next(c for c in user["cars"] if c["name"] == car_var.get())
+
+            if mode.get() == "1":
+                consumption = (f / d) * 100
+                cost = f * p
             else:
-                fuel = float(fuel_used.get())
-                c = (fuel / d) * 100
+                if unit.get() == "л/100км":
+                    consumption = float(car.get("consumption", 0))
+                    f = (d / 100) * consumption
+                else:
+                    km_per_l = float(car.get("consumption", 1))
+                    f = d / km_per_l
+                    consumption = 100 / km_per_l
 
-            if current_user:
-                users[current_user]["profile"]["consumption"] = round(c, 2)
+                cost = f * p
+
+            car["consumption"] = round(consumption, 2)
 
             record = {
                 "date": datetime.now().strftime("%d.%m.%Y"),
-                "consumption": round(c, 2)
+                "car": car["name"],
+                "consumption": round(consumption, 2)
             }
 
             history.append(record)
-
-            if current_user:
-                users[current_user]["history"] = history
-                save_data()
+            user["history"] = history
+            save_data()
 
             messagebox.showinfo("Результат",
-                                f"{c:.2f} л/100км\n{fuel:.2f} л")
+                                f"{consumption:.2f} л/100км\n"
+                                f"{f:.2f} л\n"
+                                f"{cost:.2f} {currency.get()}")
 
-        except:
+        except Exception as e:
             messagebox.showerror("Ошибка", "Проверь ввод")
 
     tk.Button(main_frame, text="Рассчитать",
               command=calc,
-              bg=COLORS["accent"],
-              font=("Arial", 16)).pack(pady=20)
+              bg=COLORS["accent"]).pack(pady=10)
 
 # ===============================
 # 👤 ПРОФИЛЬ
@@ -150,37 +194,52 @@ def show_profile():
         show_auth()
         return
 
-    profile = users[current_user]["profile"]
+    user = users[current_user]
 
     tk.Label(main_frame, text="Профиль",
              bg=COLORS["bg"], fg=COLORS["text"],
-             font=("Arial", 22)).pack(pady=20)
+             font=("Arial", 22)).pack(pady=10)
 
-    name = tk.Entry(main_frame, font=("Arial", 14))
-    vehicle = tk.Entry(main_frame, font=("Arial", 14))
+    name_entry = tk.Entry(main_frame, font=("Arial", 16), width=30)
+    name_entry.insert(0, user["name"])
+    name_entry.pack(pady=10)
 
-    name.insert(0, profile["name"])
-    vehicle.insert(0, profile["vehicle"])
+    tk.Label(main_frame, text="Автомобили",
+             bg=COLORS["bg"], fg=COLORS["text"]).pack()
 
-    name.pack(pady=10)
-    vehicle.pack(pady=10)
+    car_entry = tk.Entry(main_frame, font=("Arial", 14))
+    car_entry.pack(pady=5)
 
-    def save():
-        profile["name"] = name.get()
-        profile["vehicle"] = vehicle.get()
+    def add_car():
+        name = car_entry.get()
+        if name:
+            user["cars"].append({"name": name, "consumption": 0})
+            save_data()
+            show_profile()
+
+    tk.Button(main_frame, text="Добавить авто",
+              command=add_car,
+              bg=COLORS["accent"]).pack(pady=5)
+
+    for car in user["cars"]:
+        tk.Label(main_frame,
+                 text=f"{car['name']} | {car.get('consumption', 0)} л/100км",
+                 bg=COLORS["bg"], fg=COLORS["text"]).pack()
+
+    def auto_save(*args):
+        user["name"] = name_entry.get()
         save_data()
-        messagebox.showinfo("OK", "Сохранено")
 
-    def logout():
-        global current_user
-        current_user = None
-        show_calc()
+    name_entry.bind("<KeyRelease>", auto_save)
 
-    tk.Button(main_frame, text="Сохранить", command=save,
-              bg=COLORS["accent"]).pack(pady=10)
-
-    tk.Button(main_frame, text="Выйти", command=logout,
+    tk.Button(main_frame, text="Выйти",
+              command=logout,
               bg="red", fg="white").pack(pady=10)
+
+def logout():
+    global current_user
+    current_user = None
+    show_calc()
 
 # ===============================
 # 🔐 АВТОРИЗАЦИЯ
@@ -190,10 +249,10 @@ def show_auth():
 
     tk.Label(main_frame, text="Вход",
              bg=COLORS["bg"], fg=COLORS["text"],
-             font=("Arial", 22)).pack(pady=20)
+             font=("Arial", 26)).pack(pady=20)
 
-    login = tk.Entry(main_frame, font=("Arial", 14))
-    password = tk.Entry(main_frame, show="*", font=("Arial", 14))
+    login = tk.Entry(main_frame, font=("Arial", 18), width=30)
+    password = tk.Entry(main_frame, show="*", font=("Arial", 18), width=30)
 
     login.pack(pady=10)
     password.pack(pady=10)
@@ -210,7 +269,8 @@ def show_auth():
     def register():
         users[login.get()] = {
             "password": password.get(),
-            "profile": {"name": "", "vehicle": "", "consumption": ""},
+            "name": "",
+            "cars": [],
             "history": []
         }
         save_data()
@@ -232,24 +292,10 @@ def show_history():
              bg=COLORS["bg"], fg=COLORS["text"],
              font=("Arial", 22)).pack(pady=20)
 
-    for i, h in enumerate(history):
-        frame = tk.Frame(main_frame, bg=COLORS["card"])
-        frame.pack(fill="x", pady=5, padx=50)
-
-        tk.Label(frame,
-                 text=f"{h['date']} | {h['consumption']} л/100км",
-                 bg=COLORS["card"], fg=COLORS["text"],
-                 font=("Arial", 14)).pack(side="left", padx=10)
-
-        def delete(index=i):
-            history.pop(index)
-            if current_user:
-                users[current_user]["history"] = history
-                save_data()
-            show_history()
-
-        tk.Button(frame, text="Удалить",
-                  command=delete).pack(side="right")
+    for h in history:
+        tk.Label(main_frame,
+                 text=f"{h['date']} | {h['car']} | {h['consumption']} л/100км",
+                 bg=COLORS["bg"], fg=COLORS["text"]).pack()
 
 # ===============================
 # 📋 МЕНЮ
