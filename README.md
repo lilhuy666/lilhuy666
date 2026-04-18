@@ -11,7 +11,12 @@ DARK = "#1e293b"
 CARD = "#ffffff"
 MUTED = "#94a3b8"
 
-history_data = []  # хранение истории
+# ======================
+# 📦 Данные
+# ======================
+history_data = []
+users = {}
+current_user = None
 
 # ======================
 # 🖥️ Окно
@@ -77,6 +82,7 @@ def show_calc():
     distance = field("Дистанция (км):")
     fuel = field("Кол-во топлива (л):")
     price = field("Цена топлива (₽/л):")
+    needed_distance = field("Планируемая дистанция (км):")
 
     # -------- ЦЕНТР --------
     center = tk.Frame(content, bg=CARD, padx=20, pady=20)
@@ -99,7 +105,14 @@ def show_calc():
                            bg=CARD, font=("Arial", 18, "bold"))
     result_cost.pack(anchor="w")
 
-    # -------- ИСТОРИЯ (последние) --------
+    tk.Label(center, text="Потребуется топлива",
+             bg=CARD, fg=MUTED).pack(anchor="w", pady=(15, 0))
+
+    result_needed = tk.Label(center, text="0 л",
+                            bg=CARD, font=("Arial", 18, "bold"))
+    result_needed.pack(anchor="w")
+
+    # -------- ИСТОРИЯ --------
     history_frame = tk.Frame(main, bg=CARD, padx=20, pady=20)
     history_frame.pack(fill="x", pady=20)
 
@@ -121,12 +134,19 @@ def show_calc():
             d = float(distance.get())
             f = float(fuel.get())
             p = float(price.get())
+            nd = float(needed_distance.get() or 0)
 
             cons = f / d * 100
             cost = f * p
 
             result_consumption.config(text=f"{cons:.1f} л/100 км")
             result_cost.config(text=f"{cost:.0f} ₽")
+
+            if nd > 0:
+                needed = cons / 100 * nd
+                result_needed.config(text=f"{needed:.1f} л")
+            else:
+                result_needed.config(text="0 л")
 
             record = {
                 "cons": f"{cons:.1f} л/100 км",
@@ -144,13 +164,18 @@ def show_calc():
         distance.delete(0, tk.END)
         fuel.delete(0, tk.END)
         price.delete(0, tk.END)
+        needed_distance.delete(0, tk.END)
+
+        result_consumption.config(text="0.0 л/100 км")
+        result_cost.config(text="0 ₽")
+        result_needed.config(text="0 л")
 
     tk.Button(left, text="Рассчитать",
               bg=BLUE, fg="white",
               command=calculate).pack(fill="x", pady=10)
 
-    tk.Button(center, text="Сбросить",
-              command=reset).pack(pady=10)
+    tk.Button(left, text="Сброс",
+              command=reset).pack(fill="x")
 
     update_history_view()
 
@@ -174,14 +199,97 @@ def show_history():
 def show_profile():
     clear_main()
 
-    tk.Label(main, text="Профиль",
-             bg=BG, font=("Arial", 20, "bold")).pack(pady=20)
+    global current_user
 
-    tk.Label(main, text="Имя пользователя: Гость",
-             bg=BG).pack()
+    if current_user is None:
+        frame = tk.Frame(main, bg=CARD, padx=40, pady=40)
+        frame.pack(expand=True, fill="both")
 
-    tk.Label(main, text="Статус: Пользователь",
-             bg=BG).pack()
+        tk.Label(frame, text="Вход / Регистрация",
+                 font=("Arial", 20, "bold"), bg=CARD).pack(pady=10)
+
+        tk.Label(frame, text="Логин", bg=CARD).pack(anchor="w")
+        login_entry = tk.Entry(frame)
+        login_entry.pack(fill="x", pady=5)
+
+        tk.Label(frame, text="Пароль", bg=CARD).pack(anchor="w")
+        password_entry = tk.Entry(frame, show="*")
+        password_entry.pack(fill="x", pady=5)
+
+        def login():
+            global current_user
+            login = login_entry.get()
+            password = password_entry.get()
+
+            if login in users and users[login]["password"] == password:
+                current_user = login
+                show_profile()
+            else:
+                messagebox.showerror("Ошибка", "Неверные данные")
+
+        def register():
+            login = login_entry.get()
+            password = password_entry.get()
+
+            if login in users:
+                messagebox.showerror("Ошибка", "Пользователь уже есть")
+                return
+
+            users[login] = {
+                "password": password,
+                "name": "Гость",
+                "car": "Не указано"
+            }
+
+            messagebox.showinfo("Успех", "Аккаунт создан!")
+
+        tk.Button(frame, text="Войти", bg=BLUE, fg="white",
+                  command=login).pack(fill="x", pady=5)
+
+        tk.Button(frame, text="Регистрация",
+                  command=register).pack(fill="x")
+
+    else:
+        data = users[current_user]
+
+        tk.Label(main, text="Профиль",
+                 bg=BG, font=("Arial", 20, "bold")).pack(pady=10)
+
+        name_entry = tk.Entry(main)
+        name_entry.insert(0, data["name"])
+        name_entry.pack(pady=5)
+
+        car_entry = tk.Entry(main)
+        car_entry.insert(0, data["car"])
+        car_entry.pack(pady=5)
+
+        def save():
+            data["name"] = name_entry.get()
+            data["car"] = car_entry.get()
+            messagebox.showinfo("Сохранено", "Данные обновлены")
+
+        def change_password():
+            win = tk.Toplevel(root)
+            win.title("Смена пароля")
+
+            tk.Label(win, text="Новый пароль").pack()
+            new_pass = tk.Entry(win, show="*")
+            new_pass.pack()
+
+            def save_pass():
+                data["password"] = new_pass.get()
+                win.destroy()
+
+            tk.Button(win, text="Сохранить", command=save_pass).pack()
+
+        def logout():
+            global current_user
+            current_user = None
+            show_profile()
+
+        tk.Button(main, text="Сохранить", command=save).pack(pady=5)
+        tk.Button(main, text="Сменить пароль", command=change_password).pack(pady=5)
+        tk.Button(main, text="Выйти", command=logout).pack(pady=10)
 
 # ======================
 # ℹ️ О НАС
@@ -193,10 +301,8 @@ def show_about():
              bg=BG, font=("Arial", 20, "bold")).pack(pady=20)
 
     tk.Label(main,
-             text="Добро пожаловать в CalculatCar!\n\n"
-                  "Это приложение для расчёта расхода топлива и стоимости поездки.\n"
-                  "Создано для удобства водителей 🚗",
-             bg=BG, justify="left").pack()
+             text="CalculatCar — приложение для расчёта топлива и стоимости поездки 🚗",
+             bg=BG).pack()
 
 # ======================
 # 📚 КНОПКИ
@@ -209,9 +315,6 @@ def btn(text, cmd):
                      relief="flat",
                      padx=20,
                      pady=12)
-
-tk.Label(sidebar, text="👤", bg="#f8fafc",
-         font=("Arial", 30)).pack(pady=20)
 
 btn("Профиль", show_profile).pack(fill="x")
 btn("Калькулятор", show_calc).pack(fill="x")
