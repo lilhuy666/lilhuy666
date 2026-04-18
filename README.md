@@ -1,122 +1,198 @@
-import tkinter as tk
-from tkinter import messagebox
+import sys
+import json
 from datetime import datetime
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QListWidget, QMessageBox, QStackedWidget
+)
+from PyQt6.QtCore import Qt
 
-# ===============================
-# 🎨 ТЕМА
-# ===============================
-BG = "#eef2f5"
-CARD = "#ffffff"
-ACCENT = "#2563eb"
-TEXT = "#111827"
+DATA_FILE = "users.json"
 
-root = tk.Tk()
-root.title("Fuel Calculator")
-root.geometry("900x700")
-root.configure(bg=BG)
 
-# ===============================
-# HERO БАННЕР
-# ===============================
-hero = tk.Frame(root, bg="#1f2937", height=200)
-hero.pack(fill="x")
-
-tk.Label(hero,
-         text="Калькулятор\nрасхода топлива",
-         bg="#1f2937",
-         fg="white",
-         font=("Arial", 28, "bold"),
-         justify="left").pack(anchor="w", padx=30, pady=40)
-
-# ===============================
-# КАРТОЧКА
-# ===============================
-card = tk.Frame(root, bg=CARD, padx=30, pady=30)
-card.pack(pady=20, padx=40, fill="both")
-
-# ===============================
-# ВЫБОР ТРАНСПОРТА
-# ===============================
-vehicle = tk.StringVar(value="car")
-
-btn_frame = tk.Frame(card, bg=CARD)
-btn_frame.pack(pady=10)
-
-def vehicle_btn(text, val):
-    return tk.Radiobutton(btn_frame,
-                          text=text,
-                          variable=vehicle,
-                          value=val,
-                          indicatoron=0,
-                          width=12,
-                          padx=10,
-                          pady=10,
-                          bg="#e5e7eb",
-                          selectcolor="#93c5fd",
-                          font=("Arial", 12))
-
-vehicle_btn("🚗 Авто", "car").pack(side="left", padx=5)
-vehicle_btn("🏍 Мото", "moto").pack(side="left", padx=5)
-vehicle_btn("🚚 Грузовик", "truck").pack(side="left", padx=5)
-
-# ===============================
-# ПОЛЯ
-# ===============================
-def field(label, placeholder=""):
-    frame = tk.Frame(card, bg=CARD)
-    frame.pack(fill="x", pady=10)
-
-    tk.Label(frame, text=label,
-             bg=CARD, fg=TEXT,
-             font=("Arial", 12, "bold")).pack(anchor="w")
-
-    entry = tk.Entry(frame, font=("Arial", 14))
-    entry.pack(fill="x", pady=5)
-
-    return entry
-
-distance = field("Пройденное расстояние (км):")
-fuel = field("Израсходованное топливо (литры):")
-
-# ===============================
-# РЕЗУЛЬТАТ
-# ===============================
-result_var = tk.StringVar()
-
-result_box = tk.Label(card,
-                      textvariable=result_var,
-                      bg="#f3f4f6",
-                      fg=TEXT,
-                      font=("Arial", 14),
-                      pady=10)
-result_box.pack(fill="x", pady=15)
-
-# ===============================
-# КНОПКА
-# ===============================
-def calculate():
+def load_data():
     try:
-        d = float(distance.get())
-        f = float(fuel.get())
-
-        consumption = (f / d) * 100
-
-        now = datetime.now().strftime("%d.%m.%Y %H:%M")
-
-        result_var.set(f"Расход: {consumption:.2f} л/100 км\n{now}")
-
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
     except:
-        messagebox.showerror("Ошибка", "Проверь ввод")
+        return {}
 
-tk.Button(card,
-          text="Рассчитать",
-          command=calculate,
-          bg=ACCENT,
-          fg="white",
-          font=("Arial", 14, "bold"),
-          pady=10).pack(fill="x")
 
-# ===============================
-# СТАРТ
-# ===============================
-root.mainloop()
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+class AuthScreen(QWidget):
+    def __init__(self, app):
+        super().__init__()
+        self.app = app
+
+        layout = QVBoxLayout()
+
+        self.login_input = QLineEdit()
+        self.login_input.setPlaceholderText("Логин")
+
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Пароль")
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+
+        self.login_btn = QPushButton("Войти")
+        self.register_btn = QPushButton("Регистрация")
+
+        self.login_btn.clicked.connect(self.login)
+        self.register_btn.clicked.connect(self.register)
+
+        layout.addWidget(QLabel("Fuel Calculator"))
+        layout.addWidget(self.login_input)
+        layout.addWidget(self.password_input)
+        layout.addWidget(self.login_btn)
+        layout.addWidget(self.register_btn)
+
+        self.setLayout(layout)
+
+    def login(self):
+        data = load_data()
+        user = self.login_input.text()
+        pwd = self.password_input.text()
+
+        if user in data and data[user]["password"] == pwd:
+            self.app.current_user = user
+            self.app.load_main()
+        else:
+            QMessageBox.warning(self, "Ошибка", "Неверные данные")
+
+    def register(self):
+        data = load_data()
+        user = self.login_input.text()
+        pwd = self.password_input.text()
+
+        if user in data:
+            QMessageBox.warning(self, "Ошибка", "Пользователь уже есть")
+            return
+
+        data[user] = {
+            "password": pwd,
+            "history": []
+        }
+        save_data(data)
+        QMessageBox.information(self, "Успех", "Регистрация успешна")
+
+
+class MainScreen(QWidget):
+    def __init__(self, app):
+        super().__init__()
+        self.app = app
+
+        layout = QVBoxLayout()
+
+        self.distance = QLineEdit()
+        self.distance.setPlaceholderText("Км")
+
+        self.fuel = QLineEdit()
+        self.fuel.setPlaceholderText("Литры")
+
+        self.price = QLineEdit()
+        self.price.setPlaceholderText("Цена за литр")
+
+        self.calc_btn = QPushButton("Рассчитать")
+        self.calc_btn.clicked.connect(self.calculate)
+
+        self.result = QLabel("Результат появится здесь")
+
+        self.history = QListWidget()
+
+        layout.addWidget(QLabel(f"Пользователь: {self.app.current_user}"))
+        layout.addWidget(self.distance)
+        layout.addWidget(self.fuel)
+        layout.addWidget(self.price)
+        layout.addWidget(self.calc_btn)
+        layout.addWidget(self.result)
+        layout.addWidget(QLabel("История"))
+        layout.addWidget(self.history)
+
+        self.setLayout(layout)
+        self.load_history()
+
+    def load_history(self):
+        self.history.clear()
+        data = load_data()
+        user_data = data[self.app.current_user]["history"]
+
+        for item in user_data[::-1]:
+            self.history.addItem(item)
+
+    def calculate(self):
+        try:
+            dist = float(self.distance.text())
+            fuel = float(self.fuel.text())
+            price = float(self.price.text())
+
+            consumption = (fuel / dist) * 100
+            total_cost = fuel * price
+
+            result_text = f"{consumption:.2f} л/100км | {total_cost:.2f} ₽"
+            self.result.setText(result_text)
+
+            # сохраняем историю
+            data = load_data()
+            entry = f"{datetime.now().strftime('%d.%m %H:%M')} - {result_text}"
+            data[self.app.current_user]["history"].append(entry)
+            save_data(data)
+
+            self.load_history()
+
+        except:
+            QMessageBox.warning(self, "Ошибка", "Проверьте ввод")
+
+
+class App(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Fuel Calculator")
+        self.setFixedSize(400, 500)
+
+        self.current_user = None
+
+        self.stack = QStackedWidget()
+        self.auth = AuthScreen(self)
+        self.stack.addWidget(self.auth)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.stack)
+        self.setLayout(layout)
+
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #121212;
+                color: white;
+                font-size: 14px;
+            }
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #333;
+                border-radius: 6px;
+                background: #1e1e1e;
+            }
+            QPushButton {
+                padding: 10px;
+                background-color: #4CAF50;
+                border: none;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+
+    def load_main(self):
+        self.main = MainScreen(self)
+        self.stack.addWidget(self.main)
+        self.stack.setCurrentWidget(self.main)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = App()
+    window.show()
+    sys.exit(app.exec())
