@@ -1,124 +1,46 @@
-import tkinter as tk
-from tkinter import ttk
-from datetime import datetime
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+Traceback (most recent call last):
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\_core\__init__.py", line 24, in <module>
+    from . import multiarray
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\_core\multiarray.py", line 11, in <module>
+    from . import _multiarray_umath, overrides
+ImportError: DLL load failed while importing _multiarray_umath: Произошел сбой в программе инициализации библиотеки динамической компоновки (DLL).
 
-# ===================== ЛОГИКА =====================
-history = []
+The above exception was the direct cause of the following exception:
 
-def calculate():
-    try:
-        distance = float(entry_distance.get())
-        fuel = float(entry_fuel.get())
-        price = float(entry_price.get())
+Traceback (most recent call last):
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\main.py", line 4, in <module>
+    import matplotlib.pyplot as plt
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\matplotlib\__init__.py", line 161, in <module>
+    from . import _api, _version, cbook, _docstring, rcsetup
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\matplotlib\cbook.py", line 24, in <module>
+    import numpy as np
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\__init__.py", line 125, in <module>
+    from numpy.__config__ import show_config
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\__config__.py", line 4, in <module>
+    from numpy._core._multiarray_umath import (
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\_core\__init__.py", line 85, in <module>
+    raise ImportError(msg) from exc
+ImportError: 
 
-        consumption = (fuel / distance) * 100
-        cost = fuel * price
+IMPORTANT: PLEASE READ THIS FOR ADVICE ON HOW TO SOLVE THIS ISSUE!
 
-        result_consumption.config(text=f"{consumption:.1f} л/100 км")
-        result_cost.config(text=f"{cost:.0f} ₽")
+Importing the numpy C-extensions failed. This error can happen for
+many reasons, often due to issues with your setup or how NumPy was
+installed.
 
-        # сохраняем историю
-        now = datetime.now().strftime("%H:%M")
-        history.append((consumption, cost, now))
-        update_history()
-        update_graph()
+We have compiled some common reasons and troubleshooting tips at:
 
-    except:
-        result_consumption.config(text="Ошибка")
-        result_cost.config(text="Ошибка")
+    https://numpy.org/devdocs/user/troubleshooting-importerror.html
 
-def update_history():
-    history_box.delete(0, tk.END)
-    for item in reversed(history[-5:]):
-        history_box.insert(tk.END, f"{item[0]:.1f} л/100км — {item[1]:.0f} ₽ ({item[2]})")
+Please note and check the following:
 
-def update_graph():
-    ax.clear()
-    values = [h[0] for h in history[-7:]]
-    if values:
-        ax.plot(values, marker="o")
-        ax.set_title("График расхода")
-    canvas.draw()
+  * The Python version is: Python 3.12 from "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Scripts\python.exe"
+  * The NumPy version is: "2.4.4"
 
-# ===================== UI =====================
-root = tk.Tk()
-root.title("CalculatCar")
-root.geometry("1000x600")
-root.configure(bg="#f0f2f5")
+and make sure that they are the versions you expect.
 
-# ===== Верхняя панель =====
-top = tk.Frame(root, bg="#2f6db3", height=60)
-top.pack(fill="x")
+Please carefully study the information and documentation linked above.
+This is unlikely to be a NumPy issue but will be caused by a bad install
+or environment on your machine.
 
-title = tk.Label(top, text="CalculatCar", fg="white", bg="#2f6db3",
-                 font=("Arial", 20, "bold"))
-title.pack(pady=10)
-
-# ===== Основной контейнер =====
-main = tk.Frame(root, bg="#f0f2f5")
-main.pack(fill="both", expand=True)
-
-# ===== Сайдбар =====
-sidebar = tk.Frame(main, bg="#e4e7eb", width=200)
-sidebar.pack(side="left", fill="y")
-
-buttons = ["Профиль", "Калькулятор", "История", "О нас"]
-for b in buttons:
-    tk.Button(sidebar, text=b, relief="flat", bg="#e4e7eb",
-              font=("Arial", 12)).pack(fill="x", pady=10, padx=10)
-
-# ===== Контент =====
-content = tk.Frame(main, bg="#f0f2f5")
-content.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-
-# ===== Левая часть (ввод) =====
-left = tk.Frame(content, bg="white", bd=1, relief="solid")
-left.grid(row=0, column=0, padx=10, pady=10, sticky="n")
-
-tk.Label(left, text="Дистанция (км):").pack(pady=5)
-entry_distance = tk.Entry(left)
-entry_distance.pack()
-
-tk.Label(left, text="Кол-во топлива (л):").pack(pady=5)
-entry_fuel = tk.Entry(left)
-entry_fuel.pack()
-
-tk.Label(left, text="Цена топлива (₽):").pack(pady=5)
-entry_price = tk.Entry(left)
-entry_price.pack()
-
-tk.Button(left, text="Рассчитать", bg="#2f6db3", fg="white",
-          command=calculate).pack(pady=10)
-
-# ===== Центр (результаты) =====
-center = tk.Frame(content, bg="white", bd=1, relief="solid")
-center.grid(row=0, column=1, padx=10, pady=10, sticky="n")
-
-tk.Label(center, text="Расход топлива").pack(pady=5)
-result_consumption = tk.Label(center, text="0.0 л/100 км", font=("Arial", 14))
-result_consumption.pack()
-
-tk.Label(center, text="Стоимость поездки").pack(pady=5)
-result_cost = tk.Label(center, text="0 ₽", font=("Arial", 14))
-result_cost.pack()
-
-# ===== Правая часть (история) =====
-right = tk.Frame(content, bg="white", bd=1, relief="solid")
-right.grid(row=0, column=2, padx=10, pady=10, sticky="n")
-
-tk.Label(right, text="История").pack()
-history_box = tk.Listbox(right, width=30, height=10)
-history_box.pack()
-
-# ===== График =====
-graph_frame = tk.Frame(content, bg="white", bd=1, relief="solid")
-graph_frame.grid(row=1, column=0, columnspan=3, pady=10, sticky="ew")
-
-fig, ax = plt.subplots(figsize=(6, 2))
-canvas = FigureCanvasTkAgg(fig, master=graph_frame)
-canvas.get_tk_widget().pack()
-
-# ===== Запуск =====
-root.mainloop()
+Original error was: DLL load failed while importing _multiarray_umath: Произошел сбой в программе инициализации библиотеки динамической компоновки (DLL).
