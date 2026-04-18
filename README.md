@@ -1,54 +1,236 @@
-Traceback (most recent call last):
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\_core\__init__.py", line 24, in <module>
-    from . import multiarray
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\_core\multiarray.py", line 11, in <module>
-    from . import _multiarray_umath, overrides
-ImportError: DLL load failed while importing _multiarray_umath: Произошел сбой в программе инициализации библиотеки динамической компоновки (DLL).
+import tkinter as tk
+from tkinter import messagebox, ttk
+import json
+from datetime import datetime
+import re
 
-The above exception was the direct cause of the following exception:
+# =====================
+# ДАННЫЕ
+# =====================
+users = {}
+current_user = None
 
-Traceback (most recent call last):
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\main.py", line 5, in <module>
-    import matplotlib.pyplot as plt
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\matplotlib\__init__.py", line 161, in <module>
-    from . import _api, _version, cbook, _docstring, rcsetup
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\matplotlib\cbook.py", line 24, in <module>
-    import numpy as np
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\__init__.py", line 125, in <module>
-    from numpy.__config__ import show_config
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\__config__.py", line 4, in <module>
-    from numpy._core._multiarray_umath import (
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Lib\site-packages\numpy\_core\__init__.py", line 85, in <module>
-    raise ImportError(msg) from exc
-ImportError: 
+# =====================
+# ФАЙЛ
+# =====================
+def load_data():
+    global users
+    try:
+        with open("data.json", "r", encoding="utf-8") as f:
+            users = json.load(f)
+    except:
+        users = {}
 
-IMPORTANT: PLEASE READ THIS FOR ADVICE ON HOW TO SOLVE THIS ISSUE!
+def save_data():
+    with open("data.json", "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False)
 
-Importing the numpy C-extensions failed. This error can happen for
-many reasons, often due to issues with your setup or how NumPy was
-installed.
+# =====================
+# UI
+# =====================
+root = tk.Tk()
+root.title("FuelCalcPro")
+root.geometry("1200x800")
 
-We have compiled some common reasons and troubleshooting tips at:
+header = tk.Frame(root, bg="#064e3b", height=70)
+header.pack(fill="x")
 
-    https://numpy.org/devdocs/user/troubleshooting-importerror.html
+menu_frame = tk.Frame(root, bg="#064e3b")
+menu_open = False
 
-Please note and check the following:
+def toggle_menu():
+    global menu_open
+    if menu_open:
+        menu_frame.place_forget()
+    else:
+        menu_frame.place(x=0, y=70, width=250, height=730)
+    menu_open = not menu_open
 
-  * The Python version is: Python 3.12 from "C:\Users\Кирилл\PycharmProjects\PythonProject4\.venv\Scripts\python.exe"
-  * The NumPy version is: "2.4.4"
+tk.Button(header, text="☰", command=toggle_menu,
+          bg="#064e3b", fg="white", font=("Arial", 18), bd=0).pack(side="left")
 
-and make sure that they are the versions you expect.
+tk.Label(header, text="⛽ FuelCalcPro",
+         bg="#064e3b", fg="white",
+         font=("Arial", 24, "bold")).pack(pady=10)
 
-Please carefully study the information and documentation linked above.
-This is unlikely to be a NumPy issue but will be caused by a bad install
-or environment on your machine.
+main = tk.Frame(root)
+main.pack(fill="both", expand=True)
 
-Original error was: DLL load failed while importing _multiarray_umath: Произошел сбой в программе инициализации библиотеки динамической компоновки (DLL).
+def clear():
+    for w in main.winfo_children():
+        w.destroy()
 
+# =====================
+# КАЛЬКУЛЯТОР
+# =====================
+def show_calc():
+    clear()
 
-Please carefully study the information and documentation linked above.
-This is unlikely to be a NumPy issue but will be caused by a bad install
-or environment on your machine.
+    tk.Label(main, text="Калькулятор", font=("Arial", 22)).pack(pady=10)
 
-Original error was: DLL load failed while importing _multiarray_umath: Произошел сбой в программе инициализации библиотеки динамической компоновки (DLL).
+    car_var = tk.StringVar()
 
+    if current_user:
+        cars = list(users[current_user]["cars"].keys())
+    else:
+        cars = []
+
+    ttk.Combobox(main, textvariable=car_var, values=cars).pack(pady=10)
+
+    fuel = tk.Entry(main)
+    dist = tk.Entry(main)
+    price = tk.Entry(main)
+
+    for text, field in [("Топливо (л)", fuel), ("Расстояние (км)", dist), ("Цена", price)]:
+        tk.Label(main, text=text).pack()
+        field.pack()
+
+    def calc():
+        try:
+            f = float(fuel.get())
+            d = float(dist.get())
+            p = float(price.get())
+
+            cons = (f / d) * 100
+
+            if current_user and car_var.get():
+                car = car_var.get()
+                users[current_user]["cars"][car]["history"].append(cons)
+                users[current_user]["cars"][car]["consumption"] = cons
+                save_data()
+
+            messagebox.showinfo("Результат", f"{cons:.2f} л/100км\n{f*p:.2f}")
+
+        except:
+            messagebox.showerror("Ошибка", "Проверь ввод")
+
+    tk.Button(main, text="Рассчитать", command=calc).pack(pady=20)
+
+# =====================
+# ПРОФИЛЬ
+# =====================
+def show_profile():
+    clear()
+
+    if not current_user:
+        show_auth()
+        return
+
+    tk.Label(main, text="Профиль", font=("Arial", 22)).pack()
+
+    cars = users[current_user]["cars"]
+
+    for car in cars:
+        tk.Label(main, text=car).pack()
+
+    new_car = tk.Entry(main)
+    new_car.pack()
+
+    def add_car():
+        cars[new_car.get()] = {"history": [], "consumption": 0}
+        save_data()
+        show_profile()
+
+    tk.Button(main, text="Добавить авто", command=add_car).pack()
+
+    def logout():
+        global current_user
+        current_user = None
+        show_calc()
+
+    tk.Button(main, text="Выйти", command=logout).pack()
+
+# =====================
+# AUTH
+# =====================
+def show_auth():
+    clear()
+
+    tk.Label(main, text="Вход", font=("Arial", 22)).pack()
+
+    email = tk.Entry(main)
+    password = tk.Entry(main, show="*")
+
+    email.pack()
+    password.pack()
+
+    def valid(e):
+        return re.match(r"[^@]+@[^@]+\.[^@]+", e)
+
+    def login():
+        global current_user
+        if not valid(email.get()):
+            messagebox.showerror("Ошибка", "Введите email")
+            return
+
+        if email.get() in users and users[email.get()]["password"] == password.get():
+            current_user = email.get()
+            show_profile()
+        else:
+            messagebox.showerror("Ошибка", "Ошибка входа")
+
+    def reg():
+        users[email.get()] = {"password": password.get(), "cars": {}}
+        save_data()
+
+    tk.Button(main, text="Войти", command=login).pack()
+    tk.Button(main, text="Регистрация", command=reg).pack()
+
+# =====================
+# ГРАФИК (Canvas)
+# =====================
+def show_history():
+    clear()
+
+    canvas = tk.Canvas(main, bg="white", width=800, height=400)
+    canvas.pack(pady=20)
+
+    if not current_user:
+        return
+
+    cars = users[current_user]["cars"]
+
+    colors = ["red", "blue", "green", "orange"]
+
+    for i, (car, data) in enumerate(cars.items()):
+        points = data["history"]
+
+        for j in range(len(points)-1):
+            x1 = j * 50 + 50
+            y1 = 300 - points[j]*5
+            x2 = (j+1)*50 + 50
+            y2 = 300 - points[j+1]*5
+
+            canvas.create_line(x1, y1, x2, y2, fill=colors[i%4], width=2)
+
+        canvas.create_text(700, 20 + i*20, text=car, fill=colors[i%4])
+
+# =====================
+# ПРОЧЕЕ
+# =====================
+def show_about():
+    clear()
+    tk.Label(main, text="FuelCalcPro — приложение для учета топлива").pack()
+
+def show_fuel():
+    clear()
+    tk.Label(main, text="Заправки: Лукойл, Роснефть, Газпром").pack()
+
+# =====================
+# МЕНЮ
+# =====================
+def btn(t, c):
+    tk.Button(menu_frame, text=t, command=c).pack(fill="x")
+
+btn("Калькулятор", show_calc)
+btn("Профиль", show_profile)
+btn("История", show_history)
+btn("Заправки", show_fuel)
+btn("О нас", show_about)
+
+# =====================
+# СТАРТ
+# =====================
+load_data()
+show_calc()
+root.mainloop()
