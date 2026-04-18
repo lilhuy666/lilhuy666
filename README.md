@@ -1,198 +1,124 @@
-import sys
-import json
+import tkinter as tk
+from tkinter import ttk
 from datetime import datetime
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QListWidget, QMessageBox, QStackedWidget
-)
-from PyQt6.QtCore import Qt
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-DATA_FILE = "users.json"
+# ===================== ЛОГИКА =====================
+history = []
 
-
-def load_data():
+def calculate():
     try:
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
+        distance = float(entry_distance.get())
+        fuel = float(entry_fuel.get())
+        price = float(entry_price.get())
+
+        consumption = (fuel / distance) * 100
+        cost = fuel * price
+
+        result_consumption.config(text=f"{consumption:.1f} л/100 км")
+        result_cost.config(text=f"{cost:.0f} ₽")
+
+        # сохраняем историю
+        now = datetime.now().strftime("%H:%M")
+        history.append((consumption, cost, now))
+        update_history()
+        update_graph()
+
     except:
-        return {}
+        result_consumption.config(text="Ошибка")
+        result_cost.config(text="Ошибка")
 
+def update_history():
+    history_box.delete(0, tk.END)
+    for item in reversed(history[-5:]):
+        history_box.insert(tk.END, f"{item[0]:.1f} л/100км — {item[1]:.0f} ₽ ({item[2]})")
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+def update_graph():
+    ax.clear()
+    values = [h[0] for h in history[-7:]]
+    if values:
+        ax.plot(values, marker="o")
+        ax.set_title("График расхода")
+    canvas.draw()
 
+# ===================== UI =====================
+root = tk.Tk()
+root.title("CalculatCar")
+root.geometry("1000x600")
+root.configure(bg="#f0f2f5")
 
-class AuthScreen(QWidget):
-    def __init__(self, app):
-        super().__init__()
-        self.app = app
+# ===== Верхняя панель =====
+top = tk.Frame(root, bg="#2f6db3", height=60)
+top.pack(fill="x")
 
-        layout = QVBoxLayout()
+title = tk.Label(top, text="CalculatCar", fg="white", bg="#2f6db3",
+                 font=("Arial", 20, "bold"))
+title.pack(pady=10)
 
-        self.login_input = QLineEdit()
-        self.login_input.setPlaceholderText("Логин")
+# ===== Основной контейнер =====
+main = tk.Frame(root, bg="#f0f2f5")
+main.pack(fill="both", expand=True)
 
-        self.password_input = QLineEdit()
-        self.password_input.setPlaceholderText("Пароль")
-        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+# ===== Сайдбар =====
+sidebar = tk.Frame(main, bg="#e4e7eb", width=200)
+sidebar.pack(side="left", fill="y")
 
-        self.login_btn = QPushButton("Войти")
-        self.register_btn = QPushButton("Регистрация")
+buttons = ["Профиль", "Калькулятор", "История", "О нас"]
+for b in buttons:
+    tk.Button(sidebar, text=b, relief="flat", bg="#e4e7eb",
+              font=("Arial", 12)).pack(fill="x", pady=10, padx=10)
 
-        self.login_btn.clicked.connect(self.login)
-        self.register_btn.clicked.connect(self.register)
+# ===== Контент =====
+content = tk.Frame(main, bg="#f0f2f5")
+content.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
-        layout.addWidget(QLabel("Fuel Calculator"))
-        layout.addWidget(self.login_input)
-        layout.addWidget(self.password_input)
-        layout.addWidget(self.login_btn)
-        layout.addWidget(self.register_btn)
+# ===== Левая часть (ввод) =====
+left = tk.Frame(content, bg="white", bd=1, relief="solid")
+left.grid(row=0, column=0, padx=10, pady=10, sticky="n")
 
-        self.setLayout(layout)
+tk.Label(left, text="Дистанция (км):").pack(pady=5)
+entry_distance = tk.Entry(left)
+entry_distance.pack()
 
-    def login(self):
-        data = load_data()
-        user = self.login_input.text()
-        pwd = self.password_input.text()
+tk.Label(left, text="Кол-во топлива (л):").pack(pady=5)
+entry_fuel = tk.Entry(left)
+entry_fuel.pack()
 
-        if user in data and data[user]["password"] == pwd:
-            self.app.current_user = user
-            self.app.load_main()
-        else:
-            QMessageBox.warning(self, "Ошибка", "Неверные данные")
+tk.Label(left, text="Цена топлива (₽):").pack(pady=5)
+entry_price = tk.Entry(left)
+entry_price.pack()
 
-    def register(self):
-        data = load_data()
-        user = self.login_input.text()
-        pwd = self.password_input.text()
+tk.Button(left, text="Рассчитать", bg="#2f6db3", fg="white",
+          command=calculate).pack(pady=10)
 
-        if user in data:
-            QMessageBox.warning(self, "Ошибка", "Пользователь уже есть")
-            return
+# ===== Центр (результаты) =====
+center = tk.Frame(content, bg="white", bd=1, relief="solid")
+center.grid(row=0, column=1, padx=10, pady=10, sticky="n")
 
-        data[user] = {
-            "password": pwd,
-            "history": []
-        }
-        save_data(data)
-        QMessageBox.information(self, "Успех", "Регистрация успешна")
+tk.Label(center, text="Расход топлива").pack(pady=5)
+result_consumption = tk.Label(center, text="0.0 л/100 км", font=("Arial", 14))
+result_consumption.pack()
 
+tk.Label(center, text="Стоимость поездки").pack(pady=5)
+result_cost = tk.Label(center, text="0 ₽", font=("Arial", 14))
+result_cost.pack()
 
-class MainScreen(QWidget):
-    def __init__(self, app):
-        super().__init__()
-        self.app = app
+# ===== Правая часть (история) =====
+right = tk.Frame(content, bg="white", bd=1, relief="solid")
+right.grid(row=0, column=2, padx=10, pady=10, sticky="n")
 
-        layout = QVBoxLayout()
+tk.Label(right, text="История").pack()
+history_box = tk.Listbox(right, width=30, height=10)
+history_box.pack()
 
-        self.distance = QLineEdit()
-        self.distance.setPlaceholderText("Км")
+# ===== График =====
+graph_frame = tk.Frame(content, bg="white", bd=1, relief="solid")
+graph_frame.grid(row=1, column=0, columnspan=3, pady=10, sticky="ew")
 
-        self.fuel = QLineEdit()
-        self.fuel.setPlaceholderText("Литры")
+fig, ax = plt.subplots(figsize=(6, 2))
+canvas = FigureCanvasTkAgg(fig, master=graph_frame)
+canvas.get_tk_widget().pack()
 
-        self.price = QLineEdit()
-        self.price.setPlaceholderText("Цена за литр")
-
-        self.calc_btn = QPushButton("Рассчитать")
-        self.calc_btn.clicked.connect(self.calculate)
-
-        self.result = QLabel("Результат появится здесь")
-
-        self.history = QListWidget()
-
-        layout.addWidget(QLabel(f"Пользователь: {self.app.current_user}"))
-        layout.addWidget(self.distance)
-        layout.addWidget(self.fuel)
-        layout.addWidget(self.price)
-        layout.addWidget(self.calc_btn)
-        layout.addWidget(self.result)
-        layout.addWidget(QLabel("История"))
-        layout.addWidget(self.history)
-
-        self.setLayout(layout)
-        self.load_history()
-
-    def load_history(self):
-        self.history.clear()
-        data = load_data()
-        user_data = data[self.app.current_user]["history"]
-
-        for item in user_data[::-1]:
-            self.history.addItem(item)
-
-    def calculate(self):
-        try:
-            dist = float(self.distance.text())
-            fuel = float(self.fuel.text())
-            price = float(self.price.text())
-
-            consumption = (fuel / dist) * 100
-            total_cost = fuel * price
-
-            result_text = f"{consumption:.2f} л/100км | {total_cost:.2f} ₽"
-            self.result.setText(result_text)
-
-            # сохраняем историю
-            data = load_data()
-            entry = f"{datetime.now().strftime('%d.%m %H:%M')} - {result_text}"
-            data[self.app.current_user]["history"].append(entry)
-            save_data(data)
-
-            self.load_history()
-
-        except:
-            QMessageBox.warning(self, "Ошибка", "Проверьте ввод")
-
-
-class App(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Fuel Calculator")
-        self.setFixedSize(400, 500)
-
-        self.current_user = None
-
-        self.stack = QStackedWidget()
-        self.auth = AuthScreen(self)
-        self.stack.addWidget(self.auth)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.stack)
-        self.setLayout(layout)
-
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #121212;
-                color: white;
-                font-size: 14px;
-            }
-            QLineEdit {
-                padding: 8px;
-                border: 1px solid #333;
-                border-radius: 6px;
-                background: #1e1e1e;
-            }
-            QPushButton {
-                padding: 10px;
-                background-color: #4CAF50;
-                border: none;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-        """)
-
-    def load_main(self):
-        self.main = MainScreen(self)
-        self.stack.addWidget(self.main)
-        self.stack.setCurrentWidget(self.main)
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = App()
-    window.show()
-    sys.exit(app.exec())
+# ===== Запуск =====
+root.mainloop()
