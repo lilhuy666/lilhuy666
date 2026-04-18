@@ -1,9 +1,21 @@
 import tkinter as tk
-from datetime import datetime
+from tkinter import ttk
 
-history = []
+# =========================
+# 🎨 Цвета
+# =========================
+COLORS = {
+    "bg": "#f1f5f9",
+    "sidebar": "#1e3a8a",
+    "card": "#ffffff",
+    "accent": "#3b82f6",
+    "text": "#0f172a",
+    "muted": "#64748b"
+}
 
-# ================= ЛОГИКА =================
+# =========================
+# 🧮 Расчет
+# =========================
 def calculate():
     try:
         distance = float(entry_distance.get())
@@ -13,123 +25,121 @@ def calculate():
         consumption = (fuel / distance) * 100
         cost = fuel * price
 
-        result_consumption.config(text=f"{consumption:.1f} л/100 км")
-        result_cost.config(text=f"{cost:.0f} ₽")
-
-        now = datetime.now().strftime("%H:%M")
-        history.append(consumption)
-
-        update_history(consumption, cost, now)
-        draw_graph()
+        lbl_consumption.config(text=f"{consumption:.1f} л/100 км")
+        lbl_cost.config(text=f"{cost:.0f} ₽")
 
     except:
-        result_consumption.config(text="Ошибка")
-        result_cost.config(text="Ошибка")
+        lbl_consumption.config(text="Ошибка")
+        lbl_cost.config(text="Ошибка")
 
-
-def update_history(cons, cost, time):
-    history_box.insert(0, f"{cons:.1f} л/100км — {cost:.0f} ₽ ({time})")
-    if history_box.size() > 5:
-        history_box.delete(5)
-
-
-# ================= ГРАФИК =================
-def draw_graph():
-    canvas.delete("all")
-
-    if len(history) < 2:
-        return
-
-    width = 400
-    height = 150
-    max_val = max(history)
-
-    step_x = width / (len(history) - 1)
-
-    for i in range(len(history) - 1):
-        x1 = i * step_x
-        y1 = height - (history[i] / max_val * height)
-
-        x2 = (i + 1) * step_x
-        y2 = height - (history[i+1] / max_val * height)
-
-        canvas.create_line(x1, y1, x2, y2, width=2)
-
-
-# ================= UI =================
+# =========================
+# 🖥️ Окно
+# =========================
 root = tk.Tk()
 root.title("CalculatCar")
-root.geometry("900x600")
-root.configure(bg="#f0f2f5")
+root.geometry("1100x700")
+root.configure(bg=COLORS["bg"])
 
-# Верх
-top = tk.Frame(root, bg="#2f6db3", height=60)
-top.pack(fill="x")
+# =========================
+# 🔷 Header
+# =========================
+header = tk.Frame(root, bg=COLORS["accent"], height=60)
+header.pack(fill="x")
 
-tk.Label(top, text="CalculatCar", fg="white", bg="#2f6db3",
-         font=("Arial", 20, "bold")).pack(pady=10)
+tk.Label(header, text="CalculatCar", bg=COLORS["accent"],
+         fg="white", font=("Arial", 20, "bold")).pack(pady=10)
 
-# Основной блок
-main = tk.Frame(root, bg="#f0f2f5")
-main.pack(fill="both", expand=True)
+# =========================
+# 📦 Основной контейнер
+# =========================
+container = tk.Frame(root, bg=COLORS["bg"])
+container.pack(fill="both", expand=True)
 
-# Сайдбар
-sidebar = tk.Frame(main, bg="#e4e7eb", width=200)
+# =========================
+# 📚 Sidebar
+# =========================
+sidebar = tk.Frame(container, bg=COLORS["sidebar"], width=200)
 sidebar.pack(side="left", fill="y")
 
-for text in ["Профиль", "Калькулятор", "История", "О нас"]:
-    tk.Button(sidebar, text=text, relief="flat", bg="#e4e7eb",
-              font=("Arial", 12)).pack(fill="x", pady=10, padx=10)
+def menu_btn(text):
+    return tk.Button(sidebar, text=text, bg=COLORS["sidebar"],
+                     fg="white", relief="flat", height=2)
 
-# Контент
-content = tk.Frame(main, bg="#f0f2f5")
-content.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+menu_btn("Профиль").pack(fill="x")
+menu_btn("Калькулятор").pack(fill="x")
+menu_btn("История").pack(fill="x")
+menu_btn("О нас").pack(fill="x")
 
-# Ввод
-frame_input = tk.Frame(content, bg="white", padx=10, pady=10)
-frame_input.grid(row=0, column=0, padx=10)
+# =========================
+# 🧩 Main area
+# =========================
+main = tk.Frame(container, bg=COLORS["bg"])
+main.pack(side="left", fill="both", expand=True, padx=20, pady=20)
 
-tk.Label(frame_input, text="Дистанция (км):").pack()
-entry_distance = tk.Entry(frame_input)
-entry_distance.pack()
+tk.Label(main, text="Калькулятор расхода топлива",
+         bg=COLORS["bg"], fg=COLORS["text"],
+         font=("Arial", 18, "bold")).pack(anchor="w", pady=10)
 
-tk.Label(frame_input, text="Топливо (л):").pack()
-entry_fuel = tk.Entry(frame_input)
-entry_fuel.pack()
+content = tk.Frame(main, bg=COLORS["bg"])
+content.pack(fill="both", expand=True)
 
-tk.Label(frame_input, text="Цена (₽):").pack()
-entry_price = tk.Entry(frame_input)
-entry_price.pack()
+# =========================
+# 🧾 Левая карточка (ввод)
+# =========================
+card_left = tk.Frame(content, bg=COLORS["card"], padx=20, pady=20)
+card_left.pack(side="left", fill="y", padx=10)
 
-tk.Button(frame_input, text="Рассчитать", bg="#2f6db3",
-          fg="white", command=calculate).pack(pady=10)
+def input_field(parent, label):
+    tk.Label(parent, text=label, bg=COLORS["card"],
+             fg=COLORS["text"]).pack(anchor="w")
+    entry = tk.Entry(parent, width=25)
+    entry.pack(pady=5)
+    return entry
 
-# Результаты
-frame_result = tk.Frame(content, bg="white", padx=10, pady=10)
-frame_result.grid(row=0, column=1, padx=10)
+entry_distance = input_field(card_left, "Дистанция (км):")
+entry_fuel = input_field(card_left, "Кол-во топлива (л):")
+entry_price = input_field(card_left, "Цена топлива (₽/л):")
 
-tk.Label(frame_result, text="Расход:").pack()
-result_consumption = tk.Label(frame_result, text="0.0 л/100 км", font=("Arial", 14))
-result_consumption.pack()
+tk.Button(card_left, text="Рассчитать", bg=COLORS["accent"],
+          fg="white", command=calculate).pack(pady=15, fill="x")
 
-tk.Label(frame_result, text="Стоимость:").pack()
-result_cost = tk.Label(frame_result, text="0 ₽", font=("Arial", 14))
-result_cost.pack()
+# =========================
+# 📊 Правая карточка (результат)
+# =========================
+card_right = tk.Frame(content, bg=COLORS["card"], padx=20, pady=20)
+card_right.pack(side="left", fill="y", padx=10)
 
-# История
-frame_history = tk.Frame(content, bg="white", padx=10, pady=10)
-frame_history.grid(row=0, column=2, padx=10)
+tk.Label(card_right, text="Результаты",
+         bg=COLORS["card"], font=("Arial", 14, "bold")).pack(anchor="w")
 
-tk.Label(frame_history, text="История").pack()
-history_box = tk.Listbox(frame_history, width=30, height=10)
-history_box.pack()
+tk.Label(card_right, text="Расход топлива",
+         bg=COLORS["card"], fg=COLORS["muted"]).pack(anchor="w", pady=(10, 0))
 
-# График
-frame_graph = tk.Frame(content, bg="white")
-frame_graph.grid(row=1, column=0, columnspan=3, pady=20)
+lbl_consumption = tk.Label(card_right, text="0.0 л/100 км",
+                           bg=COLORS["card"], font=("Arial", 18, "bold"))
+lbl_consumption.pack(anchor="w")
 
-canvas = tk.Canvas(frame_graph, width=400, height=150, bg="white")
-canvas.pack()
+tk.Label(card_right, text="Стоимость поездки",
+         bg=COLORS["card"], fg=COLORS["muted"]).pack(anchor="w", pady=(15, 0))
 
-# Запуск
+lbl_cost = tk.Label(card_right, text="0 ₽",
+                    bg=COLORS["card"], font=("Arial", 18, "bold"))
+lbl_cost.pack(anchor="w")
+
+# =========================
+# ⚡ Быстрые действия
+# =========================
+card_actions = tk.Frame(content, bg=COLORS["card"], padx=20, pady=20)
+card_actions.pack(side="left", fill="y", padx=10)
+
+tk.Label(card_actions, text="Быстрые действия",
+         bg=COLORS["card"], font=("Arial", 12, "bold")).pack(anchor="w")
+
+tk.Button(card_actions, text="Новый расчёт").pack(fill="x", pady=5)
+tk.Button(card_actions, text="Сохранить").pack(fill="x", pady=5)
+tk.Button(card_actions, text="Показать график").pack(fill="x", pady=5)
+
+# =========================
+# ▶️ Старт
+# =========================
 root.mainloop()
