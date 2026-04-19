@@ -41,19 +41,11 @@ root.configure(bg=BG)
 root.grid_columnconfigure(1, weight=1)
 root.grid_rowconfigure(0, weight=1)
 
-# SIDEBAR
 sidebar = tk.Frame(root, bg=PANEL, width=220)
 sidebar.grid(row=0, column=0, sticky="ns")
 
-# MAIN
 main = tk.Frame(root, bg=BG)
 main.grid(row=0, column=1, sticky="nsew")
-
-header = tk.Frame(main, bg=BG)
-header.pack(fill="x")
-
-user_label = tk.Label(header, bg=BG, fg=SUB)
-user_label.pack(side="right", padx=15)
 
 content = tk.Frame(main, bg=BG)
 content.pack(fill="both", expand=True)
@@ -62,17 +54,13 @@ def clear():
     for w in content.winfo_children():
         w.destroy()
 
-def update_user():
-    user_label.config(text=current_user or "")
-
 # ================= PROFILE =================
 def show_profile():
     clear()
 
-    # ЕСЛИ НЕ ВОШЕЛ → ПОКАЗАТЬ ВХОД
     if not current_user:
         box = tk.Frame(content, bg=CARD, padx=40, pady=40)
-        box.pack(pady=80)
+        box.pack(pady=100)
 
         tk.Label(box, text="Вход / Регистрация",
                  bg=CARD, fg=TEXT,
@@ -90,93 +78,136 @@ def show_profile():
 
             if e in data["users"] and data["users"][e]["password"] == p:
                 current_user = e
-                update_user()
                 show_profile()
             else:
-                messagebox.showerror("Ошибка", "Неверные данные")
+                messagebox.showerror("Ошибка", "Неверно")
 
         def register():
             e, p = email.get(), password.get()
-
             if not e or not p:
-                return messagebox.showerror("Ошибка", "Заполни поля")
+                return
 
-            if e in data["users"]:
-                return messagebox.showerror("Ошибка", "Уже есть")
-
-            data["users"][e] = {"password": p, "history": []}
+            data["users"][e] = {
+                "password": p,
+                "history": [],
+                "profile": {"name": "", "phone": "", "car": ""}
+            }
             save_data()
             messagebox.showinfo("OK", "Создан")
 
-        tk.Button(box, text="Войти",
-                  bg=ACCENT, fg="white",
+        tk.Button(box, text="Войти", bg=ACCENT, fg="white",
                   command=login).pack(fill="x", pady=5)
 
         tk.Button(box, text="Регистрация",
-                  bg=ACCENT2,
-                  command=register).pack(fill="x")
-
+                  bg=ACCENT2, command=register).pack(fill="x")
         return
 
-    # ================= ПРОФИЛЬ =================
-    wrapper = tk.Frame(content, bg=BG)
-    wrapper.pack(pady=20, fill="x")
+    user = data["users"][current_user]
+    prof = user["profile"]
 
-    # ЛЕВАЯ КАРТОЧКА
-    left = tk.Frame(wrapper, bg=CARD, padx=20, pady=20)
+    wrap = tk.Frame(content, bg=BG)
+    wrap.pack(pady=20)
+
+    # LEFT
+    left = tk.Frame(wrap, bg=CARD, padx=20, pady=20)
     left.pack(side="left", padx=20)
 
-    tk.Label(left, text="👤",
-             font=("Arial", 50),
+    tk.Label(left, text="👤", font=("Arial", 50),
              bg=CARD, fg=ACCENT).pack()
 
     tk.Label(left, text=current_user,
-             bg=CARD, fg=TEXT,
-             font=("Arial", 14, "bold")).pack(pady=5)
+             bg=CARD, fg=TEXT).pack(pady=5)
+
+    def logout():
+        global current_user
+        current_user = None
+        show_profile()
 
     tk.Button(left, text="Выйти",
               bg=DANGER, fg="white",
               command=logout).pack(fill="x", pady=10)
 
-    # ПРАВАЯ ЧАСТЬ
-    right = tk.Frame(wrapper, bg=CARD, padx=30, pady=30)
-    right.pack(side="left", padx=10)
+    # RIGHT
+    right = tk.Frame(wrap, bg=CARD, padx=30, pady=30)
+    right.pack(side="left")
 
     tk.Label(right, text="Личная информация",
-             bg=CARD, fg=TEXT,
-             font=("Arial", 16, "bold")).pack(anchor="w", pady=10)
+             bg=CARD, fg=TEXT).pack(anchor="w")
 
     name = tk.Entry(right)
-    name.insert(0, "Имя")
+    name.insert(0, prof["name"])
 
     phone = tk.Entry(right)
-    phone.insert(0, "+7")
+    phone.insert(0, prof["phone"])
+
+    car = tk.Entry(right)
+    car.insert(0, prof["car"])
 
     name.pack(fill="x", pady=5)
     phone.pack(fill="x", pady=5)
-
-    tk.Label(right, text="Автомобиль",
-             bg=CARD, fg=TEXT,
-             font=("Arial", 14)).pack(anchor="w", pady=10)
-
-    car = tk.Entry(right)
-    car.insert(0, "Toyota Camry")
-
     car.pack(fill="x", pady=5)
 
-def logout():
-    global current_user
-    current_user = None
-    update_user()
-    show_profile()
+    def save_profile():
+        prof["name"] = name.get()
+        prof["phone"] = phone.get()
+        prof["car"] = car.get()
+        save_data()
+        messagebox.showinfo("OK", "Сохранено")
+
+    tk.Button(right, text="Сохранить",
+              bg=ACCENT, fg="white",
+              command=save_profile).pack(pady=10)
 
 # ================= CALC =================
 def show_calc():
     clear()
 
     tk.Label(content, text="Калькулятор",
-             bg=BG, fg=TEXT,
-             font=("Arial", 18)).pack(pady=20)
+             bg=BG, fg=TEXT).pack(pady=10)
+
+    f = tk.Entry(content)
+    d = tk.Entry(content)
+    p = tk.Entry(content)
+
+    f.pack()
+    d.pack()
+    p.pack()
+
+    result = tk.Label(content, text="", bg=BG, fg=ACCENT)
+    result.pack()
+
+    def calc():
+        try:
+            fuel = float(f.get())
+            dist = float(d.get())
+            price = float(p.get())
+
+            cons = (fuel / dist) * 100
+            cost = fuel * price
+
+            txt = f"{cons:.1f} | {cost:.0f}"
+            result.config(text=txt)
+
+            if current_user:
+                data["users"][current_user]["history"].append(txt)
+                save_data()
+
+        except:
+            messagebox.showerror("Ошибка", "Ошибка ввода")
+
+    tk.Button(content, text="Рассчитать",
+              command=calc).pack()
+
+# ================= HISTORY =================
+def show_history():
+    clear()
+
+    if not current_user:
+        return
+
+    for h in data["users"][current_user]["history"]:
+        tk.Label(content, text=h,
+                 bg=CARD, fg=TEXT).pack(fill="x", padx=20, pady=5)
 
 # ================= MENU =================
 def nav(text, cmd):
@@ -188,6 +219,7 @@ def nav(text, cmd):
 
 nav("Профиль", show_profile)
 nav("Калькулятор", show_calc)
+nav("История", show_history)
 
 # ================= START =================
 load_data()
