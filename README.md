@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import messagebox
-from datetime import datetime
 import json
 import os
 
@@ -14,16 +13,15 @@ CARD = "#ffffff"
 TEXT = "#1f2937"
 SUB = "#6b7280"
 BLUE = "#3b82f6"
-RED = "#ef4444"
 
 DATA_FILE = "data.json"
 
-# ===============================
-# 💾 DATA
-# ===============================
 data = {"users": {}}
 current_user = None
 
+# ===============================
+# 💾 LOAD / SAVE
+# ===============================
 def load_data():
     global data
     if os.path.exists(DATA_FILE):
@@ -39,66 +37,80 @@ def save_data():
 # ===============================
 root = tk.Tk()
 root.title("CalculatCar")
-root.geometry("1200x750")
+root.geometry("900x600")
 root.configure(bg=BG)
 
 # ===============================
-# HEADER
+# CLEAR
 # ===============================
-header = tk.Frame(root, bg=HEADER, height=60)
-header.pack(fill="x")
-
-menu_visible = True
-
-def toggle_menu():
-    global menu_visible
-    if menu_visible:
-        sidebar.pack_forget()
-    else:
-        sidebar.pack(side="left", fill="y")
-    menu_visible = not menu_visible
-
-tk.Button(header, text="☰", bg=HEADER, fg="white",
-          font=("Arial", 18), bd=0,
-          command=toggle_menu).pack(side="left", padx=10)
-
-tk.Label(header, text="CalculatCar",
-         bg=HEADER, fg="white",
-         font=("Arial", 20, "bold")).pack(pady=10)
-
-# ===============================
-# SIDEBAR
-# ===============================
-sidebar = tk.Frame(root, bg=SIDEBAR, width=220)
-sidebar.pack(side="left", fill="y")
-
-main = tk.Frame(root, bg=BG)
-main.pack(side="right", fill="both", expand=True)
-
-content = tk.Frame(main, bg=BG)
-content.pack(fill="both", expand=True, padx=20, pady=20)
-
 def clear():
-    for w in content.winfo_children():
+    for w in root.winfo_children():
         w.destroy()
 
 # ===============================
-# 🔐 AUTH
+# 🔐 REGISTER WINDOW
 # ===============================
-def show_auth():
+def open_register():
+    reg = tk.Toplevel(root)
+    reg.title("Регистрация")
+    reg.geometry("300x300")
+
+    tk.Label(reg, text="Логин").pack()
+    login = tk.Entry(reg)
+    login.pack()
+
+    tk.Label(reg, text="Почта").pack()
+    email = tk.Entry(reg)
+    email.pack()
+
+    tk.Label(reg, text="Пароль").pack()
+    password = tk.Entry(reg, show="*")
+    password.pack()
+
+    tk.Label(reg, text="Повторите пароль").pack()
+    password2 = tk.Entry(reg, show="*")
+    password2.pack()
+
+    def register():
+        if password.get() != password2.get():
+            messagebox.showerror("Ошибка", "Пароли не совпадают")
+            return
+
+        if login.get() in data["users"]:
+            messagebox.showerror("Ошибка", "Пользователь уже есть")
+            return
+
+        data["users"][login.get()] = {
+            "email": email.get(),
+            "password": password.get()
+        }
+
+        save_data()
+        messagebox.showinfo("OK", "Аккаунт создан")
+        reg.destroy()
+
+    tk.Button(reg, text="Создать аккаунт",
+              command=register).pack(pady=10)
+
+# ===============================
+# 🔐 LOGIN SCREEN
+# ===============================
+def show_login():
     clear()
 
-    card = tk.Frame(content, bg=CARD, padx=30, pady=30)
-    card.pack(pady=80)
+    card = tk.Frame(root, bg=CARD, padx=30, pady=30)
+    card.pack(pady=100)
 
-    tk.Label(card, text="Вход / Регистрация",
+    tk.Label(card, text="Вход",
              bg=CARD, font=("Arial", 18, "bold")).pack(pady=10)
 
+    tk.Label(card, text="Логин", bg=CARD).pack(anchor="w")
     login = tk.Entry(card)
-    password = tk.Entry(card, show="*")
+    login.pack()
 
-    login.pack(pady=5)
-    password.pack(pady=5)
+    tk.Label(card, text="Пароль", bg=CARD).pack(anchor="w")
+    password = tk.Entry(card, show="*")
+    password.pack()
 
     def login_user():
         global current_user
@@ -109,191 +121,35 @@ def show_auth():
             else:
                 messagebox.showerror("Ошибка", "Неверный пароль")
         else:
-            messagebox.showerror("Ошибка", "Пользователь не найден")
+            messagebox.showerror("Ошибка", "Нет такого пользователя")
 
-    def register():
-        if login.get() in data["users"]:
-            messagebox.showerror("Ошибка", "Уже существует")
-            return
-        data["users"][login.get()] = {
-            "password": password.get(),
-            "profile": {"name": "", "email": "", "car": ""},
-            "history": []
-        }
-        save_data()
-        messagebox.showinfo("OK", "Аккаунт создан")
-
-    tk.Button(card, text="Войти", bg=BLUE, fg="white",
-              command=login_user).pack(pady=5, fill="x")
+    tk.Button(card, text="Войти",
+              bg=BLUE, fg="white",
+              command=login_user).pack(pady=10, fill="x")
 
     tk.Button(card, text="Регистрация",
-              command=register).pack(pady=5, fill="x")
+              command=open_register).pack(fill="x")
 
 # ===============================
 # 👤 PROFILE
 # ===============================
 def show_profile():
-    if not current_user:
-        show_auth()
-        return
-
     clear()
-    user = data["users"][current_user]
 
-    left = tk.Frame(content, bg=CARD, padx=20, pady=20)
-    left.grid(row=0, column=0, padx=10, pady=10)
-
-    tk.Label(left, text="👤", font=("Arial", 40), bg=CARD).pack()
-    tk.Label(left, text=current_user,
-             bg=CARD, font=("Arial", 14, "bold")).pack()
+    tk.Label(root, text=f"Вы вошли как: {current_user}",
+             bg=BG, font=("Arial", 16)).pack(pady=50)
 
     def logout():
         global current_user
         current_user = None
-        show_calc()
+        show_login()
 
-    tk.Button(left, text="Выйти",
-              bg=RED, fg="white",
-              command=logout).pack(pady=10, fill="x")
-
-    right = tk.Frame(content, bg=CARD, padx=20, pady=20)
-    right.grid(row=0, column=1, padx=10, pady=10)
-
-    tk.Label(right, text="Личная информация",
-             bg=CARD, font=("Arial", 16, "bold")).pack(anchor="w")
-
-    def field(label, value):
-        tk.Label(right, text=label, bg=CARD, fg=SUB).pack(anchor="w")
-        e = tk.Entry(right)
-        e.insert(0, value)
-        e.pack(fill="x", pady=5)
-        return e
-
-    name = field("Имя", user["profile"]["name"])
-    email = field("Email", user["profile"]["email"])
-    car = field("Автомобиль", user["profile"]["car"])
-
-    def save():
-        user["profile"]["name"] = name.get()
-        user["profile"]["email"] = email.get()
-        user["profile"]["car"] = car.get()
-        save_data()
-        messagebox.showinfo("OK", "Сохранено")
-
-    tk.Button(right, text="Сохранить",
-              bg=BLUE, fg="white",
-              command=save).pack(pady=10)
-
-# ===============================
-# 🧮 CALC
-# ===============================
-def show_calc():
-    clear()
-
-    left = tk.Frame(content, bg=CARD, padx=20, pady=20)
-    left.pack(side="left", fill="both", expand=True, padx=10)
-
-    tk.Label(left, text="Калькулятор",
-             bg=CARD, font=("Arial", 18, "bold")).pack(anchor="w")
-
-    def field(text):
-        tk.Label(left, text=text, bg=CARD, fg=SUB).pack(anchor="w")
-        e = tk.Entry(left)
-        e.pack(fill="x", pady=5)
-        return e
-
-    distance = field("Дистанция")
-    fuel = field("Топливо")
-    price = field("Цена")
-
-    result = tk.Label(left, text="—", bg=CARD,
-                      font=("Arial", 20, "bold"))
-    result.pack(pady=20)
-
-    def calc():
-        try:
-            d = float(distance.get())
-            f = float(fuel.get())
-            p = float(price.get())
-
-            cons = (f / d) * 100
-            cost = f * p
-
-            result.config(text=f"{cons:.1f} л/100км | {cost:.0f} ₽")
-
-            if current_user:
-                data["users"][current_user]["history"].append({
-                    "date": datetime.now().strftime("%d.%m %H:%M"),
-                    "result": result.cget("text")
-                })
-                save_data()
-
-        except:
-            messagebox.showerror("Ошибка", "Проверь ввод")
-
-    tk.Button(left, text="Рассчитать",
-              bg=BLUE, fg="white",
-              command=calc).pack(fill="x")
-
-# ===============================
-# 📊 HISTORY
-# ===============================
-def show_history():
-    clear()
-
-    if not current_user:
-        messagebox.showinfo("Внимание", "Сначала войдите")
-        return
-
-    hist = data["users"][current_user]["history"]
-
-    for i, h in enumerate(hist[::-1]):
-        row = tk.Frame(content, bg=CARD, pady=10)
-        row.pack(fill="x", padx=10, pady=5)
-
-        tk.Label(row, text=h["date"], bg=CARD).pack(side="left")
-        tk.Label(row, text=h["result"], bg=CARD).pack(side="left", padx=20)
-
-# ===============================
-# ⚙ SETTINGS
-# ===============================
-def show_settings():
-    clear()
-
-    tk.Label(content, text="Настройки",
-             bg=BG, font=("Arial", 18, "bold")).pack()
-
-# ===============================
-# ℹ️ ABOUT
-# ===============================
-def show_about():
-    clear()
-    tk.Label(content, text="О программе\nCalculatCar 🚗",
-             bg=BG, font=("Arial", 16)).pack(pady=50)
-
-# ===============================
-# MENU
-# ===============================
-def menu_btn(text, cmd):
-    tk.Button(sidebar, text=text,
-              bg=SIDEBAR, fg="white",
-              font=("Arial", 13),
-              bd=0, anchor="w",
-              padx=20, pady=12,
-              command=cmd).pack(fill="x")
-
-menu_btn("Калькулятор", show_calc)
-menu_btn("Профиль", show_profile)
-menu_btn("История", show_history)
-menu_btn("О нас", show_about)
-
-# вниз меню
-tk.Label(sidebar, bg=SIDEBAR).pack(expand=True)
-menu_btn("Настройки", show_settings)
+    tk.Button(root, text="Выйти",
+              command=logout).pack()
 
 # ===============================
 # START
 # ===============================
 load_data()
-show_calc()
+show_login()
 root.mainloop()
