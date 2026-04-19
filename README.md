@@ -1,9 +1,10 @@
 import tkinter as tk
 from tkinter import messagebox
-import json, os
 from datetime import datetime
+import json, os
+from PIL import Image, ImageTk  # <-- ДОБАВЛЕНО
 
-# ================= CONFIG =================
+# ===================== STYLE =====================
 BG = "#0b1220"
 PANEL = "#111a2e"
 CARD = "#162238"
@@ -15,213 +16,223 @@ DANGER = "#ef4444"
 
 DATA_FILE = "data.json"
 
+# ===================== DATA =====================
 data = {"users": {}}
 current_user = None
 
-# ================= DATA =================
 def load_data():
     global data
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            if "users" not in data:
+                data = {"users": {}}
         except:
             data = {"users": {}}
+    else:
+        data = {"users": {}}
 
 def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-# ================= UI =================
+# ===================== WINDOW =====================
 root = tk.Tk()
-root.title("CalculatCar")
+root.title("CalculatCar Pro 🚗")
 root.geometry("1200x750")
-root.configure(bg=BG)
 
-root.grid_columnconfigure(1, weight=1)
-root.grid_rowconfigure(0, weight=1)
+# ===================== MAIN =====================
+main = tk.Frame(root)
+main.pack(fill="both", expand=True)
 
-sidebar = tk.Frame(root, bg=PANEL, width=220)
+# ===== BACKGROUND IMAGE =====
+bg_image = Image.open("background.jpg")
+bg_image = bg_image.resize((1200, 750))
+bg_photo = ImageTk.PhotoImage(bg_image)
+
+bg_label = tk.Label(main, image=bg_photo)
+bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+
+# ===================== LAYOUT =====================
+main.grid_rowconfigure(0, weight=1)
+main.grid_columnconfigure(1, weight=1)
+
+# ===================== SIDEBAR =====================
+sidebar = tk.Frame(main, bg=PANEL, width=260)
 sidebar.grid(row=0, column=0, sticky="ns")
+sidebar.grid_remove()
 
-main = tk.Frame(root, bg=BG)
-main.grid(row=0, column=1, sticky="nsew")
+menu_open = False
 
-content = tk.Frame(main, bg=BG)
+def toggle_menu():
+    global menu_open
+    if menu_open:
+        sidebar.grid_remove()
+    else:
+        sidebar.grid()
+    menu_open = not menu_open
+
+# ===================== CONTENT AREA =====================
+content_frame = tk.Frame(main, bg=BG)
+content_frame.grid(row=0, column=1, sticky="nsew")
+
+# ===================== HEADER =====================
+header = tk.Frame(content_frame, bg=BG)
+header.pack(fill="x")
+
+tk.Button(header, text="☰",
+          bg=BG, fg=TEXT,
+          font=("Arial", 18),
+          bd=0,
+          command=toggle_menu).pack(side="left", padx=15, pady=10)
+
+title = tk.Label(header, text="CalculatCar Pro",
+                 bg=BG, fg=TEXT,
+                 font=("Arial", 18, "bold"))
+title.pack(side="left", pady=10)
+
+user_label = tk.Label(header, text="",
+                      bg=BG, fg=SUB,
+                      font=("Arial", 12))
+user_label.pack(side="right", padx=15)
+
+# ===================== CONTENT =====================
+content = tk.Frame(content_frame, bg=BG)
 content.pack(fill="both", expand=True)
+
+# поднимаем поверх фона
+content_frame.lift()
+sidebar.lift()
 
 def clear():
     for w in content.winfo_children():
         w.destroy()
 
-# ================= PROFILE =================
-def show_profile():
+def card():
+    f = tk.Frame(content, bg=CARD, padx=40, pady=40)
+    f.pack(pady=30)
+    return f
+
+# ===================== AUTH =====================
+def show_auth():
     clear()
+    c = card()
 
-    if not current_user:
-        box = tk.Frame(content, bg=CARD, padx=40, pady=40)
-        box.pack(pady=100)
+    tk.Label(c, text="Вход / Регистрация",
+             bg=CARD, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
 
-        tk.Label(box, text="Вход / Регистрация",
-                 bg=CARD, fg=TEXT,
-                 font=("Arial", 18, "bold")).pack(pady=10)
+    email = tk.Entry(c, font=("Arial", 14))
+    password = tk.Entry(c, show="*", font=("Arial", 14))
 
-        email = tk.Entry(box)
-        password = tk.Entry(box, show="*")
+    email.pack(fill="x", pady=8)
+    password.pack(fill="x", pady=8)
 
-        email.pack(fill="x", pady=5)
-        password.pack(fill="x", pady=5)
-
-        def login():
-            global current_user
-            e, p = email.get(), password.get()
-
-            if e in data["users"] and data["users"][e]["password"] == p:
-                current_user = e
-                show_profile()
-            else:
-                messagebox.showerror("Ошибка", "Неверно")
-
-        def register():
-            e, p = email.get(), password.get()
-            if not e or not p:
-                return
-
-            data["users"][e] = {
-                "password": p,
-                "history": [],
-                "profile": {"name": "", "phone": "", "car": ""}
-            }
-            save_data()
-            messagebox.showinfo("OK", "Создан")
-
-        tk.Button(box, text="Войти", bg=ACCENT, fg="white",
-                  command=login).pack(fill="x", pady=5)
-
-        tk.Button(box, text="Регистрация",
-                  bg=ACCENT2, command=register).pack(fill="x")
-        return
-
-    user = data["users"][current_user]
-    prof = user["profile"]
-
-    wrap = tk.Frame(content, bg=BG)
-    wrap.pack(pady=20)
-
-    # LEFT
-    left = tk.Frame(wrap, bg=CARD, padx=20, pady=20)
-    left.pack(side="left", padx=20)
-
-    tk.Label(left, text="👤", font=("Arial", 50),
-             bg=CARD, fg=ACCENT).pack()
-
-    tk.Label(left, text=current_user,
-             bg=CARD, fg=TEXT).pack(pady=5)
-
-    def logout():
+    def login():
         global current_user
-        current_user = None
-        show_profile()
+        e = email.get().strip()
+        p = password.get().strip()
 
-    tk.Button(left, text="Выйти",
-              bg=DANGER, fg="white",
-              command=logout).pack(fill="x", pady=10)
+        if e in data["users"] and data["users"][e]["password"] == p:
+            current_user = e
+            update_user()
+            show_calc()
+        else:
+            messagebox.showerror("Ошибка", "Неверные данные")
 
-    # RIGHT
-    right = tk.Frame(wrap, bg=CARD, padx=30, pady=30)
-    right.pack(side="left")
+    def register():
+        e = email.get().strip()
+        p = password.get().strip()
 
-    tk.Label(right, text="Личная информация",
-             bg=CARD, fg=TEXT).pack(anchor="w")
+        if not e or not p:
+            return messagebox.showerror("Ошибка", "Заполни поля")
 
-    name = tk.Entry(right)
-    name.insert(0, prof["name"])
+        if e in data["users"]:
+            return messagebox.showerror("Ошибка", "Уже существует")
 
-    phone = tk.Entry(right)
-    phone.insert(0, prof["phone"])
-
-    car = tk.Entry(right)
-    car.insert(0, prof["car"])
-
-    name.pack(fill="x", pady=5)
-    phone.pack(fill="x", pady=5)
-    car.pack(fill="x", pady=5)
-
-    def save_profile():
-        prof["name"] = name.get()
-        prof["phone"] = phone.get()
-        prof["car"] = car.get()
+        data["users"][e] = {"password": p, "history": []}
         save_data()
-        messagebox.showinfo("OK", "Сохранено")
+        messagebox.showinfo("OK", "Аккаунт создан")
 
-    tk.Button(right, text="Сохранить",
-              bg=ACCENT, fg="white",
-              command=save_profile).pack(pady=10)
+    tk.Button(c, text="Войти", bg=ACCENT, fg="white",
+              font=("Arial", 12, "bold"),
+              command=login).pack(fill="x", pady=10)
 
-# ================= CALC =================
+    tk.Button(c, text="Регистрация", bg=ACCENT2, fg="black",
+              font=("Arial", 12, "bold"),
+              command=register).pack(fill="x")
+
+# ===================== CALC =====================
 def show_calc():
     clear()
 
-    tk.Label(content, text="Калькулятор",
-             bg=BG, fg=TEXT).pack(pady=10)
+    tk.Label(content, text="Калькулятор расхода",
+             bg=BG, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
 
-    f = tk.Entry(content)
-    d = tk.Entry(content)
-    p = tk.Entry(content)
+    mode = tk.StringVar(value="1")
 
-    f.pack()
-    d.pack()
-    p.pack()
+    form = tk.Frame(content, bg=CARD, padx=40, pady=40)
+    form.pack(pady=20)
 
-    result = tk.Label(content, text="", bg=BG, fg=ACCENT)
-    result.pack()
+    entries = {}
+
+    def build():
+        for w in form.winfo_children():
+            w.destroy()
+        entries.clear()
+
+        def add(t):
+            tk.Label(form, text=t, bg=CARD, fg=TEXT).pack(anchor="w")
+            e = tk.Entry(form)
+            e.pack(fill="x", pady=8)
+            entries[t] = e
+
+        add("Топливо (л)")
+        add("Расстояние (км)")
+        add("Цена за литр")
 
     def calc():
         try:
-            fuel = float(f.get())
-            dist = float(d.get())
-            price = float(p.get())
+            f = float(entries["Топливо (л)"].get())
+            d = float(entries["Расстояние (км)"].get())
+            p = float(entries["Цена за литр"].get())
 
-            cons = (fuel / dist) * 100
-            cost = fuel * price
+            cons = (f / d) * 100
+            cost = f * p
 
-            txt = f"{cons:.1f} | {cost:.0f}"
-            result.config(text=txt)
-
-            if current_user:
-                data["users"][current_user]["history"].append(txt)
-                save_data()
-
+            result.config(text=f"{cons:.1f} л/100км | {cost:.0f} ₽")
         except:
-            messagebox.showerror("Ошибка", "Ошибка ввода")
+            messagebox.showerror("Ошибка", "Проверь ввод")
+
+    result = tk.Label(content, text="—",
+                      bg=BG, fg=ACCENT,
+                      font=("Arial", 22, "bold"))
+    result.pack()
 
     tk.Button(content, text="Рассчитать",
-              command=calc).pack()
+              bg=ACCENT, fg="white",
+              command=calc).pack(pady=10)
 
-# ================= HISTORY =================
-def show_history():
-    clear()
+    build()
 
-    if not current_user:
-        return
-
-    for h in data["users"][current_user]["history"]:
-        tk.Label(content, text=h,
-                 bg=CARD, fg=TEXT).pack(fill="x", padx=20, pady=5)
-
-# ================= MENU =================
+# ===================== MENU =====================
 def nav(text, cmd):
     tk.Button(sidebar, text=text,
               bg=PANEL, fg=TEXT,
               bd=0, anchor="w",
-              padx=20, pady=12,
+              padx=20, pady=14,
               command=cmd).pack(fill="x")
 
-nav("Профиль", show_profile)
 nav("Калькулятор", show_calc)
-nav("История", show_history)
+nav("Профиль", show_auth)
 
-# ================= START =================
+# ===================== USER =====================
+def update_user():
+    user_label.config(text=current_user if current_user else "")
+
+# ===================== START =====================
 load_data()
-show_profile()
+show_calc()
 root.mainloop()
