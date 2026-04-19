@@ -19,6 +19,7 @@ DATA_FILE = "data.json"
 # ===================== DATA =====================
 data = {"users": {}}
 current_user = None
+calc_mode = "1"
 
 def load_data():
     global data
@@ -46,7 +47,7 @@ root.configure(bg=BG)
 root.grid_rowconfigure(0, weight=1)
 root.grid_columnconfigure(0, weight=1)
 
-# ===================== SIDEBAR (overlay) =====================
+# ===================== SIDEBAR (overlay FIXED) =====================
 sidebar = tk.Frame(root, bg=PANEL, width=260, height=750)
 sidebar.place(x=-260, y=0)
 
@@ -74,12 +75,9 @@ tk.Button(header, text="☰",
           bd=0,
           command=toggle_menu).pack(side="left", padx=15, pady=10)
 
-user_lbl = tk.Label(header, text="",
-                    bg=BG, fg=SUB,
-                    font=("Arial", 12))
-user_lbl.pack(side="right", padx=15)
+user_label = tk.Label(header, text="", bg=BG, fg=SUB)
+user_label.pack(side="right", padx=15)
 
-# CONTENT
 content = tk.Frame(main, bg=BG)
 content.pack(fill="both", expand=True)
 
@@ -152,7 +150,7 @@ def show_profile():
         show_auth()
         return
 
-    user = data["users"][current_user]
+    u = data["users"][current_user]
     c = card()
 
     tk.Label(c, text="Профиль",
@@ -160,9 +158,12 @@ def show_profile():
              font=("Arial", 18, "bold")).pack()
 
     username = tk.Entry(c)
-    username.insert(0, user.get("username", ""))
+    username.insert(0, u.get("username", ""))
 
     password = tk.Entry(c, show="*")
+
+    cars = tk.Entry(c)
+    cars.insert(0, ",".join(u.get("cars", [])))
 
     tk.Label(c, text="Username", bg=CARD, fg=SUB).pack(anchor="w")
     username.pack(fill="x")
@@ -170,23 +171,19 @@ def show_profile():
     tk.Label(c, text="Новый пароль", bg=CARD, fg=SUB).pack(anchor="w")
     password.pack(fill="x")
 
-    tk.Label(c, text="Машины (через запятую)",
-             bg=CARD, fg=SUB).pack(anchor="w")
-
-    cars = tk.Entry(c)
-    cars.insert(0, ",".join(user.get("cars", [])))
+    tk.Label(c, text="Машины (через ,)", bg=CARD, fg=SUB).pack(anchor="w")
     cars.pack(fill="x")
 
-    def save_profile():
-        user["username"] = username.get()
+    def save():
+        u["username"] = username.get()
 
-        if password.get().strip():
-            user["password"] = password.get()
+        if password.get():
+            u["password"] = password.get()
 
-        user["cars"] = [c.strip() for c in cars.get().split(",") if c.strip()]
+        u["cars"] = [x.strip() for x in cars.get().split(",") if x.strip()]
 
-        if user["cars"] and user["selected_car"] not in user["cars"]:
-            user["selected_car"] = user["cars"][0]
+        if u["cars"] and u["selected_car"] not in u["cars"]:
+            u["selected_car"] = u["cars"][0]
 
         save_data()
         update_user()
@@ -194,7 +191,7 @@ def show_profile():
 
     tk.Button(c, text="Сохранить",
               bg=ACCENT, fg="white",
-              command=save_profile).pack(fill="x", pady=10)
+              command=save).pack(fill="x", pady=10)
 
 # ===================== CALC =====================
 def show_calc():
@@ -204,53 +201,82 @@ def show_calc():
         show_auth()
         return
 
-    user = data["users"][current_user]
+    u = data["users"][current_user]
 
     tk.Label(content, text="Калькулятор",
              bg=BG, fg=TEXT,
              font=("Arial", 18, "bold")).pack(pady=10)
 
-    car_var = tk.StringVar(value=user.get("selected_car", ""))
+    mode_var = tk.StringVar(value=calc_mode)
 
-    tk.OptionMenu(content, car_var,
-                  *user.get("cars", ["Нет авто"])).pack()
+    def change_mode():
+        global calc_mode
+        calc_mode = mode_var.get()
+        build()
+
+    switch = tk.Frame(content, bg=BG)
+    switch.pack()
+
+    tk.Radiobutton(switch, text="Стоимость поездки",
+                   variable=mode_var, value="1",
+                   bg=BG, command=change_mode).pack(side="left", padx=10)
+
+    tk.Radiobutton(switch, text="Средний расход",
+                   variable=mode_var, value="2",
+                   bg=BG, command=change_mode).pack(side="left", padx=10)
 
     form = tk.Frame(content, bg=CARD, padx=30, pady=30)
     form.pack(pady=20)
 
     entries = {}
 
-    def add(t):
-        tk.Label(form, text=t, bg=CARD, fg=TEXT).pack(anchor="w")
-        e = tk.Entry(form)
-        e.pack(fill="x", pady=5)
-        entries[t] = e
+    car_var = tk.StringVar(value=u.get("selected_car", ""))
 
-    add("Топливо")
-    add("Расстояние")
-    add("Цена")
+    def build():
+        for w in form.winfo_children():
+            w.destroy()
+        entries.clear()
 
-    result = tk.Label(content, text="—",
-                      bg=BG, fg=ACCENT,
-                      font=("Arial", 20, "bold"))
-    result.pack()
+        tk.Label(form, text="Машина", bg=CARD, fg=TEXT).pack(anchor="w")
+        tk.OptionMenu(form, car_var, *u.get("cars", ["Нет авто"])).pack(fill="x")
+
+        def add(t):
+            tk.Label(form, text=t, bg=CARD, fg=TEXT).pack(anchor="w")
+            e = tk.Entry(form)
+            e.pack(fill="x", pady=5)
+            entries[t] = e
+
+        if mode_var.get() == "1":
+            add("Топливо")
+            add("Расстояние")
+            add("Цена")
+        else:
+            add("Средний расход")
+            add("Расстояние")
+            add("Цена")
 
     def calc():
         try:
-            f = float(entries["Топливо"].get())
-            d = float(entries["Расстояние"].get())
-            p = float(entries["Цена"].get())
-
-            cons = (f / d) * 100
-            cost = f * p
+            if mode_var.get() == "1":
+                f = float(entries["Топливо"].get())
+                d = float(entries["Расстояние"].get())
+                p = float(entries["Цена"].get())
+                cons = (f / d) * 100
+                cost = f * p
+            else:
+                cons = float(entries["Средний расход"].get())
+                d = float(entries["Расстояние"].get())
+                p = float(entries["Цена"].get())
+                f = cons * d / 100
+                cost = f * p
 
             car = car_var.get()
 
             result.config(text=f"{cons:.1f} л/100км | {cost:.0f} ₽")
 
-            user["selected_car"] = car
+            u["selected_car"] = car
 
-            user["history"].append({
+            u["history"].append({
                 "date": datetime.now().strftime("%d.%m %H:%M"),
                 "car": car,
                 "result": result.cget("text")
@@ -261,9 +287,16 @@ def show_calc():
         except:
             messagebox.showerror("Ошибка", "Проверь ввод")
 
+    result = tk.Label(content, text="—",
+                      bg=BG, fg=ACCENT,
+                      font=("Arial", 20, "bold"))
+    result.pack()
+
     tk.Button(content, text="Рассчитать",
               bg=ACCENT, fg="white",
               command=calc).pack()
+
+    build()
 
 # ===================== HISTORY =====================
 def show_history():
@@ -272,19 +305,19 @@ def show_history():
     if not current_user:
         return
 
-    user = data["users"][current_user]
+    u = data["users"][current_user]
 
     tk.Label(content, text="История",
              bg=BG, fg=TEXT,
              font=("Arial", 18, "bold")).pack()
 
     def delete(i):
-        del user["history"][i]
+        del u["history"][i]
         save_data()
         show_history()
 
-    for i, h in enumerate(user["history"][::-1]):
-        frame = tk.Frame(content, bg=CARD, padx=10, pady=10)
+    for i, h in enumerate(u["history"][::-1]):
+        frame = tk.Frame(content, bg=CARD)
         frame.pack(fill="x", padx=20, pady=5)
 
         tk.Label(frame,
@@ -293,7 +326,7 @@ def show_history():
 
         tk.Button(frame, text="🗑",
                   bg=RED, fg="white",
-                  command=lambda i=i: delete(len(user["history"]) - 1 - i)).pack(side="right")
+                  command=lambda i=i: delete(len(u["history"]) - 1 - i)).pack(side="right")
 
 # ===================== SETTINGS =====================
 def show_settings():
@@ -307,7 +340,7 @@ def nav(t, c):
     tk.Button(sidebar, text=t,
               bg=PANEL, fg=TEXT,
               bd=0, anchor="w",
-              padx=20, pady=14,
+              padx=20, pady=12,
               command=c).pack(fill="x")
 
 nav("Калькулятор", show_calc)
@@ -315,12 +348,12 @@ nav("Профиль", show_profile)
 nav("История", show_history)
 nav("Настройки", show_settings)
 
-# ===================== USER UPDATE =====================
+# ===================== UPDATE USER =====================
 def update_user():
     if current_user:
-        user_lbl.config(text=data["users"][current_user].get("username", current_user))
+        user_label.config(text=data["users"][current_user].get("username", current_user))
     else:
-        user_lbl.config(text="")
+        user_label.config(text="")
 
 # ===================== START =====================
 load_data()
