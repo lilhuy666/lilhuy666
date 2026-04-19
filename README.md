@@ -1,8 +1,9 @@
 import tkinter as tk
 from tkinter import messagebox
+from datetime import datetime
 
 # ===============================
-# 🎨 Цвета (приближены к макету)
+# 🎨 COLORS
 # ===============================
 BG = "#eef1f5"
 SIDEBAR = "#1f4aa8"
@@ -12,42 +13,19 @@ TEXT = "#1f2937"
 SUB = "#6b7280"
 BLUE = "#3b82f6"
 
+history_data = []
+
 root = tk.Tk()
 root.title("CalculatCar")
 root.geometry("1200x750")
 root.configure(bg=BG)
 
 # ===============================
-# 📌 SIDEBAR
+# SIDEBAR
 # ===============================
 sidebar = tk.Frame(root, bg=SIDEBAR, width=220)
 sidebar.pack(side="left", fill="y")
 
-def menu_item(text):
-    tk.Button(
-        sidebar,
-        text=text,
-        bg=SIDEBAR,
-        fg="white",
-        font=("Arial", 13),
-        bd=0,
-        anchor="w",
-        padx=20,
-        pady=12,
-        activebackground="#1a3f8a"
-    ).pack(fill="x")
-
-tk.Label(sidebar, text="👤\nПрофиль",
-         bg=SIDEBAR, fg="white",
-         font=("Arial", 12)).pack(pady=20)
-
-menu_item("Калькулятор")
-menu_item("История")
-menu_item("О нас")
-
-# ===============================
-# 📌 MAIN
-# ===============================
 main = tk.Frame(root, bg=BG)
 main.pack(side="right", fill="both", expand=True)
 
@@ -59,102 +37,173 @@ tk.Label(header, text="CalculatCar",
          bg=HEADER, fg="white",
          font=("Arial", 22, "bold")).pack(pady=15)
 
-# ===============================
-# 📌 CONTENT
-# ===============================
 content = tk.Frame(main, bg=BG)
 content.pack(fill="both", expand=True, padx=20, pady=20)
 
-content.grid_columnconfigure(0, weight=2)
-content.grid_columnconfigure(1, weight=1)
+# ===============================
+# CLEAR
+# ===============================
+def clear():
+    for w in content.winfo_children():
+        w.destroy()
 
 # ===============================
-# 🧮 ЛЕВАЯ КАРТОЧКА
+# 🧮 КАЛЬКУЛЯТОР
 # ===============================
-left = tk.Frame(content, bg=CARD, padx=20, pady=20)
-left.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+def show_calc():
+    clear()
 
-tk.Label(left, text="Калькулятор расхода топлива",
-         bg=CARD, fg=TEXT,
-         font=("Arial", 18, "bold")).pack(anchor="w", pady=10)
+    content.grid_columnconfigure(0, weight=2)
+    content.grid_columnconfigure(1, weight=1)
 
-def field(parent, text):
-    tk.Label(parent, text=text,
-             bg=CARD, fg=SUB,
-             font=("Arial", 11)).pack(anchor="w")
-    e = tk.Entry(parent, font=("Arial", 13))
-    e.pack(fill="x", pady=5)
-    return e
+    left = tk.Frame(content, bg=CARD, padx=20, pady=20)
+    left.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-distance = field(left, "Дистанция (км)")
-fuel = field(left, "Кол-во топлива (л)")
-price = field(left, "Цена топлива (₽/л)")
+    tk.Label(left, text="Калькулятор",
+             bg=CARD, fg=TEXT,
+             font=("Arial", 18, "bold")).pack(anchor="w")
 
-def calc():
-    try:
-        d = float(distance.get())
-        f = float(fuel.get())
-        p = float(price.get())
+    def field(text):
+        tk.Label(left, text=text,
+                 bg=CARD, fg=SUB).pack(anchor="w")
+        e = tk.Entry(left)
+        e.pack(fill="x", pady=5)
+        return e
 
-        cons = (f / d) * 100
-        cost = f * p
+    distance = field("Дистанция (км)")
+    fuel = field("Топливо (л)")
+    price = field("Цена (₽)")
 
-        cons_label.config(text=f"{cons:.1f} л/100 км")
-        cost_label.config(text=f"{cost:.0f} ₽")
+    right = tk.Frame(content, bg=BG)
+    right.grid(row=0, column=1, sticky="nsew")
 
-    except:
-        messagebox.showerror("Ошибка", "Проверь ввод")
+    card1 = tk.Frame(right, bg=CARD, padx=20, pady=20)
+    card1.pack(fill="x", pady=10)
 
-tk.Button(left, text="Рассчитать",
-          bg=BLUE, fg="white",
-          font=("Arial", 13),
-          command=calc).pack(fill="x", pady=15)
+    cons_label = tk.Label(card1, text="—",
+                          bg=CARD, font=("Arial", 20, "bold"))
+    cons_label.pack()
 
-# ===============================
-# 📊 ПРАВАЯ КАРТОЧКА (результат)
-# ===============================
-right = tk.Frame(content, bg=BG)
-right.grid(row=0, column=1, sticky="nsew")
+    card2 = tk.Frame(right, bg=CARD, padx=20, pady=20)
+    card2.pack(fill="x", pady=10)
 
-# RESULT CARD 1
-card1 = tk.Frame(right, bg=CARD, padx=20, pady=20)
-card1.pack(fill="x", pady=10)
+    cost_label = tk.Label(card2, text="—",
+                          bg=CARD, font=("Arial", 20, "bold"))
+    cost_label.pack()
 
-tk.Label(card1, text="Расход топлива",
-         bg=CARD, fg=SUB,
-         font=("Arial", 11)).pack(anchor="w")
+    def calc():
+        try:
+            d = float(distance.get())
+            f = float(fuel.get())
+            p = float(price.get())
 
-cons_label = tk.Label(card1,
-                      text="—",
-                      bg=CARD,
-                      fg=TEXT,
-                      font=("Arial", 22, "bold"))
-cons_label.pack()
+            cons = (f / d) * 100
+            cost = f * p
 
-# RESULT CARD 2
-card2 = tk.Frame(right, bg=CARD, padx=20, pady=20)
-card2.pack(fill="x", pady=10)
+            cons_label.config(text=f"{cons:.1f} л/100км")
+            cost_label.config(text=f"{cost:.0f} ₽")
 
-tk.Label(card2, text="Стоимость поездки",
-         bg=CARD, fg=SUB,
-         font=("Arial", 11)).pack(anchor="w")
+            history_data.append({
+                "date": datetime.now().strftime("%d.%m %H:%M"),
+                "cons": cons,
+                "cost": cost
+            })
 
-cost_label = tk.Label(card2,
-                      text="—",
-                      bg=CARD,
-                      fg=TEXT,
-                      font=("Arial", 22, "bold"))
-cost_label.pack()
+        except:
+            messagebox.showerror("Ошибка", "Неверный ввод")
+
+    tk.Button(left, text="Рассчитать",
+              bg=BLUE, fg="white",
+              command=calc).pack(fill="x", pady=10)
 
 # ===============================
-# 📉 ГРАФИК (заглушка)
+# 👤 ПРОФИЛЬ
 # ===============================
-graph = tk.Frame(content, bg=CARD, height=200)
-graph.grid(row=1, column=0, columnspan=2,
-           sticky="nsew", padx=10, pady=10)
+def show_profile():
+    clear()
 
-tk.Label(graph, text="График расхода (пример)",
-         bg=CARD, fg=SUB,
-         font=("Arial", 12)).pack(pady=60)
+    content.grid_columnconfigure(0, weight=1)
+    content.grid_columnconfigure(1, weight=2)
 
+    # ЛЕВАЯ КАРТОЧКА
+    card_left = tk.Frame(content, bg=CARD, padx=20, pady=20)
+    card_left.grid(row=0, column=0, sticky="n", padx=10, pady=10)
+
+    tk.Label(card_left, text="👤",
+             bg=CARD, font=("Arial", 50)).pack()
+
+    tk.Label(card_left, text="Алексей Смирнов",
+             bg=CARD, font=("Arial", 14, "bold")).pack()
+
+    tk.Label(card_left, text="alex@email.com",
+             bg=CARD, fg=SUB).pack()
+
+    tk.Button(card_left, text="Редактировать",
+              bg=BLUE, fg="white").pack(pady=10, fill="x")
+
+    # ПРАВАЯ КАРТОЧКА
+    card_right = tk.Frame(content, bg=CARD, padx=20, pady=20)
+    card_right.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+
+    tk.Label(card_right, text="Личная информация",
+             bg=CARD, font=("Arial", 16, "bold")).pack(anchor="w")
+
+    def field(text, value):
+        tk.Label(card_right, text=text,
+                 bg=CARD, fg=SUB).pack(anchor="w")
+        e = tk.Entry(card_right)
+        e.insert(0, value)
+        e.pack(fill="x", pady=5)
+
+    field("Имя", "Алексей")
+    field("Фамилия", "Смирнов")
+    field("Email", "alex@email.com")
+    field("Телефон", "+7 999 123 45 67")
+
+# ===============================
+# 📊 ИСТОРИЯ
+# ===============================
+def show_history():
+    clear()
+
+    tk.Label(content, text="История расчетов",
+             bg=BG, fg=TEXT,
+             font=("Arial", 18, "bold")).pack(anchor="w")
+
+    table = tk.Frame(content, bg=CARD)
+    table.pack(fill="both", expand=True, pady=10)
+
+    for h in history_data[::-1]:
+        row = tk.Frame(table, bg=CARD, pady=10)
+        row.pack(fill="x", padx=10)
+
+        tk.Label(row, text=h["date"],
+                 bg=CARD, width=15).pack(side="left")
+
+        tk.Label(row, text=f"{h['cons']:.1f} л/100км",
+                 bg=CARD, width=15).pack(side="left")
+
+        tk.Label(row, text=f"{h['cost']:.0f} ₽",
+                 bg=CARD, width=10).pack(side="left")
+
+        tk.Button(row, text="Удалить",
+                  command=lambda r=row: r.destroy()).pack(side="right")
+
+# ===============================
+# MENU
+# ===============================
+def menu_btn(text, cmd):
+    tk.Button(sidebar, text=text,
+              bg=SIDEBAR, fg="white",
+              font=("Arial", 13),
+              bd=0, anchor="w",
+              padx=20, pady=12,
+              command=cmd).pack(fill="x")
+
+menu_btn("Профиль", show_profile)
+menu_btn("Калькулятор", show_calc)
+menu_btn("История", show_history)
+
+# START
+show_calc()
 root.mainloop()
