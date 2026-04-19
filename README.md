@@ -14,19 +14,15 @@ CARD = "#ffffff"
 TEXT = "#1f2937"
 SUB = "#6b7280"
 BLUE = "#3b82f6"
+RED = "#ef4444"
 
 DATA_FILE = "data.json"
 
 # ===============================
 # 💾 DATA
 # ===============================
-data = {
-    "profile": {
-        "name": "Алексей",
-        "car": "Toyota Camry"
-    },
-    "history": []
-}
+data = {"users": {}}
+current_user = None
 
 def load_data():
     global data
@@ -62,10 +58,8 @@ def toggle_menu():
         sidebar.pack(side="left", fill="y")
     menu_visible = not menu_visible
 
-tk.Button(header, text="☰",
-          bg=HEADER, fg="white",
-          font=("Arial", 18),
-          bd=0,
+tk.Button(header, text="☰", bg=HEADER, fg="white",
+          font=("Arial", 18), bd=0,
           command=toggle_menu).pack(side="left", padx=10)
 
 tk.Label(header, text="CalculatCar",
@@ -89,37 +83,118 @@ def clear():
         w.destroy()
 
 # ===============================
-# 🧮 КАЛЬКУЛЯТОР
+# 🔐 AUTH
+# ===============================
+def show_auth():
+    clear()
+
+    card = tk.Frame(content, bg=CARD, padx=30, pady=30)
+    card.pack(pady=80)
+
+    tk.Label(card, text="Вход / Регистрация",
+             bg=CARD, font=("Arial", 18, "bold")).pack(pady=10)
+
+    login = tk.Entry(card)
+    password = tk.Entry(card, show="*")
+
+    login.pack(pady=5)
+    password.pack(pady=5)
+
+    def login_user():
+        global current_user
+        if login.get() in data["users"]:
+            if data["users"][login.get()]["password"] == password.get():
+                current_user = login.get()
+                show_profile()
+            else:
+                messagebox.showerror("Ошибка", "Неверный пароль")
+        else:
+            messagebox.showerror("Ошибка", "Пользователь не найден")
+
+    def register():
+        if login.get() in data["users"]:
+            messagebox.showerror("Ошибка", "Уже существует")
+            return
+        data["users"][login.get()] = {
+            "password": password.get(),
+            "profile": {"name": "", "email": "", "car": ""},
+            "history": []
+        }
+        save_data()
+        messagebox.showinfo("OK", "Аккаунт создан")
+
+    tk.Button(card, text="Войти", bg=BLUE, fg="white",
+              command=login_user).pack(pady=5, fill="x")
+
+    tk.Button(card, text="Регистрация",
+              command=register).pack(pady=5, fill="x")
+
+# ===============================
+# 👤 PROFILE
+# ===============================
+def show_profile():
+    if not current_user:
+        show_auth()
+        return
+
+    clear()
+    user = data["users"][current_user]
+
+    left = tk.Frame(content, bg=CARD, padx=20, pady=20)
+    left.grid(row=0, column=0, padx=10, pady=10)
+
+    tk.Label(left, text="👤", font=("Arial", 40), bg=CARD).pack()
+    tk.Label(left, text=current_user,
+             bg=CARD, font=("Arial", 14, "bold")).pack()
+
+    def logout():
+        global current_user
+        current_user = None
+        show_calc()
+
+    tk.Button(left, text="Выйти",
+              bg=RED, fg="white",
+              command=logout).pack(pady=10, fill="x")
+
+    right = tk.Frame(content, bg=CARD, padx=20, pady=20)
+    right.grid(row=0, column=1, padx=10, pady=10)
+
+    tk.Label(right, text="Личная информация",
+             bg=CARD, font=("Arial", 16, "bold")).pack(anchor="w")
+
+    def field(label, value):
+        tk.Label(right, text=label, bg=CARD, fg=SUB).pack(anchor="w")
+        e = tk.Entry(right)
+        e.insert(0, value)
+        e.pack(fill="x", pady=5)
+        return e
+
+    name = field("Имя", user["profile"]["name"])
+    email = field("Email", user["profile"]["email"])
+    car = field("Автомобиль", user["profile"]["car"])
+
+    def save():
+        user["profile"]["name"] = name.get()
+        user["profile"]["email"] = email.get()
+        user["profile"]["car"] = car.get()
+        save_data()
+        messagebox.showinfo("OK", "Сохранено")
+
+    tk.Button(right, text="Сохранить",
+              bg=BLUE, fg="white",
+              command=save).pack(pady=10)
+
+# ===============================
+# 🧮 CALC
 # ===============================
 def show_calc():
     clear()
 
-    content.grid_columnconfigure(0, weight=2)
-    content.grid_columnconfigure(1, weight=1)
-
     left = tk.Frame(content, bg=CARD, padx=20, pady=20)
-    left.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+    left.pack(side="left", fill="both", expand=True, padx=10)
 
     tk.Label(left, text="Калькулятор",
-             bg=CARD, fg=TEXT,
-             font=("Arial", 18, "bold")).pack(anchor="w")
-
-    # выбор авто
-    tk.Label(left, text="Автомобиль", bg=CARD, fg=SUB).pack(anchor="w")
-    car_var = tk.StringVar(value=data["profile"]["car"])
-    car_entry = tk.Entry(left, textvariable=car_var)
-    car_entry.pack(fill="x", pady=5)
-
-    # выбор типа расчета
-    calc_type = tk.StringVar(value="consumption")
-
-    tk.Radiobutton(left, text="Расход (л/100км)",
-                   variable=calc_type, value="consumption",
-                   bg=CARD).pack(anchor="w")
-
-    tk.Radiobutton(left, text="Стоимость поездки",
-                   variable=calc_type, value="cost",
-                   bg=CARD).pack(anchor="w")
+             bg=CARD, font=("Arial", 18, "bold")).pack(anchor="w")
 
     def field(text):
         tk.Label(left, text=text, bg=CARD, fg=SUB).pack(anchor="w")
@@ -127,131 +202,74 @@ def show_calc():
         e.pack(fill="x", pady=5)
         return e
 
-    distance = field("Дистанция (км)")
-    fuel = field("Топливо (л)")
-    price = field("Цена (₽/л)")
+    distance = field("Дистанция")
+    fuel = field("Топливо")
+    price = field("Цена")
 
-    right = tk.Frame(content, bg=BG)
-    right.grid(row=0, column=1, sticky="nsew")
-
-    result_label = tk.Label(right, text="—",
-                            bg=CARD, font=("Arial", 22, "bold"))
-    result_label.pack(pady=50)
+    result = tk.Label(left, text="—", bg=CARD,
+                      font=("Arial", 20, "bold"))
+    result.pack(pady=20)
 
     def calc():
         try:
             d = float(distance.get())
             f = float(fuel.get())
             p = float(price.get())
-            car = car_var.get()
 
-            if calc_type.get() == "consumption":
-                result = (f / d) * 100
-                text = f"{result:.1f} л/100км"
-            else:
-                result = f * p
-                text = f"{result:.0f} ₽"
+            cons = (f / d) * 100
+            cost = f * p
 
-            result_label.config(text=text)
+            result.config(text=f"{cons:.1f} л/100км | {cost:.0f} ₽")
 
-            data["history"].append({
-                "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                "car": car,
-                "result": text
-            })
-            save_data()
+            if current_user:
+                data["users"][current_user]["history"].append({
+                    "date": datetime.now().strftime("%d.%m %H:%M"),
+                    "result": result.cget("text")
+                })
+                save_data()
 
         except:
             messagebox.showerror("Ошибка", "Проверь ввод")
 
     tk.Button(left, text="Рассчитать",
               bg=BLUE, fg="white",
-              command=calc).pack(fill="x", pady=10)
+              command=calc).pack(fill="x")
 
 # ===============================
-# 👤 ПРОФИЛЬ
-# ===============================
-def show_profile():
-    clear()
-
-    card = tk.Frame(content, bg=CARD, padx=30, pady=30)
-    card.pack(pady=50)
-
-    tk.Label(card, text="Профиль",
-             bg=CARD, font=("Arial", 18, "bold")).pack()
-
-    tk.Label(card, text="Имя", bg=CARD).pack(anchor="w")
-    name = tk.Entry(card)
-    name.insert(0, data["profile"]["name"])
-    name.pack(fill="x")
-
-    tk.Label(card, text="Автомобиль", bg=CARD).pack(anchor="w")
-    car = tk.Entry(card)
-    car.insert(0, data["profile"]["car"])
-    car.pack(fill="x")
-
-    def save():
-        data["profile"]["name"] = name.get()
-        data["profile"]["car"] = car.get()
-        save_data()
-        messagebox.showinfo("OK", "Сохранено")
-
-    tk.Button(card, text="Сохранить",
-              bg=BLUE, fg="white",
-              command=save).pack(pady=10)
-
-# ===============================
-# 📊 ИСТОРИЯ
+# 📊 HISTORY
 # ===============================
 def show_history():
     clear()
 
-    tk.Label(content, text="История",
-             bg=BG, fg=TEXT,
-             font=("Arial", 18, "bold")).pack(anchor="w")
+    if not current_user:
+        messagebox.showinfo("Внимание", "Сначала войдите")
+        return
 
-    table = tk.Frame(content, bg=CARD)
-    table.pack(fill="both", expand=True, pady=10)
+    hist = data["users"][current_user]["history"]
 
-    def delete_item(index):
-        data["history"].pop(index)
-        save_data()
-        show_history()
+    for i, h in enumerate(hist[::-1]):
+        row = tk.Frame(content, bg=CARD, pady=10)
+        row.pack(fill="x", padx=10, pady=5)
 
-    for i, h in enumerate(data["history"][::-1]):
-        real_index = len(data["history"]) - 1 - i
-
-        row = tk.Frame(table, bg=CARD, pady=10)
-        row.pack(fill="x", padx=10)
-
-        tk.Label(row, text=h["date"],
-                 bg=CARD, width=20).pack(side="left")
-
-        tk.Label(row, text=h["car"],
-                 bg=CARD, width=20).pack(side="left")
-
-        tk.Label(row, text=h["result"],
-                 bg=CARD, width=15).pack(side="left")
-
-        tk.Button(row, text="Удалить",
-                  command=lambda idx=real_index: delete_item(idx)
-                  ).pack(side="right")
+        tk.Label(row, text=h["date"], bg=CARD).pack(side="left")
+        tk.Label(row, text=h["result"], bg=CARD).pack(side="left", padx=20)
 
 # ===============================
-# ℹ️ О НАС
+# ⚙ SETTINGS
+# ===============================
+def show_settings():
+    clear()
+
+    tk.Label(content, text="Настройки",
+             bg=BG, font=("Arial", 18, "bold")).pack()
+
+# ===============================
+# ℹ️ ABOUT
 # ===============================
 def show_about():
     clear()
-
-    card = tk.Frame(content, bg=CARD, padx=30, pady=30)
-    card.pack(pady=50)
-
-    tk.Label(card, text="О программе",
-             bg=CARD, font=("Arial", 18, "bold")).pack()
-
-    tk.Label(card,
-             text="CalculatCar — калькулятор расхода топлива 🚗",
-             bg=CARD, fg=SUB).pack(pady=10)
+    tk.Label(content, text="О программе\nCalculatCar 🚗",
+             bg=BG, font=("Arial", 16)).pack(pady=50)
 
 # ===============================
 # MENU
@@ -268,6 +286,10 @@ menu_btn("Калькулятор", show_calc)
 menu_btn("Профиль", show_profile)
 menu_btn("История", show_history)
 menu_btn("О нас", show_about)
+
+# вниз меню
+tk.Label(sidebar, bg=SIDEBAR).pack(expand=True)
+menu_btn("Настройки", show_settings)
 
 # ===============================
 # START
