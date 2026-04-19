@@ -15,21 +15,28 @@ TEXT = "#1f2937"
 SUB = "#6b7280"
 BLUE = "#3b82f6"
 
-DATA_FILE = "history.json"
-history_data = []
+DATA_FILE = "data.json"
 
 # ===============================
-# 💾 LOAD / SAVE
+# 💾 DATA
 # ===============================
+data = {
+    "profile": {
+        "name": "Алексей",
+        "car": "Toyota Camry"
+    },
+    "history": []
+}
+
 def load_data():
-    global history_data
+    global data
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            history_data = json.load(f)
+            data = json.load(f)
 
 def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(history_data, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 # ===============================
 # 🪟 WINDOW
@@ -77,9 +84,6 @@ main.pack(side="right", fill="both", expand=True)
 content = tk.Frame(main, bg=BG)
 content.pack(fill="both", expand=True, padx=20, pady=20)
 
-# ===============================
-# CLEAR
-# ===============================
 def clear():
     for w in content.winfo_children():
         w.destroy()
@@ -100,6 +104,23 @@ def show_calc():
              bg=CARD, fg=TEXT,
              font=("Arial", 18, "bold")).pack(anchor="w")
 
+    # выбор авто
+    tk.Label(left, text="Автомобиль", bg=CARD, fg=SUB).pack(anchor="w")
+    car_var = tk.StringVar(value=data["profile"]["car"])
+    car_entry = tk.Entry(left, textvariable=car_var)
+    car_entry.pack(fill="x", pady=5)
+
+    # выбор типа расчета
+    calc_type = tk.StringVar(value="consumption")
+
+    tk.Radiobutton(left, text="Расход (л/100км)",
+                   variable=calc_type, value="consumption",
+                   bg=CARD).pack(anchor="w")
+
+    tk.Radiobutton(left, text="Стоимость поездки",
+                   variable=calc_type, value="cost",
+                   bg=CARD).pack(anchor="w")
+
     def field(text):
         tk.Label(left, text=text, bg=CARD, fg=SUB).pack(anchor="w")
         e = tk.Entry(left)
@@ -113,36 +134,30 @@ def show_calc():
     right = tk.Frame(content, bg=BG)
     right.grid(row=0, column=1, sticky="nsew")
 
-    card1 = tk.Frame(right, bg=CARD, padx=20, pady=20)
-    card1.pack(fill="x", pady=10)
-
-    cons_label = tk.Label(card1, text="—",
-                          bg=CARD, font=("Arial", 20, "bold"))
-    cons_label.pack()
-
-    card2 = tk.Frame(right, bg=CARD, padx=20, pady=20)
-    card2.pack(fill="x", pady=10)
-
-    cost_label = tk.Label(card2, text="—",
-                          bg=CARD, font=("Arial", 20, "bold"))
-    cost_label.pack()
+    result_label = tk.Label(right, text="—",
+                            bg=CARD, font=("Arial", 22, "bold"))
+    result_label.pack(pady=50)
 
     def calc():
         try:
             d = float(distance.get())
             f = float(fuel.get())
             p = float(price.get())
+            car = car_var.get()
 
-            cons = (f / d) * 100
-            cost = f * p
+            if calc_type.get() == "consumption":
+                result = (f / d) * 100
+                text = f"{result:.1f} л/100км"
+            else:
+                result = f * p
+                text = f"{result:.0f} ₽"
 
-            cons_label.config(text=f"{cons:.1f} л/100км")
-            cost_label.config(text=f"{cost:.0f} ₽")
+            result_label.config(text=text)
 
-            history_data.append({
+            data["history"].append({
                 "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                "cons": round(cons, 2),
-                "cost": round(cost, 2)
+                "car": car,
+                "result": text
             })
             save_data()
 
@@ -154,12 +169,44 @@ def show_calc():
               command=calc).pack(fill="x", pady=10)
 
 # ===============================
+# 👤 ПРОФИЛЬ
+# ===============================
+def show_profile():
+    clear()
+
+    card = tk.Frame(content, bg=CARD, padx=30, pady=30)
+    card.pack(pady=50)
+
+    tk.Label(card, text="Профиль",
+             bg=CARD, font=("Arial", 18, "bold")).pack()
+
+    tk.Label(card, text="Имя", bg=CARD).pack(anchor="w")
+    name = tk.Entry(card)
+    name.insert(0, data["profile"]["name"])
+    name.pack(fill="x")
+
+    tk.Label(card, text="Автомобиль", bg=CARD).pack(anchor="w")
+    car = tk.Entry(card)
+    car.insert(0, data["profile"]["car"])
+    car.pack(fill="x")
+
+    def save():
+        data["profile"]["name"] = name.get()
+        data["profile"]["car"] = car.get()
+        save_data()
+        messagebox.showinfo("OK", "Сохранено")
+
+    tk.Button(card, text="Сохранить",
+              bg=BLUE, fg="white",
+              command=save).pack(pady=10)
+
+# ===============================
 # 📊 ИСТОРИЯ
 # ===============================
 def show_history():
     clear()
 
-    tk.Label(content, text="История расчетов",
+    tk.Label(content, text="История",
              bg=BG, fg=TEXT,
              font=("Arial", 18, "bold")).pack(anchor="w")
 
@@ -167,24 +214,24 @@ def show_history():
     table.pack(fill="both", expand=True, pady=10)
 
     def delete_item(index):
-        history_data.pop(index)
+        data["history"].pop(index)
         save_data()
         show_history()
 
-    for i, h in enumerate(history_data[::-1]):
-        real_index = len(history_data) - 1 - i
+    for i, h in enumerate(data["history"][::-1]):
+        real_index = len(data["history"]) - 1 - i
 
         row = tk.Frame(table, bg=CARD, pady=10)
         row.pack(fill="x", padx=10)
 
         tk.Label(row, text=h["date"],
-                 bg=CARD, width=20, anchor="w").pack(side="left")
+                 bg=CARD, width=20).pack(side="left")
 
-        tk.Label(row, text=f"{h['cons']} л/100км",
+        tk.Label(row, text=h["car"],
+                 bg=CARD, width=20).pack(side="left")
+
+        tk.Label(row, text=h["result"],
                  bg=CARD, width=15).pack(side="left")
-
-        tk.Label(row, text=f"{h['cost']} ₽",
-                 bg=CARD, width=10).pack(side="left")
 
         tk.Button(row, text="Удалить",
                   command=lambda idx=real_index: delete_item(idx)
@@ -200,15 +247,11 @@ def show_about():
     card.pack(pady=50)
 
     tk.Label(card, text="О программе",
-             bg=CARD, fg=TEXT,
-             font=("Arial", 18, "bold")).pack()
+             bg=CARD, font=("Arial", 18, "bold")).pack()
 
     tk.Label(card,
-             text="CalculatCar — простой калькулятор расхода топлива.\n"
-                  "Создан для удобного расчета поездок 🚗",
-             bg=CARD, fg=SUB,
-             font=("Arial", 12),
-             justify="center").pack(pady=10)
+             text="CalculatCar — калькулятор расхода топлива 🚗",
+             bg=CARD, fg=SUB).pack(pady=10)
 
 # ===============================
 # MENU
@@ -222,6 +265,7 @@ def menu_btn(text, cmd):
               command=cmd).pack(fill="x")
 
 menu_btn("Калькулятор", show_calc)
+menu_btn("Профиль", show_profile)
 menu_btn("История", show_history)
 menu_btn("О нас", show_about)
 
