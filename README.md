@@ -115,9 +115,14 @@ def clear():
     for w in content.winfo_children():
         w.destroy()
 
-def card():
+def card(full=False):
     f = tk.Frame(content, bg=CARD, padx=40, pady=40)
-    f.pack(pady=30)
+
+    if full:
+        f.pack(fill="both", expand=True, padx=20, pady=20)
+    else:
+        f.pack(pady=30)
+
     return f
 
 # ===================== PROFILE =====================
@@ -125,7 +130,7 @@ def show_profile():
     clear()
 
     if not current_user:
-        c = card()
+        c = card(full=True)
 
         tk.Label(c, text="Вход / Регистрация",
                  bg=CARD, fg=TEXT,
@@ -162,7 +167,7 @@ def show_profile():
             data["users"][e] = {
                 "password": p,
                 "name": "",
-                "car": "",
+                "cars": [],
                 "history": []
             }
             save_data()
@@ -176,64 +181,72 @@ def show_profile():
         return
 
     user = data["users"][current_user]
-    c = card()
+    c = card(full=True)
 
     tk.Label(c, text="Профиль",
              bg=CARD, fg=TEXT,
              font=("Arial", 20, "bold")).pack(pady=10)
 
+    # ===== ИМЯ =====
     tk.Label(c, text="Имя", bg=CARD, fg=SUB).pack(anchor="w")
     name_entry = tk.Entry(c, font=("Arial", 14))
     name_entry.insert(0, user.get("name", ""))
     name_entry.pack(fill="x", pady=5)
 
-    tk.Label(c, text="Автомобиль", bg=CARD, fg=SUB).pack(anchor="w")
-    car_entry = tk.Entry(c, font=("Arial", 14))
-    car_entry.insert(0, user.get("car", ""))
-    car_entry.pack(fill="x", pady=5)
+    def save_name():
+        user["name"] = name_entry.get()
+        save_data()
+        messagebox.showinfo("OK", "Сохранено")
 
-    tk.Label(c, text="Новый пароль", bg=CARD, fg=SUB).pack(anchor="w")
-    pass1 = tk.Entry(c, show="*", font=("Arial", 14))
-    pass1.pack(fill="x", pady=5)
+    tk.Button(c, text="Сохранить имя",
+              bg=ACCENT, fg="white",
+              command=save_name).pack(fill="x", pady=5)
 
-    tk.Label(c, text="Повтор пароля", bg=CARD, fg=SUB).pack(anchor="w")
-    pass2 = tk.Entry(c, show="*", font=("Arial", 14))
-    pass2.pack(fill="x", pady=5)
+    # ===== ДОБАВЛЕНИЕ АВТО =====
+    tk.Label(c, text="Добавить авто",
+             bg=CARD, fg=TEXT,
+             font=("Arial", 14, "bold")).pack(pady=10)
 
-    show_pass = tk.BooleanVar()
+    car_name = tk.Entry(c)
+    car_name.insert(0, "Название авто")
+    car_name.pack(fill="x", pady=5)
 
-    def toggle_password():
-        s = "" if show_pass.get() else "*"
-        pass1.config(show=s)
-        pass2.config(show=s)
+    car_cons = tk.Entry(c)
+    car_cons.insert(0, "Расход л/100км")
+    car_cons.pack(fill="x", pady=5)
 
-    tk.Checkbutton(c, text="Показать пароль",
-                   variable=show_pass,
-                   command=toggle_password,
-                   bg=CARD, fg=SUB).pack(anchor="w", pady=5)
+    def add_car():
+        name = car_name.get().strip()
+        try:
+            cons = float(car_cons.get())
+        except:
+            return messagebox.showerror("Ошибка", "Неверный расход")
 
-    def save_all():
-        name = name_entry.get().strip()
-        car = car_entry.get().strip()
-        p1 = pass1.get()
-        p2 = pass2.get()
+        if not name:
+            return messagebox.showerror("Ошибка", "Введите имя авто")
 
-        user["name"] = name
-        user["car"] = car
-
-        if p1 or p2:
-            if p1 != p2:
-                return messagebox.showerror("Ошибка", "Пароли не совпадают")
-            if len(p1) < 4:
-                return messagebox.showerror("Ошибка", "Слишком короткий пароль")
-            user["password"] = p1
+        user["cars"].append({
+            "name": name,
+            "consumption": cons
+        })
 
         save_data()
-        messagebox.showinfo("OK", "Профиль обновлён")
+        show_profile()
 
-    tk.Button(c, text="Сохранить изменения",
-              bg=ACCENT, fg="white",
-              command=save_all).pack(fill="x", pady=15)
+    tk.Button(c, text="Добавить авто",
+              bg=ACCENT2, fg="black",
+              command=add_car).pack(fill="x", pady=5)
+
+    # ===== СПИСОК АВТО =====
+    tk.Label(c, text="Мои авто",
+             bg=CARD, fg=TEXT,
+             font=("Arial", 14, "bold")).pack(pady=10)
+
+    for car in user.get("cars", []):
+        tk.Label(c,
+                 text=f"{car['name']} — {car['consumption']} л/100км",
+                 bg=PANEL, fg=TEXT,
+                 padx=10, pady=5).pack(fill="x", pady=2)
 
     def logout():
         global current_user
@@ -243,24 +256,43 @@ def show_profile():
 
     tk.Button(c, text="Выйти",
               bg=DANGER, fg="white",
-              command=logout).pack(fill="x")
+              command=logout).pack(fill="x", pady=10)
 
-# ===================== CALC / HISTORY / ETC =====================
+# ===================== CALCULATOR =====================
 def show_calc():
     clear()
-    tk.Label(content, text="Калькулятор", bg=BG, fg=TEXT).pack(pady=50)
 
+    tk.Label(content, text="Калькулятор",
+             bg=BG, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
+
+    tk.Label(content, text="(оставил твою логику без изменений)",
+             bg=BG, fg=SUB).pack()
+
+# ===================== HISTORY =====================
 def show_history():
     clear()
-    tk.Label(content, text="История", bg=BG, fg=TEXT).pack(pady=50)
 
+    tk.Label(content, text="История",
+             bg=BG, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
+
+    if not current_user:
+        return
+
+    for h in data["users"][current_user]["history"][::-1]:
+        tk.Label(content,
+                 text=f"{h['date']} | {h['result']}",
+                 bg=CARD, fg=TEXT).pack(fill="x", padx=40, pady=5)
+
+# ===================== OTHER =====================
 def show_settings():
     clear()
-    tk.Label(content, text="Настройки", bg=BG, fg=TEXT).pack(pady=50)
+    tk.Label(content, text="Настройки", bg=BG, fg=TEXT).pack(pady=40)
 
 def show_about():
     clear()
-    tk.Label(content, text="CalculatCar 🚗", bg=BG, fg=TEXT).pack(pady=50)
+    tk.Label(content, text="CalculatCar 🚗", bg=BG, fg=TEXT).pack(pady=40)
 
 def update_user():
     user_label.config(text=current_user if current_user else "")
