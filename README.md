@@ -1,27 +1,36 @@
-header = tk.Frame(main, bg=ACCENT, height=70)
-header.pack(fill="x")
-header.pack_propagate(False)
+dropdown = tk.Frame(main, bg=PANEL)
+dropdown.pack(fill="x")
+dropdown.pack_forget()  # скрыто по умолчанию
 
-tk.Button(header,
-          text="☰",
-          bg=ACCENT,
-          fg="white",
-          font=("Arial", 16, "bold"),
-          bd=0,
-          activebackground=ACCENT,
-          activeforeground="white",
-          command=toggle_menu).pack(side="left", padx=15)
+menu_open = False
 
-title = tk.Label(header,
-                 text="CalculatCar Pro 🚗",
-                 bg=ACCENT,
-                 fg="white",
-                 font=("Arial", 20, "bold"))
-title.pack(side="left")
 
-user_label = tk.Label(header,
-                      text="",
-                      bg=ACCENT,
-                      fg="white",
-                      font=("Arial", 11))
-user_label.pack(side="right", padx=15)
+
+
+def toggle_menu():
+    global menu_open
+    if menu_open:
+        dropdown.pack_forget()
+    else:
+        dropdown.pack(fill="x")
+    menu_open = not menu_open
+
+
+
+
+
+
+    def nav(text, cmd):
+    tk.Button(dropdown,
+              text=text,
+              bg=PANEL,
+              fg=TEXT,
+              bd=0,
+              anchor="w",
+              padx=20,
+              pady=12,
+              font=("Arial", 12),
+              activebackground=CARD,
+              activeforeground=ACCENT,
+              command=lambda: [cmd(), toggle_menu()]
+              ).pack(fill="x")
