@@ -30,8 +30,6 @@ def load_data():
                 data = {"users": {}}
         except:
             data = {"users": {}}
-    else:
-        data = {"users": {}}
 
 def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -43,53 +41,76 @@ root.title("CalculatCar Pro 🚗")
 root.geometry("1200x750")
 root.configure(bg=BG)
 
-root.grid_rowconfigure(0, weight=1)
-root.grid_columnconfigure(0, weight=1)
-
 # ===================== MAIN =====================
 main = tk.Frame(root, bg=BG)
-main.grid(row=0, column=0, sticky="nsew")
+main.pack(fill="both", expand=True)
 
 # ===================== HEADER =====================
 header = tk.Frame(main, bg=ACCENT, height=70)
 header.pack(fill="x")
 header.pack_propagate(False)
 
-menu_open = False
-
-# ===================== DROPDOWN MENU =====================
-dropdown = tk.Frame(main, bg=PANEL)
-dropdown.pack(fill="x")
-dropdown.pack_forget()
+menu_window = None
 
 def toggle_menu():
-    global menu_open
-    if menu_open:
-        dropdown.pack_forget()
-    else:
-        dropdown.pack(fill="x")
-    menu_open = not menu_open
+    global menu_window
 
-tk.Button(header,
-          text="☰",
-          bg=ACCENT,
-          fg="white",
+    if menu_window and menu_window.winfo_exists():
+        menu_window.destroy()
+        return
+
+    # координаты кнопки
+    x = root.winfo_x() + 20
+    y = root.winfo_y() + 70
+
+    menu_window = tk.Toplevel(root)
+    menu_window.overrideredirect(True)
+    menu_window.configure(bg=PANEL)
+
+    menu_window.geometry(f"220x240+{x}+{y}")
+
+    def close(e=None):
+        if menu_window:
+            menu_window.destroy()
+
+    menu_window.bind("<FocusOut>", close)
+
+    def nav(text, cmd):
+        tk.Button(menu_window,
+                  text=text,
+                  bg=PANEL,
+                  fg=TEXT,
+                  bd=0,
+                  anchor="w",
+                  padx=15,
+                  pady=10,
+                  font=("Arial", 11),
+                  activebackground=CARD,
+                  activeforeground=ACCENT,
+                  command=lambda: [cmd(), close()]
+                  ).pack(fill="x")
+
+    nav("Калькулятор", show_calc)
+    nav("Профиль", show_profile)
+    nav("История", show_history)
+    nav("Настройки", show_settings)
+    nav("О программе", show_about)
+
+    menu_window.focus_force()
+
+tk.Button(header, text="☰",
+          bg=ACCENT, fg="white",
           font=("Arial", 16, "bold"),
           bd=0,
-          activebackground=ACCENT,
           command=toggle_menu).pack(side="left", padx=15)
 
-title = tk.Label(header,
-                 text="CalculatCar Pro 🚗",
-                 bg=ACCENT,
-                 fg="white",
+title = tk.Label(header, text="CalculatCar Pro 🚗",
+                 bg=ACCENT, fg="white",
                  font=("Arial", 20, "bold"))
 title.pack(side="left")
 
-user_label = tk.Label(header,
-                      text="",
-                      bg=ACCENT,
-                      fg="white",
+user_label = tk.Label(header, text="",
+                      bg=ACCENT, fg="white",
                       font=("Arial", 11))
 user_label.pack(side="right", padx=15)
 
@@ -105,22 +126,6 @@ def card():
     f = tk.Frame(content, bg=CARD, padx=40, pady=40)
     f.pack(pady=30)
     return f
-
-# ===================== MENU =====================
-def nav(text, cmd):
-    tk.Button(dropdown,
-              text=text,
-              bg=PANEL,
-              fg=TEXT,
-              bd=0,
-              anchor="w",
-              padx=20,
-              pady=12,
-              font=("Arial", 12),
-              activebackground=CARD,
-              activeforeground=ACCENT,
-              command=lambda: [cmd(), toggle_menu()]
-              ).pack(fill="x")
 
 # ===================== AUTH =====================
 def show_auth():
@@ -322,13 +327,6 @@ def show_about():
              text="CalculatCar Pro 🚗\nКрасивое приложение",
              bg=BG, fg=TEXT,
              font=("Arial", 16)).pack(pady=60)
-
-# ===================== MENU BUTTONS =====================
-nav("Калькулятор", show_calc)
-nav("Профиль", show_profile)
-nav("История", show_history)
-nav("Настройки", show_settings)
-nav("О программе", show_about)
 
 # ===================== USER =====================
 def update_user():
