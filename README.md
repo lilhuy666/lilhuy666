@@ -1,6 +1,3 @@
-Конечно! Вот полностью улучшенный код с современным дизайном:
-
-```python
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
@@ -126,7 +123,7 @@ def toggle_menu():
 
     menu_window.focus_force()
 
-# Кнопка меню с анимацией
+# Функция создания стильной кнопки
 def create_modern_button(parent, text, command=None, bg=ACCENT, fg=TEXT, hover_bg=None, hover_fg=None):
     """Создаёт стильную анимированную кнопку"""
     if hover_bg is None:
@@ -212,8 +209,7 @@ def show_profile():
                  bg=CARD, fg=HIGHLIGHT,
                  font=("Segoe UI", 22, "bold")).pack(pady=20)
 
+        # Поле email
+        tk.Label(c, text="Email", bg=CARD, fg=SUB, font=("Segoe UI", 11)).pack(anchor="w", pady=(0, 5))
         email = tk.Entry(c, font=("Segoe UI", 14), bd=1, relief="flat", bg=PANEL, fg=TEXT)
-        password = tk.Entry(c, show="*", font=("Segoe UI", 14), bd=1, relief="flat", bg=PANEL, fg=TEXT)
-
-        # Подсказки для полей
-        tk.Label(c, text="Email", bg=
+        email.pack(
