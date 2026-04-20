@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
 import json, os
-from PIL import Image, ImageTk  # <-- ДОБАВЛЕНО
 
 # ===================== STYLE =====================
 BG = "#0b1220"
@@ -41,25 +40,13 @@ def save_data():
 root = tk.Tk()
 root.title("CalculatCar Pro 🚗")
 root.geometry("1200x750")
+root.configure(bg=BG)
 
-# ===================== MAIN =====================
-main = tk.Frame(root)
-main.pack(fill="both", expand=True)
-
-# ===== BACKGROUND IMAGE =====
-bg_image = Image.open("background.jpg")
-bg_image = bg_image.resize((1200, 750))
-bg_photo = ImageTk.PhotoImage(bg_image)
-
-bg_label = tk.Label(main, image=bg_photo)
-bg_label.place(x=0, y=0, relwidth=1, relheight=1)
-
-# ===================== LAYOUT =====================
-main.grid_rowconfigure(0, weight=1)
-main.grid_columnconfigure(1, weight=1)
+root.grid_rowconfigure(0, weight=1)
+root.grid_columnconfigure(1, weight=1)
 
 # ===================== SIDEBAR =====================
-sidebar = tk.Frame(main, bg=PANEL, width=260)
+sidebar = tk.Frame(root, bg=PANEL, width=260)
 sidebar.grid(row=0, column=0, sticky="ns")
 sidebar.grid_remove()
 
@@ -73,12 +60,12 @@ def toggle_menu():
         sidebar.grid()
     menu_open = not menu_open
 
-# ===================== CONTENT AREA =====================
-content_frame = tk.Frame(main, bg=BG)
-content_frame.grid(row=0, column=1, sticky="nsew")
+# ===================== MAIN =====================
+main = tk.Frame(root, bg=BG)
+main.grid(row=0, column=1, sticky="nsew")
 
 # ===================== HEADER =====================
-header = tk.Frame(content_frame, bg=BG)
+header = tk.Frame(main, bg=BG)
 header.pack(fill="x")
 
 tk.Button(header, text="☰",
@@ -98,12 +85,8 @@ user_label = tk.Label(header, text="",
 user_label.pack(side="right", padx=15)
 
 # ===================== CONTENT =====================
-content = tk.Frame(content_frame, bg=BG)
+content = tk.Frame(main, bg=BG)
 content.pack(fill="both", expand=True)
-
-# поднимаем поверх фона
-content_frame.lift()
-sidebar.lift()
 
 def clear():
     for w in content.winfo_children():
@@ -155,13 +138,38 @@ def show_auth():
         save_data()
         messagebox.showinfo("OK", "Аккаунт создан")
 
-    tk.Button(c, text="Войти", bg=ACCENT, fg="white",
+    tk.Button(c, text="Войти",
+              bg=ACCENT, fg="white",
               font=("Arial", 12, "bold"),
               command=login).pack(fill="x", pady=10)
 
-    tk.Button(c, text="Регистрация", bg=ACCENT2, fg="black",
+    tk.Button(c, text="Регистрация",
+              bg=ACCENT2, fg="black",
               font=("Arial", 12, "bold"),
               command=register).pack(fill="x")
+
+# ===================== PROFILE =====================
+def show_profile():
+    clear()
+    c = card()
+
+    tk.Label(c, text="Профиль",
+             bg=CARD, fg=TEXT,
+             font=("Arial", 20, "bold")).pack()
+
+    tk.Label(c, text=current_user or "",
+             bg=CARD, fg=SUB,
+             font=("Arial", 14)).pack(pady=10)
+
+    def logout():
+        global current_user
+        current_user = None
+        update_user()
+        show_auth()
+
+    tk.Button(c, text="Выйти",
+              bg=DANGER, fg="white",
+              command=logout).pack(fill="x", pady=10)
 
 # ===================== CALC =====================
 def show_calc():
@@ -172,6 +180,32 @@ def show_calc():
              font=("Arial", 20, "bold")).pack(pady=10)
 
     mode = tk.StringVar(value="1")
+
+    # красивые сегмент-кнопки
+    switch = tk.Frame(content, bg=BG)
+    switch.pack(pady=10)
+
+    tk.Radiobutton(switch,
+                   text="Рассчитать стоимость поездки",
+                   variable=mode,
+                   value="1",
+                   indicatoron=0,
+                   width=28,
+                   bg=PANEL,
+                   fg=TEXT,
+                   selectcolor=ACCENT,
+                   font=("Arial", 11)).pack(side="left", padx=5)
+
+    tk.Radiobutton(switch,
+                   text="Средний расход на 100 км",
+                   variable=mode,
+                   value="2",
+                   indicatoron=0,
+                   width=28,
+                   bg=PANEL,
+                   fg=TEXT,
+                   selectcolor=ACCENT,
+                   font=("Arial", 11)).pack(side="left", padx=5)
 
     form = tk.Frame(content, bg=CARD, padx=40, pady=40)
     form.pack(pady=20)
@@ -184,51 +218,119 @@ def show_calc():
         entries.clear()
 
         def add(t):
-            tk.Label(form, text=t, bg=CARD, fg=TEXT).pack(anchor="w")
-            e = tk.Entry(form)
-            e.pack(fill="x", pady=8)
+            tk.Label(form, text=t, bg=CARD, fg=TEXT,
+                     font=("Arial", 12)).pack(anchor="w")
+            e = tk.Entry(form, font=("Arial", 14))
+            e.pack(fill="x", pady=8, ipady=4)
             entries[t] = e
 
-        add("Топливо (л)")
-        add("Расстояние (км)")
-        add("Цена за литр")
+        if mode.get() == "1":
+            add("Топливо (л)")
+            add("Расстояние (км)")
+            add("Цена за литр")
+        else:
+            add("Средний расход (л/100км)")
+            add("Расстояние (км)")
+            add("Цена за литр")
 
     def calc():
         try:
-            f = float(entries["Топливо (л)"].get())
-            d = float(entries["Расстояние (км)"].get())
-            p = float(entries["Цена за литр"].get())
-
-            cons = (f / d) * 100
-            cost = f * p
+            if mode.get() == "1":
+                f = float(entries["Топливо (л)"].get())
+                d = float(entries["Расстояние (км)"].get())
+                p = float(entries["Цена за литр"].get())
+                cons = (f / d) * 100
+                cost = f * p
+            else:
+                cons = float(entries["Средний расход (л/100км)"].get())
+                d = float(entries["Расстояние (км)"].get())
+                p = float(entries["Цена за литр"].get())
+                f = cons * d / 100
+                cost = f * p
 
             result.config(text=f"{cons:.1f} л/100км | {cost:.0f} ₽")
+
+            if current_user:
+                data["users"][current_user]["history"].append({
+                    "date": datetime.now().strftime("%d.%m %H:%M"),
+                    "result": result.cget("text")
+                })
+                save_data()
+
         except:
             messagebox.showerror("Ошибка", "Проверь ввод")
 
-    result = tk.Label(content, text="—",
-                      bg=BG, fg=ACCENT,
+    result = tk.Label(content,
+                      text="—",
+                      bg=BG,
+                      fg=ACCENT,
                       font=("Arial", 22, "bold"))
     result.pack()
 
-    tk.Button(content, text="Рассчитать",
-              bg=ACCENT, fg="white",
+    tk.Button(content,
+              text="Рассчитать",
+              bg=ACCENT,
+              fg="white",
+              font=("Arial", 14, "bold"),
               command=calc).pack(pady=10)
 
+    mode.trace("w", lambda *a: build())
     build()
+
+# ===================== HISTORY =====================
+def show_history():
+    clear()
+
+    tk.Label(content, text="История",
+             bg=BG, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
+
+    if not current_user:
+        return
+
+    for h in data["users"][current_user]["history"][::-1]:
+        tk.Label(content,
+                 text=f"{h['date']}  |  {h['result']}",
+                 bg=CARD, fg=TEXT,
+                 font=("Arial", 12)).pack(fill="x", padx=40, pady=5)
+
+# ===================== SETTINGS =====================
+def show_settings():
+    clear()
+    tk.Label(content, text="Настройки",
+             bg=BG, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=40)
+
+# ===================== ABOUT =====================
+def show_about():
+    clear()
+    tk.Label(content,
+             text="CalculatCar Pro 🚗\nКрасивое приложение для расчёта расхода",
+             bg=BG, fg=TEXT,
+             font=("Arial", 16)).pack(pady=60)
 
 # ===================== MENU =====================
 def nav(text, cmd):
-    tk.Button(sidebar, text=text,
-              bg=PANEL, fg=TEXT,
-              bd=0, anchor="w",
-              padx=20, pady=14,
+    tk.Button(sidebar,
+              text=text,
+              bg=PANEL,
+              fg=TEXT,
+              bd=0,
+              anchor="w",
+              padx=20,
+              pady=14,
+              font=("Arial", 12),
+              activebackground=CARD,
+              activeforeground=ACCENT,
               command=cmd).pack(fill="x")
 
 nav("Калькулятор", show_calc)
-nav("Профиль", show_auth)
+nav("Профиль", show_profile)
+nav("История", show_history)
+nav("Настройки", show_settings)
+nav("О программе", show_about)
 
-# ===================== USER =====================
+# ===================== USER LABEL UPDATE =====================
 def update_user():
     user_label.config(text=current_user if current_user else "")
 
