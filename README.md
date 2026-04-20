@@ -1,7 +1,11 @@
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
-import json, os
+import json
+import os
+import hashlib
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 
 # ===================== STYLE =====================
 BG = "#0b1220"
@@ -15,9 +19,17 @@ DANGER = "#ef4444"
 
 DATA_FILE = "data.json"
 
+FONT_MAIN = ("Segoe UI", 11)
+FONT_TITLE = ("Segoe UI", 16, "bold")
+FONT_BUTTON = ("Segoe UI", 10, "bold")
+
 # ===================== DATA =====================
 data = {"users": {}}
 current_user = None
+
+def hash_password(password):
+    """Хеширует пароль с помощью SHA-256"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def load_data():
     global data
@@ -27,12 +39,16 @@ def load_data():
                 data = json.load(f)
             if "users" not in data:
                 data = {"users": {}}
-        except:
+        except (json.JSONDecodeError, IOError):
             data = {"users": {}}
 
 def save_data():
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    """Сохраняет данные в файл с обработкой ошибок"""
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        messagebox.showerror("Ошибка", f"Не удалось сохранить данные: {e}")
 
 # ===================== WINDOW =====================
 root = tk.Tk()
@@ -50,7 +66,7 @@ header.pack_propagate(False)
 
 menu_window = None
 
-def toggle_menu():
+def toggle_menu(show_settings=None, show_about=None):
     global menu_window
 
     if menu_window and menu_window.winfo_exists():
@@ -142,7 +158,7 @@ def show_profile():
             e = email.get().strip()
             p = password.get().strip()
 
-            if e in data["users"] and data["users"][e]["password"] == p:
+            if e in data["users"] and data["users"][e]["password"] == hash_password(p):
                 current_user = e
                 update_user()
                 show_profile()
@@ -154,19 +170,22 @@ def show_profile():
             p = password.get().strip()
 
             if not e or not p:
-                return messagebox.showerror("Ошибка", "Заполни поля")
+                return messagebox.showerror("Ошибка", "Заполните все поля")
+
+            if len(p) < 4:
+                return messagebox.showerror("Ошибка", "Пароль должен содержать минимум 4 символа")
 
             if e in data["users"]:
-                return messagebox.showerror("Ошибка", "Уже существует")
+                return messagebox.showerror("Ошибка", "Пользователь с таким email уже существует")
 
             data["users"][e] = {
-                "password": p,
+                "password": hash_password(p),
                 "name": "",
                 "car": "",
                 "history": []
             }
             save_data()
-            messagebox.showinfo("OK", "Аккаунт создан")
+            messagebox.showinfo("Успех", "Аккаунт создан")
 
         tk.Button(c, text="Войти", bg=ACCENT, fg="white",
                   command=login).pack(fill="x", pady=10)
@@ -195,8 +214,9 @@ def show_profile():
     def save_name():
         user["name"] = name_entry.get()
         save_data()
-        messagebox.showinfo("OK", "Имя сохранено")
+        messagebox.showinfo("Успех", "Имя сохранено")
 
+    name_entry.bind("<FocusOut>", lambda e: save_name())
     tk.Button(row1, text="Сохранить",
               bg=ACCENT, fg="white",
               command=save_name).pack(side="right")
@@ -209,13 +229,14 @@ def show_profile():
 
     car_entry = tk.Entry(row2, font=("Arial", 14))
     car_entry.insert(0, user.get("car", ""))
-    car_entry.pack(side="left", fill="x", expand=True, padx=(0,10))
+    car_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
     def save_car():
         user["car"] = car_entry.get()
         save_data()
-        messagebox.showinfo("OK", "Авто сохранено")
+        messagebox.showinfo("Успех", "Автомобиль сохранён")
 
+    car_entry.bind("<FocusOut>", lambda e: save_car())
     tk.Button(row2, text="Сохранить",
               bg=ACCENT, fg="white",
               command=save_car).pack(side="right")
@@ -235,7 +256,7 @@ def show_profile():
     tk.Label(row4, text="Повтор пароля", bg=CARD, fg=SUB).pack(anchor="w")
 
     pass2 = tk.Entry(row4, show="*", font=("Arial", 14))
-    pass2.pack(side="left", fill="x", expand=True, padx=(0,10))
+    pass2.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
     def save_password():
         p1 = pass1.get()
@@ -244,27 +265,39 @@ def show_profile():
         if not p1 or not p2:
             return messagebox.showerror("Ошибка", "Введите пароль")
 
+        if len(p1) < 4:
+            return messagebox.showerror("Ошибка", "Пароль должен содержать минимум 4 символа")
+
         if p1 != p2:
             return messagebox.showerror("Ошибка", "Пароли не совпадают")
 
-        user["password"] = p1
+        user["password"] = hash_password(p1)
         save_data()
-        messagebox.showinfo("OK", "Пароль изменён")
+        messagebox.showinfo("Успех", "Пароль изменён")
+        pass1.delete(0, tk.END)
+        pass2.delete(0, tk.END)
 
     tk.Button(row4, text="Сохранить",
               bg=ACCENT, fg="white",
               command=save_password).pack(side="right")
 
     def logout():
-        global current_user
-        current_user = None
-        update_user()
-        show_profile()
+        if messagebox.askyesno("Выход", "Вы уверены, что хотите выйти?"):
+            global current_user
+            current_user = None
+            update_user()
+            show_profile()
 
     tk.Button(c, text="Выйти",
               bg=DANGER, fg="white",
               command=logout).pack(fill="x", pady=10)
 
+
+root = ttk.Window(themename="darkly")
+# ===================== FUNCTIONS =====================
+
+def update_user():
+    user_label.config(text=current_user if current_user else "")
 # ===================== CALCULATOR =====================
 def show_calc():
     clear()
@@ -302,7 +335,7 @@ def show_calc():
 
         def add(t):
             tk.Label(form, text=t, bg=CARD, fg=TEXT).pack(anchor="w")
-            e = tk.Entry(form)
+            e = tk.Entry(form, font=("Arial", 12))
             e.pack(fill="x", pady=5)
             entries[t] = e
 
@@ -321,12 +354,20 @@ def show_calc():
                 f = float(entries["Топливо (л)"].get())
                 d = float(entries["Расстояние (км)"].get())
                 p = float(entries["Цена за литр"].get())
+
+                if f < 0 or d <= 0 or p < 0:
+                    raise ValueError("Значения должны быть положительными, расстояние > 0")
+
                 cons = (f / d) * 100
                 cost = f * p
             else:
                 cons = float(entries["Средний расход (л/100км)"].get())
                 d = float(entries["Расстояние (км)"].get())
                 p = float(entries["Цена за литр"].get())
+
+                if cons < 0 or d < 0 or p < 0:
+                    raise ValueError("Значения должны быть неотрицательными")
+
                 cost = cons * d / 100 * p
 
             result.config(text=f"{cons:.1f} л/100км | {cost:.2f} €")
@@ -340,8 +381,15 @@ def show_calc():
                 data["users"][current_user]["history"] = h[-50:]
                 save_data()
 
-        except:
-            messagebox.showerror("Ошибка", "Проверь ввод")
+        except ValueError as e:
+            if "could not convert" in str(e):
+                messagebox.showerror("Ошибка", "Введите корректные числа")
+            else:
+                messagebox.showerror("Ошибка", str(e))
+        except ZeroDivisionError:
+            messagebox.showerror("Ошибка", "Расстояние не может быть нулевым")
+        except KeyError:
+            messagebox.showerror("Ошибка", "Заполните все поля")
 
     result = tk.Label(content, text="—",
                       bg=BG, fg=ACCENT,
@@ -356,6 +404,7 @@ def show_calc():
     mode.trace("w", lambda *a: build())
     build()
 
+
 # ===================== HISTORY =====================
 def show_history():
     clear()
@@ -365,26 +414,162 @@ def show_history():
              font=("Arial", 20, "bold")).pack(pady=10)
 
     if not current_user:
+        tk.Label(content, text="Войдите в аккаунт для просмотра истории",
+                 bg=BG, fg=SUB).pack(pady=20)
         return
 
-    for h in data["users"][current_user]["history"][::-1]:
+    history = data["users"][current_user]["history"]
+    if not history:
+        tk.Label(content, text="История расчётов пуста",
+                 bg=CARD, fg=SUB).pack(fill="x", padx=40, pady=5)
+        return
+
+    for h in history[::-1]:
         tk.Label(content,
                  text=f"{h['date']} | {h['result']}",
                  bg=CARD, fg=TEXT).pack(fill="x", padx=40, pady=5)
 
-# ===================== OTHER =====================
-def show_settings():
-    clear()
-    tk.Label(content, text="Настройки", bg=BG, fg=TEXT).pack(pady=40)
+        # Кнопка очистки истории
 
-def show_about():
-    clear()
-    tk.Label(content, text="CalculatCar 🚗", bg=BG, fg=TEXT).pack(pady=40)
+    def clear_history():
+        if messagebox.askyesno("Очистка", "Вы уверены, что хотите очистить историю?"):
+            data["users"][current_user]["history"] = []
+            save_data()
+            show_history()
 
-def update_user():
-    user_label.config(text=current_user if current_user else "")
+    tk.Button(content, text="Очистить историю",
+              bg=DANGER, fg="white",
+              command=clear_history).pack(pady=20)
 
-# ===================== START =====================
-load_data()
-show_calc()
+    # ===================== SETTINGS =====================
+    def show_settings():
+        clear()
+
+        c = card()
+        tk.Label(c, text="Настройки",
+                 bg=CARD, fg=TEXT,
+                 font=("Arial", 20, "bold")).pack(pady=10)
+
+        # Выбор валюты
+        currency_frame = tk.Frame(c, bg=CARD)
+        currency_frame.pack(fill="x", pady=10)
+
+        tk.Label(currency_frame, text="Валюта:", bg=CARD, fg=SUB).pack(anchor="w")
+
+        currency_var = tk.StringVar(value=data.get("settings", {}).get("currency", "€"))
+        currencies = ["€", "$", "₽", "¥", "£"]
+
+        for curr in currencies:
+            tk.Radiobutton(currency_frame,
+                           text=curr,
+                           variable=currency_var,
+                           value=curr,
+                           bg=CARD, fg=TEXT,
+                           selectcolor=ACCENT).pack(side="left", padx=10)
+
+        # Выбор точности округления
+        precision_frame = tk.Frame(c, bg=CARD)
+        precision_frame.pack(fill="x", pady=10)
+
+        tk.Label(precision_frame, text="Точность округления:", bg=CARD, fg=SUB).pack(anchor="w")
+
+        precision_var = tk.IntVar(value=data.get("settings", {}).get("precision", 2))
+        precisions = [1, 2, 3]
+
+        for prec in precisions:
+            tk.Radiobutton(precision_frame,
+                           text=f"{prec} знака",
+                           variable=precision_var,
+                           value=prec,
+                           bg=CARD, fg=TEXT,
+                           selectcolor=ACCENT).pack(side="left", padx=10)
+
+        def save_settings():
+            # Сохраняем настройки в глобальные данные
+            if "settings" not in data:
+                data["settings"] = {}
+            data["settings"]["currency"] = currency_var.get()
+            data["settings"]["precision"] = precision_var.get()
+            save_data()
+            messagebox.showinfo("Успех", "Настройки сохранены")
+
+        tk.Button(c, text="Сохранить настройки",
+                  bg=ACCENT, fg="white",
+                  command=save_settings).pack(pady=20)
+
+        # Сброс настроек
+        def reset_settings():
+            if messagebox.askyesno("Сброс", "Сбросить настройки к значениям по умолчанию?"):
+                if "settings" in data:
+                    del data["settings"]
+                save_data()
+                show_settings()  # Обновляем экран
+
+        tk.Button(c, text="Сбросить к умолчанию",
+                  bg=DANGER, fg="white",
+                  command=reset_settings).pack(pady=5)
+
+    # ===================== ABOUT =====================
+    def show_about():
+        clear()
+
+        c = card()
+        tk.Label(c, text="CalculatCar 🚗",
+                 bg=CARD, fg=TEXT,
+                 font=("Arial", 24, "bold")).pack(pady=15)
+
+        about_text = """
+    Калькулятор расхода топлива для автолюбителей
+
+    ОСНОВНЫЕ ВОЗМОЖНОСТИ:
+    • Расчёт стоимости поездки
+    • Определение среднего расхода топлива
+    • История последних 50 расчётов
+    • Личный профиль пользователя
+    • Сохранение данных между запусками
+    • Настраиваемая валюта отображения
+
+    ТЕХНИЧЕСКАЯ ИНФОРМАЦИЯ:
+    Версия: 1.0
+    Разработчик: CalculatCar Team
+    Язык программирования: Python 3
+    Графический интерфейс: Tkinter
+    Хранение данных: JSON-файл
+
+    ПОДДЕРЖКА:
+    Email: support@calculatcar.com
+    Сайт: www.calculatcar.com
+        """
+
+        tk.Label(c, text=about_text,
+                 bg=CARD, fg=SUB,
+                 justify="left",
+                 font=("Arial", 11),
+                 anchor="w").pack(pady=10, padx=20)
+
+        # Кнопка «Проверить обновления»
+        def check_updates():
+            messagebox.showinfo("Обновления", "У вас установлена последняя версия")
+
+        tk.Button(c, text="Проверить обновления",
+                  bg=ACCENT2, fg="black",
+                  command=check_updates).pack(pady=10)
+
+        # Кнопка «Лицензия»
+        def show_license():
+            license_text = """
+    CalculatCar — бесплатное программное обеспечение
+
+    Эта программа распространяется на условиях
+    свободной лицензии. Вы можете использовать,
+    модифицировать и распространять её.
+
+    © 2024 CalculatCar Team. Все права защищены.
+            """
+            messagebox.showinfo("Лицензия", license_text)
+
+        tk.Button(c, text="Лицензия",
+                  bg=PANEL, fg=TEXT,
+                  command=show_license).pack(pady=5)
+
 root.mainloop()
