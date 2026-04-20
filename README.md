@@ -1,4 +1,3 @@
-```python
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
@@ -37,7 +36,7 @@ def save_data():
 
 # ===================== WINDOW =====================
 root = tk.Tk()
-root.title("CalculatCar Pro 🚗")
+root.title("CalculatCar")
 root.geometry("1200x750")
 root.configure(bg=BG)
 
@@ -104,7 +103,7 @@ tk.Button(header, text="☰",
           bd=0,
           command=toggle_menu).pack(side="left", padx=15)
 
-title = tk.Label(header, text="CalculatCar Pro 🚗",
+title = tk.Label(header, text="CalculatCar",
                  bg=ACCENT, fg="white",
                  font=("Arial", 20, "bold"))
 title.pack(side="left")
@@ -336,4 +335,3 @@ def update_user():
 load_data()
 show_calc()
 root.mainloop()
-```
