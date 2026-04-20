@@ -58,14 +58,12 @@ def toggle_menu():
         menu_window.destroy()
         return
 
-    # координаты кнопки
     x = root.winfo_x() + 20
     y = root.winfo_y() + 70
 
     menu_window = tk.Toplevel(root)
     menu_window.overrideredirect(True)
     menu_window.configure(bg=PANEL)
-
     menu_window.geometry(f"220x240+{x}+{y}")
 
     def close(e=None):
@@ -126,12 +124,12 @@ def card():
     f.pack(pady=30)
     return f
 
-# ===================== AUTH =====================
-def show_auth():
+# ===================== PROFILE (ИСПРАВЛЕН) =====================
+def show_profile():
     clear()
     c = card()
 
-    tk.Label(c, text="Вход / Регистрация",
+    tk.Label(c, text="Профиль",
              bg=CARD, fg=TEXT,
              font=("Arial", 20, "bold")).pack(pady=10)
 
@@ -177,28 +175,16 @@ def show_auth():
               font=("Arial", 12, "bold"),
               command=register).pack(fill="x")
 
-# ===================== PROFILE =====================
-def show_profile():
-    clear()
-    c = card()
+    if current_user:
+        def logout():
+            global current_user
+            current_user = None
+            update_user()
+            show_profile()
 
-    tk.Label(c, text="Профиль",
-             bg=CARD, fg=TEXT,
-             font=("Arial", 20, "bold")).pack()
-
-    tk.Label(c, text=current_user or "",
-             bg=CARD, fg=SUB,
-             font=("Arial", 14)).pack(pady=10)
-
-    def logout():
-        global current_user
-        current_user = None
-        update_user()
-        show_auth()
-
-    tk.Button(c, text="Выйти",
-              bg=DANGER, fg="white",
-              command=logout).pack(fill="x", pady=10)
+        tk.Button(c, text="Выйти",
+                  bg=DANGER, fg="white",
+                  command=logout).pack(fill="x", pady=10)
 
 # ===================== CALC =====================
 def show_calc():
