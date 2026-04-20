@@ -173,7 +173,6 @@ def show_profile():
 
         tk.Button(c, text="Регистрация", bg=ACCENT2, fg="black",
                   command=register).pack(fill="x")
-
         return
 
     user = data["users"][current_user]
@@ -183,35 +182,78 @@ def show_profile():
              bg=CARD, fg=TEXT,
              font=("Arial", 20, "bold")).pack(pady=10)
 
-    tk.Label(c, text="Имя", bg=CARD, fg=SUB).pack(anchor="w")
-    name = tk.Entry(c, font=("Arial", 14))
-    name.insert(0, user.get("name", ""))
-    name.pack(fill="x", pady=5)
+    # ==== ИМЯ ====
+    row1 = tk.Frame(c, bg=CARD)
+    row1.pack(fill="x", pady=5)
 
-    tk.Label(c, text="Автомобиль", bg=CARD, fg=SUB).pack(anchor="w")
-    car = tk.Entry(c, font=("Arial", 14))
-    car.insert(0, user.get("car", ""))
-    car.pack(fill="x", pady=5)
+    tk.Label(row1, text="Имя", bg=CARD, fg=SUB).pack(anchor="w")
 
-    tk.Label(c, text="Новый пароль", bg=CARD, fg=SUB).pack(anchor="w")
-    p1 = tk.Entry(c, show="*", font=("Arial", 14))
-    p1.pack(fill="x", pady=5)
+    name_entry = tk.Entry(row1, font=("Arial", 14))
+    name_entry.insert(0, user.get("name", ""))
+    name_entry.pack(side="left", fill="x", expand=True, padx=(0,10))
 
-    tk.Label(c, text="Повтор пароля", bg=CARD, fg=SUB).pack(anchor="w")
-    p2 = tk.Entry(c, show="*", font=("Arial", 14))
-    p2.pack(fill="x", pady=5)
-
-    def save():
-        user["name"] = name.get()
-        user["car"] = car.get()
-
-        if p1.get() or p2.get():
-            if p1.get() != p2.get():
-                return messagebox.showerror("Ошибка", "Пароли не совпадают")
-            user["password"] = p1.get()
-
+    def save_name():
+        user["name"] = name_entry.get()
         save_data()
-        messagebox.showinfo("OK", "Сохранено")
+        messagebox.showinfo("OK", "Имя сохранено")
+
+    tk.Button(row1, text="Сохранить",
+              bg=ACCENT, fg="white",
+              command=save_name).pack(side="right")
+
+    # ==== АВТО ====
+    row2 = tk.Frame(c, bg=CARD)
+    row2.pack(fill="x", pady=5)
+
+    tk.Label(row2, text="Автомобиль", bg=CARD, fg=SUB).pack(anchor="w")
+
+    car_entry = tk.Entry(row2, font=("Arial", 14))
+    car_entry.insert(0, user.get("car", ""))
+    car_entry.pack(side="left", fill="x", expand=True, padx=(0,10))
+
+    def save_car():
+        user["car"] = car_entry.get()
+        save_data()
+        messagebox.showinfo("OK", "Авто сохранено")
+
+    tk.Button(row2, text="Сохранить",
+              bg=ACCENT, fg="white",
+              command=save_car).pack(side="right")
+
+    # ==== ПАРОЛЬ ====
+    row3 = tk.Frame(c, bg=CARD)
+    row3.pack(fill="x", pady=5)
+
+    tk.Label(row3, text="Новый пароль", bg=CARD, fg=SUB).pack(anchor="w")
+
+    pass1 = tk.Entry(row3, show="*", font=("Arial", 14))
+    pass1.pack(fill="x", pady=5)
+
+    row4 = tk.Frame(c, bg=CARD)
+    row4.pack(fill="x", pady=5)
+
+    tk.Label(row4, text="Повтор пароля", bg=CARD, fg=SUB).pack(anchor="w")
+
+    pass2 = tk.Entry(row4, show="*", font=("Arial", 14))
+    pass2.pack(side="left", fill="x", expand=True, padx=(0,10))
+
+    def save_password():
+        p1 = pass1.get()
+        p2 = pass2.get()
+
+        if not p1 or not p2:
+            return messagebox.showerror("Ошибка", "Введите пароль")
+
+        if p1 != p2:
+            return messagebox.showerror("Ошибка", "Пароли не совпадают")
+
+        user["password"] = p1
+        save_data()
+        messagebox.showinfo("OK", "Пароль изменён")
+
+    tk.Button(row4, text="Сохранить",
+              bg=ACCENT, fg="white",
+              command=save_password).pack(side="right")
 
     def logout():
         global current_user
@@ -219,13 +261,11 @@ def show_profile():
         update_user()
         show_profile()
 
-    tk.Button(c, text="Сохранить", bg=ACCENT,
-              fg="white", command=save).pack(fill="x", pady=10)
+    tk.Button(c, text="Выйти",
+              bg=DANGER, fg="white",
+              command=logout).pack(fill="x", pady=10)
 
-    tk.Button(c, text="Выйти", bg=DANGER,
-              fg="white", command=logout).pack(fill="x")
-
-# ===================== CALCULATOR (ВОССТАНОВЛЕН) =====================
+# ===================== CALCULATOR =====================
 def show_calc():
     clear()
 
@@ -238,35 +278,31 @@ def show_calc():
     switch = tk.Frame(content, bg=BG)
     switch.pack(pady=10)
 
-    tk.Radiobutton(switch,
-                   text="Расход топлива",
+    tk.Radiobutton(switch, text="Рассчитать стоимость поездки",
                    variable=mode, value="1",
+                   indicatoron=0, width=28,
                    bg=PANEL, fg=TEXT,
-                   selectcolor=ACCENT,
-                   indicatoron=0,
-                   width=25).pack(side="left", padx=5)
+                   selectcolor=ACCENT).pack(side="left", padx=5)
 
-    tk.Radiobutton(switch,
-                   text="Расход на 100 км",
+    tk.Radiobutton(switch, text="Средний расход на 100 км",
                    variable=mode, value="2",
+                   indicatoron=0, width=28,
                    bg=PANEL, fg=TEXT,
-                   selectcolor=ACCENT,
-                   indicatoron=0,
-                   width=25).pack(side="left", padx=5)
+                   selectcolor=ACCENT).pack(side="left", padx=5)
 
-    form = tk.Frame(content, bg=CARD, padx=30, pady=30)
+    form = tk.Frame(content, bg=CARD, padx=40, pady=40)
     form.pack(pady=20)
 
     entries = {}
 
-    def rebuild():
+    def build():
         for w in form.winfo_children():
             w.destroy()
         entries.clear()
 
         def add(t):
             tk.Label(form, text=t, bg=CARD, fg=TEXT).pack(anchor="w")
-            e = tk.Entry(form, font=("Arial", 14))
+            e = tk.Entry(form)
             e.pack(fill="x", pady=5)
             entries[t] = e
 
@@ -275,7 +311,7 @@ def show_calc():
             add("Расстояние (км)")
             add("Цена за литр")
         else:
-            add("Расход (л/100км)")
+            add("Средний расход (л/100км)")
             add("Расстояние (км)")
             add("Цена за литр")
 
@@ -288,7 +324,7 @@ def show_calc():
                 cons = (f / d) * 100
                 cost = f * p
             else:
-                cons = float(entries["Расход (л/100км)"].get())
+                cons = float(entries["Средний расход (л/100км)"].get())
                 d = float(entries["Расстояние (км)"].get())
                 p = float(entries["Цена за литр"].get())
                 cost = cons * d / 100 * p
@@ -317,8 +353,8 @@ def show_calc():
               font=("Arial", 14, "bold"),
               command=calc).pack(pady=10)
 
-    mode.trace("w", lambda *a: rebuild())
-    rebuild()
+    mode.trace("w", lambda *a: build())
+    build()
 
 # ===================== HISTORY =====================
 def show_history():
@@ -339,7 +375,7 @@ def show_history():
 # ===================== OTHER =====================
 def show_settings():
     clear()
-    tk.Label(content, text="Настройки", bg=BG, fg=TEXT).pack()
+    tk.Label(content, text="Настройки", bg=BG, fg=TEXT).pack(pady=40)
 
 def show_about():
     clear()
