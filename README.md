@@ -4,6 +4,9 @@ from datetime import datetime
 import json, os
 import hashlib
 
+import mode
+from fontTools.ttLib.tables.grUtils import entries
+
 # ===================== STYLE =====================
 BG = "#0b1220"
 PANEL = "#111a2e"
@@ -235,7 +238,7 @@ def show_profile():
     car_info = tk.Frame(left_col, bg="#e2e8f0", padx=10, pady=10)
     car_info.pack(pady=10, ipadx=5, ipady=5)
 
-        tk.Label(car_info, text="Марка автомобиля:", font=("Arial", 10, "bold")).grid(
+    tk.Label(car_info, text="Марка автомобиля:", font=("Arial", 10, "bold")).grid(
         row=0, column=0, sticky="w")
     make_var = tk.StringVar(value=user.get("car_make", ""))
     make_dropdown = ttk.Combobox(car_info, textvariable=make_var, values=[
@@ -352,10 +355,10 @@ def show_profile():
     change_pass_btn.pack(fill="x", pady=(0, 5))
 
     def delete_account():
+        global current_user
         if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите удалить аккаунт?"):
             del data["users"][current_user]
             save_data()
-            global current_user
             current_user = None
             update_user()
             show_profile()
