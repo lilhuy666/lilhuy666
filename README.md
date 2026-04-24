@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 from datetime import datetime
 import json, os
 import hashlib
+import secrets
 
 import mode
 from fontTools.ttLib.tables.grUtils import entries
@@ -19,14 +20,23 @@ DANGER = "#ef4444"
 PROFILE_BG = "#f5f7fa"
 
 DATA_FILE = "data.json"
+BACKUP_FILE = "data.json.backup"
 
 # ===================== DATA =====================
 data = {"users": {}}
 current_user = None
 
-def hash_password(password):
-    """Хеширование пароля"""
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(password, salt=None):
+    """Хеширование пароля с солью"""
+    if salt is None:
+        salt = secrets.token_hex(16)
+    hashed = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+    return f"{salt}:{hashed.hex()}"
+
+def verify_password(stored_password, provided_password):
+    """Проверка пароля"""
+    salt, _ = stored_password.split(':')
+    return hash_password(provided_password, salt) == stored_password
 
 def load_data():
     global data
@@ -39,9 +49,22 @@ def load_data():
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось загрузить данные: {e}")
             data = {"users": {}}
+    # Создаём бэкап при загрузке
+    create_backup()
+
+def create_backup():
+    """Создание бэкапа данных"""
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f_in:
+            with open(BACKUP_FILE, "w", encoding="utf-8") as f_out:
+                f_out.write(f_in.read())
+    except:
+        pass
 
 def save_data():
     try:
+        # Создаём бэкап перед сохранением
+        create_backup()
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     except Exception as e:
@@ -156,7 +179,7 @@ def show_profile():
             e = email.get().strip()
             p = password.get().strip()
 
-            if e in data["users"] and data["users"][e]["password"] == hash_password(p):
+            if e in data["users"] and verify_password(data["users"][e]["password"], p):
                 current_user = e
                 update_user()
                 show_profile()
@@ -261,9 +284,25 @@ def show_profile():
     year_entry.grid(row=2, column=1, padx=5, pady=5)
 
     def save_car_info():
-        user["car_make"] = make_var.get()
-        user["car_model"] = model_var.get()
-        user["car_year"] = year_var.get()
+        make = make_var.get()
+        model = model_var.get()
+        year_text = year_var.get()
+
+        if year_text:
+            try:
+                year = int(year_text)
+                if not (1900 <= year <= datetime.now().year):
+                    messagebox.showerror("Ошибка", "Год должен быть от 1900 до текущего года")
+                    return
+            except ValueError:
+                messagebox.showerror("Ошибка", "Год должен быть числом")
+                return
+        else:
+            year = ""
+
+        user["car_make"] = make
+        user["car_model"] = model
+        user["car_year"] = str(year) if year else ""
         save_data()
         messagebox.showinfo("OK", "Данные об автомобиле сохранены")
 
@@ -330,13 +369,23 @@ def show_profile():
         new_pass2.pack(pady=5)
 
         def save_new_password():
-            if hash_password(old_pass.get()) != user["password"]:
+            stored_password = user["password"]
+            if not verify_password(stored_password, old_pass.get()):
                 messagebox.showerror("Ошибка", "Неверный старый пароль")
                 return
-            if new_pass1.get() != new_pass2.get():
+
+            new_pass_1 = new_pass1.get()
+            new_pass_2 = new_pass2.get()
+
+            if not new_pass_1 or not new_pass_2:
+                messagebox.showerror("Ошибка", "Поля с новым паролем не могут быть пустыми")
+                return
+
+            if new_pass_1 != new_pass_2:
                 messagebox.showerror("Ошибка", "Пароли не совпадают")
                 return
-            user["password"] = hash_password(new_pass1.get())
+
+            user["password"] = hash_password(new_pass_1)
             save_data()
             messagebox.showinfo("OK", "Пароль изменён")
             change_pass_window.destroy()
@@ -391,7 +440,7 @@ def show_profile():
         onvalue=True,
         offvalue=False,
         bg=PROFILE_BG,
-                fg=TEXT,
+        fg=TEXT,
         command=toggle_notifications
     )
     notifications_check.pack()
@@ -408,11 +457,21 @@ def show_profile():
     )
     logout_btn.pack(fill="x", pady=20)
 
+
 def logout():
     global current_user
     current_user = None
     update_user()
     show_profile()
+
+
+def update_user():
+    """Обновление информации о пользователе в заголовке"""
+    if current_user:
+        user_label.config(text=f"Пользователь: {current_user}")
+    else:
+        user_label.config(text="")
+
 
 # ===================== CALCULATOR =====================
 def show_calc():
@@ -467,9 +526,13 @@ def show_calc():
     def calc():
         try:
             if mode.get() == "1":
-                f = float(entries["Топливо (л)"].get())
-                d = float(entries["Расстояние (км)"].get())
-                p = float(entries["Цена за литр"].get())
+                try:
+                    f = float(entries["Топливо (л)"].get())
+                    d = float(entries["Расстояние (км)"].get())
+                    p = float(entries["Цена за литр"].get())
+                except ValueError:
+                    messagebox.showerror("Ошибка", "Все поля должны содержать числа")
+                    return
 
                 if d <= 0 or p <= 0 or f <= 0:
                     messagebox.showerror("Ошибка", "Все значения должны быть положительными")
@@ -478,9 +541,13 @@ def show_calc():
                 cons = (f / d) * 100
                 cost = f * p
             else:
-                cons = float(entries["Средний расход (л/100км)"].get())
-                d = float(entries["Расстояние (км)"].get())
-                p = float(entries["Цена за литр"].get())
+                try:
+                    cons = float(entries["Средний расход (л/100км)"].get())
+                    d = float(entries["Расстояние (км)"].get())
+                    p = float(entries["Цена за литр"].get())
+                except ValueError:
+                    messagebox.showerror("Ошибка", "Все поля должны содержать числа")
+                    return
 
                 if d <= 0 or p <= 0 or cons <= 0:
                     messagebox.showerror("Ошибка", "Все значения должны быть положительными")
@@ -496,14 +563,12 @@ def show_calc():
                     "distance": d,
                     "fuel": f if mode.get() == "1" else None,
                     "price_per_liter": p,
-            "consumption": cons,
-            "total_cost": cost
+                    "consumption": cons,
+                    "total_cost": cost
                 })
                 data["users"][current_user]["history"] = data["users"][current_user]["history"][-50:]
                 save_data()
 
-        except ValueError:
-            messagebox.showerror("Ошибка", "Проверь ввод — все поля должны содержать числа")
         except Exception as e:
             messagebox.showerror("Ошибка", f"Произошла ошибка: {e}")
 
@@ -520,163 +585,152 @@ def show_calc():
     mode.trace("w", lambda *a: build())
     build()
 
+
 # ===================== HISTORY =====================
 def show_history():
     clear()
 
+    tk.Label(content, text="История расчётов",
+             bg=BG, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
+
     if not current_user:
-        tk.Label(content, text="Авторизуйтесь для просмотра истории", bg=BG, fg=TEXT).pack(pady=20)
+        tk.Label(content, text="Войдите в аккаунт для просмотра истории",
+                 bg=BG, fg=SUB,
+                 font=("Arial", 14)).pack(pady=20)
         return
 
-    # Заголовок
-    tk.Label(content, text="История расчётов", bg=BG, fg=TEXT, font=("Arial", 20, "bold")).pack(pady=10)
-    tk.Label(content, text="Ваши последние расчёты", bg=BG, fg=SUB).pack(pady=5)
+    user_history = data["users"][current_user]["history"]
 
-    # Кнопки «Фильтры» и «Очистить историю»
-    btn_frame = tk.Frame(content, bg=BG)
-    btn_frame.pack(fill="x", pady=10)
+    if not user_history:
+        tk.Label(content, text="История пуста",
+                 bg=BG, fg=SUB,
+                 font=("Arial", 14)).pack(pady=20)
+        return
 
-    tk.Button(btn_frame, text="Фильтры", bg=ACCENT, fg="white", padx=10).pack(side="right", padx=5)
-    tk.Button(btn_frame, text="Очистить историю", bg=DANGER, fg="white", padx=10,
-              command=lambda: clear_history()).pack(side="right", padx=5)
-
-    # Таблица истории
     history_frame = tk.Frame(content, bg=CARD)
     history_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-    # Шапка таблицы
-    header = tk.Frame(history_frame, bg=CARD, height=30)
-    header.pack(fill="x")
+    # Заголовки таблицы
+    headers = ["Дата", "Расстояние (км)", "Расход (л/100км)", "Стоимость (₽)", "Действия"]
+    for col, header in enumerate(headers):
+        tk.Label(history_frame, text=header, bg=PANEL, fg=TEXT,
+                 font=("Arial", 10, "bold"), padx=5, pady=5).grid(row=0, column=col, sticky="ew")
 
-    tk.Label(header, text="Дата и время", bg=CARD, fg=TEXT, width=15).pack(side="left")
-    tk.Label(header, text="Параметры расчёта", bg=CARD, fg=TEXT, width=20).pack(side="left")
-    tk.Label(header, text="Результат", bg=CARD, fg=TEXT, width=15).pack(side="left")
-    tk.Label(header, text="Действия", bg=CARD, fg=TEXT, width=10).pack(side="left")
+    # Данные истории
+    for row, item in enumerate(user_history, start=1):
+        tk.Label(history_frame, text=item["date"], bg=CARD, fg=TEXT).grid(row=row, column=0, padx=5, pady=2, sticky="w")
+        tk.Label(history_frame, text=str(item["distance"]), bg=CARD, fg=TEXT).grid(row=row, column=1, padx=5, pady=2)
+        tk.Label(history_frame, text=f"{item['consumption']:.1f}", bg=CARD, fg=TEXT).grid(row=row, column=2, padx=5,
+                                                                                          pady=2)
+        tk.Label(history_frame, text=f"{item['total_cost']:.2f}", bg=CARD, fg=TEXT).grid(row=row, column=3, padx=5,
+                                                                                         pady=2)
 
-    # Строки истории
-    for index, item in enumerate(reversed(data["users"][current_user]["history"])):
-        row = tk.Frame(history_frame, bg=CARD, height=50)
-        row.pack(fill="x", pady=2)
+        # Кнопка для повторного использования данных
+        def create_use_callback(item_data):
+            def callback():
+                open_calculation(item_data)
 
-        # Дата и время
-        tk.Label(row, text=f"{item['date']}", bg=CARD, fg=TEXT, width=15).pack(side="left", padx=5)
+            return callback
 
-        # Параметры расчёта
-        params = tk.Frame(row, bg=CARD)
-        params.pack(side="left", padx=10)
+        use_btn = tk.Button(history_frame, text="↻", bg=ACCENT, fg="white",
+                            command=create_use_callback(item), width=3)
+        use_btn.grid(row=row, column=4, padx=5, pady=2)
 
-        if item['fuel'] is not None:
-            tk.Label(params, text=f"Топливо: {item['fuel']} л", bg=CARD, fg=TEXT).pack(anchor="w")
-        tk.Label(params, text=f"Расстояние: {item['distance']} км", bg=CARD, fg=TEXT).pack(anchor="w")
-        tk.Label(params, text=f"Цена: {item['price_per_liter']} ₽/л", bg=CARD, fg=TEXT).pack(anchor="w")
+        # Кнопка удаления записи
+        def create_delete_callback(row_idx):
+            def callback():
+                del user_history[row_idx - 1]
+                save_data()
+                show_history()
 
-                # Результат
-        result_frame = tk.Frame(row, bg=ACCENT, padx=8, pady=4)
-        result_frame.pack(side="left", padx=10)
-        tk.Label(result_frame, text=f"{item['consumption']:.1f} л/100км",
-                  bg=ACCENT, fg="white", font=("Arial", 9, "bold")).pack()
-        tk.Label(result_frame, text=f"{item['total_cost']:.2f} ₽",
-                  bg=ACCENT, fg="white", font=("Arial", 9, "bold")).pack()
+            return callback
 
-        # Действия
-        actions = tk.Frame(row, bg=CARD)
-        actions.pack(side="left")
+        delete_btn = tk.Button(history_frame, text="×", bg=DANGER, fg="white",
+                               command=create_delete_callback(row), width=3)
+        delete_btn.grid(row=row, column=5, padx=5, pady=2)
 
-        def open_calculation(item_data):
-            show_calc()
-            # Заполняем поля калькулятора данными из истории
-            if item_data['fuel'] is not None:
-                mode.set("1")
-                entries["Топливо (л)"].delete(0, tk.END)
-                entries["Топливо (л)"].insert(0, str(item_data['fuel']))
-            else:
-                mode.set("2")
-                entries["Средний расход (л/100км)"].delete(0, tk.END)
-                entries["Средний расход (л/100км)"].insert(0, str(item_data['consumption']))
+    # Настройка растяжения колонок
+    for col in range(len(headers)):
+        history_frame.grid_columnconfigure(col, weight=1)
 
-            entries["Расстояние (км)"].delete(0, tk.END)
-            entries["Расстояние (км)"].insert(0, str(item_data['distance']))
-            entries["Цена за литр"].delete(0, tk.END)
-            entries["Цена за литр"].insert(0, str(item_data['price_per_liter']))
 
-        tk.Button(actions, text="↻", bg=ACCENT2, fg="black",
-                 command=lambda: open_calculation(item)).pack(side="left", padx=2)
+def open_calculation(item_data):
+    """Открытие калькулятора с заполнением полей из истории"""
+    show_calc()
+    if item_data['fuel'] is not None:
+        mode.set("1")
+        entries["Топливо (л)"].delete(0, tk.END)
+        entries["Топливо (л)"].insert(0, str(item_data['fuel']))
+        entries["Средний расход (л/100км)"].delete(0, tk.END)
+    else:
+        mode.set("2")
+        entries["Средний расход (л/100км)"].delete(0, tk.END)
+        entries["Средний расход (л/100км)"].insert(0, str(item_data['consumption']))
+        entries["Топливо (л)"].delete(0, tk.END)
 
-        def delete_history_item(index):
-            del data["users"][current_user]["history"][index]
-            save_data()
-            show_history()
+    entries["Расстояние (км)"].delete(0, tk.END)
+    entries["Расстояние (км)"].insert(0, str(item_data['distance']))
+    entries["Цена за литр"].delete(0, tk.END)
+    entries["Цена за литр"].insert(0, str(item_data['price_per_liter']))
 
-        tk.Button(actions, text="❌", bg=DANGER, fg="white",
-                 command=lambda idx=index: delete_history_item(idx)).pack(side="left", padx=2)
-
-def clear_history():
-    if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите очистить всю историю?"):
-        data["users"][current_user]["history"] = []
-        save_data()
-        show_history()
 
 # ===================== SETTINGS =====================
 def show_settings():
     clear()
-    tk.Label(content, text="Настройки", bg=BG, fg=TEXT,
-             font=("Arial", 20, "bold")).pack(pady=20)
+    tk.Label(content, text="Настройки",
+             bg=BG, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
 
     settings_frame = tk.Frame(content, bg=CARD, padx=40, pady=40)
     settings_frame.pack(pady=20)
 
-    # Тема
-    tk.Label(settings_frame, text="Тема:", bg=CARD, fg=TEXT,
-             font=("Arial", 12, "bold")).pack(anchor="w", pady=(0, 10))
-    theme_var = tk.StringVar(value="Тёмная")
-    tk.OptionMenu(settings_frame, theme_var, "Тёмная", "Светлая").pack(anchor="w")
+    # Опция резервного копирования
+    backup_btn = tk.Button(settings_frame,
+                           text="Создать бэкап данных",
+                           bg=ACCENT2, fg="black",
+                           command=create_backup,
+                           font=("Arial", 12))
+    backup_btn.pack(pady=10, fill="x")
 
-    # Язык
-    tk.Label(settings_frame, text="Язык:", bg=CARD, fg=TEXT,
-             font=("Arial", 12, "bold")).pack(anchor="w", pady=(20, 10))
-    lang_var = tk.StringVar(value="Русский")
-    tk.OptionMenu(settings_frame, lang_var, "Русский", "English").pack(anchor="w")
+    # Информация о версии
+    version_label = tk.Label(settings_frame,
+                             text="CalculatCar v1.0\n© 2024",
+                             bg=CARD, fg=SUB,
+                             font=("Arial", 10))
+    version_label.pack(pady=20)
 
-    def save_settings():
-        messagebox.showinfo("OK", "Настройки сохранены")
-
-    tk.Button(settings_frame, text="Сохранить настройки", bg=ACCENT, fg="white",
-              command=save_settings).pack(pady=30)
 
 # ===================== ABOUT =====================
 def show_about():
     clear()
-    about_frame = tk.Frame(content, bg=CARD, padx=40, pady=40)
-    about_frame.pack(pady=30)
+    tk.Label(content, text="О программе",
+             bg=BG, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
 
-    tk.Label(about_frame, text="CalculatCar", bg=CARD, fg=ACCENT,
-             font=("Arial", 24, "bold")).pack(pady=(0, 20))
-    tk.Label(about_frame, text="Калькулятор расхода топлива", bg=CARD, fg=TEXT,
-             font=("Arial", 14)).pack(pady=(0, 30))
+    about_text = """CalculatCar — приложение для расчёта расхода топлива и стоимости поездок.
 
-    info_text = """
-Версия: 1.0
-Разработчик: CalculatCar Team
-Год: 2024
+    Основные функции:
+    • Расчёт расхода топлива на 100 км
+    • Расчёт стоимости поездки
+    • История расчётов
+    • Личный профиль пользователя
+    • Сохранение данных между сеансами
 
-Программа для расчёта расхода топлива и стоимости поездок.
-Сохраняет историю расчётов и позволяет управлять профилем пользователя.
 
-© Все права защищены.
-    """
-    tk.Label(about_frame, text=info_text, bg=CARD, fg=SUB,
-             justify="left", font=("Arial", 11)).pack()
+    Версия: 1.0
+    Разработчик: [Ваше имя]"""
 
-# ===================== UPDATE USER =====================
-def update_user():
-    if current_user:
-        user_label.config(text=f"Пользователь: {current_user}")
-    else:
-        user_label.config(text="")
+    text_widget = tk.Text(content, wrap="word", bg=CARD, fg=TEXT, font=("Arial", 11), height=15)
+    text_widget.pack(padx=20, pady=10, fill="both", expand=True)
+    text_widget.insert("1.0", about_text)
+    text_widget.config(state="disabled")
 
-# ===================== START =====================
+
+# Инициализация приложения
 load_data()
 update_user()
 show_calc()  # По умолчанию показываем калькулятор
 
+# Запуск главного цикла
 root.mainloop()
