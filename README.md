@@ -217,7 +217,7 @@ def show_profile():
         messagebox.showinfo("OK", "Авто сохранено")
 
     tk.Button(row2, text="Сохранить",
-              bg=ACCENT, fg="white",
+                            bg=ACCENT, fg="white",
               command=save_car).pack(side="right")
 
     # ==== ПАРОЛЬ ====
@@ -329,19 +329,24 @@ def show_calc():
                 p = float(entries["Цена за литр"].get())
                 cost = cons * d / 100 * p
 
-            result.config(text=f"{cons:.1f} л/100км | {cost:.2f} €")
+            result.config(text=f"{cons:.1f} л/100км | {cost:.2f} ₽")
 
             if current_user:
-                h = data["users"][current_user]["history"]
-                h.append({
-                    "date": datetime.now().strftime("%d.%m %H:%M"),
-                    "result": result.cget("text")
+                data["users"][current_user]["history"].append({
+                    "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                    "distance": d,
+                    "fuel": f if mode.get() == "1" else None,
+                    "price_per_liter": p,
+                    "consumption": cons,
+            "total_cost": cost
                 })
-                data["users"][current_user]["history"] = h[-50:]
+                data["users"][current_user]["history"] = data["users"][current_user]["history"][-50:]
                 save_data()
 
-        except:
-            messagebox.showerror("Ошибка", "Проверь ввод")
+        except ValueError:
+            messagebox.showerror("Ошибка", "Проверь ввод — все поля должны содержать числа")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла ошибка: {e}")
 
     result = tk.Label(content, text="—",
                       bg=BG, fg=ACCENT,
@@ -360,17 +365,90 @@ def show_calc():
 def show_history():
     clear()
 
-    tk.Label(content, text="История",
-             bg=BG, fg=TEXT,
-             font=("Arial", 20, "bold")).pack(pady=10)
-
     if not current_user:
+        tk.Label(content, text="Авторизуйтесь для просмотра истории", bg=BG, fg=TEXT).pack(pady=20)
         return
 
-    for h in data["users"][current_user]["history"][::-1]:
-        tk.Label(content,
-                 text=f"{h['date']} | {h['result']}",
-                 bg=CARD, fg=TEXT).pack(fill="x", padx=40, pady=5)
+    # Заголовок
+    tk.Label(content, text="История расчётов", bg=BG, fg=TEXT, font=("Arial", 20, "bold")).pack(pady=10)
+    tk.Label(content, text="Ваши последние расчёты", bg=BG, fg=SUB).pack(pady=5)
+
+    # Кнопки «Фильтры» и «Очистить историю»
+    btn_frame = tk.Frame(content, bg=BG)
+    btn_frame.pack(fill="x", pady=10)
+
+    tk.Button(btn_frame, text="Фильтры", bg=ACCENT, fg="white", padx=10).pack(side="right", padx=5)
+    tk.Button(btn_frame, text="Очистить историю", bg=DANGER, fg="white", padx=10,
+              command=lambda: clear_history()).pack(side="right", padx=5)
+
+    # Таблица истории
+    history_frame = tk.Frame(content, bg=CARD)
+    history_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+    # Шапка таблицы
+    header = tk.Frame(history_frame, bg=CARD, height=30)
+    header.pack(fill="x")
+
+    tk.Label(header, text="Дата и время", bg=CARD, fg=TEXT, width=15).pack(side="left")
+    tk.Label(header, text="Параметры расчёта", bg=CARD, fg=TEXT, width=20).pack(side="left")
+    tk.Label(header, text="Результат", bg=CARD, fg=TEXT, width=15).pack(side="left")
+    tk.Label(header, text="Действия", bg=CARD, fg=TEXT, width=10).pack(side="left")
+
+    # Строки истории
+    for item in reversed(data["users"][current_user]["history"]):
+        row = tk.Frame(history_frame, bg=CARD, height=50)
+        row.pack(fill="x", pady=2)
+                # Дата и время
+        tk.Label(row, text=f"{item['date']}", bg=CARD, fg=TEXT, width=15).pack(side="left", padx=5)
+
+        # Параметры расчёта
+        params = tk.Frame(row, bg=CARD)
+        params.pack(side="left", padx=10)
+
+        if item['fuel'] is not None:
+            tk.Label(params, text=f"Топливо: {item['fuel']} л", bg=CARD, fg=TEXT).pack(anchor="w")
+        tk.Label(params, text=f"Расстояние: {item['distance']} км", bg=CARD, fg=TEXT).pack(anchor="w")
+        tk.Label(params, text=f"Цена: {item['price_per_liter']} ₽/л", bg=CARD, fg=TEXT).pack(anchor="w")
+
+        # Результат
+        result_frame = tk.Frame(row, bg=ACCENT, padx=8, pady=4)
+        result_frame.pack(side="left", padx=10)
+        tk.Label(result_frame, text=f"{item['consumption']:.1f} л/100 км",
+                  bg=ACCENT, fg="white", font=("Arial", 9, "bold")).pack()
+        tk.Label(result_frame, text=f"{item['total_cost']:.2f} ₽",
+                  bg=ACCENT, fg="white", font=("Arial", 11, "bold")).pack()
+
+        # Действия
+        actions = tk.Frame(row, bg=CARD)
+        actions.pack(side="left")
+
+        def open_calculation(item_data):
+            # Открывает калькулятор с предзаполненными данными
+            show_calc()
+            # Здесь можно добавить логику для предзаполнения полей калькулятора
+            messagebox.showinfo("Детали расчёта",
+                               f"Дата: {item_data['date']}\n"
+                               f"Расход: {item_data['consumption']:.1f} л/100 км\n"
+                               f"Стоимость: {item_data['total_cost']:.2f} ₽")
+
+        def delete_calculation(index):
+            data["users"][current_user]["history"].pop(index)
+            save_data()
+            show_history()  # Обновляем отображение истории
+
+        # Находим индекс текущего элемента в истории
+        index = data["users"][current_user]["history"].index(item)
+
+        tk.Button(actions, text="Открыть", bg=PANEL, fg="white", width=6,
+                  command=lambda idx=index: open_calculation(data["users"][current_user]["history"][idx])).pack(side="left", padx=2)
+        tk.Button(actions, text="❌", bg=DANGER, fg="white", width=2,
+                  command=lambda idx=index: delete_calculation(idx)).pack(side="left")
+
+def clear_history():
+    if current_user and messagebox.askyesno("Подтверждение", "Очистить всю историю расчётов?"):
+        data["users"][current_user]["history"] = []
+        save_data()
+        show_history()
 
 # ===================== OTHER =====================
 def show_settings():
