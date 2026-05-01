@@ -900,3 +900,193 @@ show_calc()
 
     # Запускаем главный цикл
 root.mainloop()
+
+
+
+
+
+def show_profile():
+    clear()
+
+    if not current_user:
+        return show_auth()
+
+    user = data["users"][current_user]
+
+    profile_frame = tk.Frame(content, bg=PROFILE_BG, padx=20, pady=20)
+    profile_frame.pack(fill="both", expand=True)
+
+    create_header(profile_frame)
+    create_profile_body(profile_frame, user)
+
+
+# -------------------------
+# 🔐 Авторизация
+# -------------------------
+def show_auth():
+    c = card()
+
+    tk.Label(c, text="Вход / Регистрация",
+             bg=CARD, fg=TEXT,
+             font=("Arial", 20, "bold")).pack(pady=10)
+
+    email = tk.Entry(c, font=("Arial", 14))
+    password = tk.Entry(c, show="*", font=("Arial", 14))
+
+    email.pack(fill="x", pady=8)
+    password.pack(fill="x", pady=8)
+
+    def login():
+        global current_user
+        e, p = email.get().strip(), password.get().strip()
+
+        if e in data["users"] and verify_password(data["users"][e]["password"], p):
+            current_user = e
+            update_user()
+            show_profile()
+        else:
+            messagebox.showerror("Ошибка", "Неверные данные")
+
+    def register():
+        e, p = email.get().strip(), password.get().strip()
+
+        if not e or not p:
+            return messagebox.showerror("Ошибка", "Заполни поля")
+
+        if e in data["users"]:
+            return messagebox.showerror("Ошибка", "Уже существует")
+
+        data["users"][e] = {
+            "password": hash_password(p),
+            "name": "",
+            "surname": "",
+            "phone": "",
+            "car_make": "",
+            "car_model": "",
+            "car_year": "",
+            "notifications": True,
+            "history": []
+        }
+
+        save_data()
+        messagebox.showinfo("OK", "Аккаунт создан")
+
+    tk.Button(c, text="Войти", bg=ACCENT, fg="white", command=login).pack(fill="x", pady=10)
+    tk.Button(c, text="Регистрация", bg=ACCENT2, fg="black", command=register).pack(fill="x")
+
+
+# -------------------------
+# 🧱 Header
+# -------------------------
+def create_header(parent):
+    header = tk.Frame(parent, bg=PANEL, height=60)
+    header.pack(fill="x", pady=(0, 20))
+    header.pack_propagate(False)
+
+    tk.Label(header, text="Профиль пользователя",
+             bg=PANEL, fg=ACCENT,
+             font=("Arial", 16, "bold")).pack(pady=10)
+
+
+# -------------------------
+# 🧩 Основное тело профиля
+# -------------------------
+def create_profile_body(parent, user):
+    grid = tk.Frame(parent, bg=PROFILE_BG)
+    grid.pack(fill="both", expand=True)
+
+    left = create_left_column(grid, user)
+    center = create_center_column(grid, user)
+    right = create_right_column(grid, user)
+
+    left.grid(row=0, column=0, padx=(0, 20), sticky="n")
+    center.grid(row=0, column=1, padx=20, sticky="nsew")
+    right.grid(row=0, column=2, padx=(20, 0), sticky="n")
+
+    grid.columnconfigure(1, weight=1)
+
+
+# -------------------------
+# 👤 Левая колонка
+# -------------------------
+def create_left_column(parent, user):
+    frame = tk.Frame(parent, bg=CARD, padx=20, pady=20)
+
+    # Аватар
+    canvas = tk.Canvas(frame, width=100, height=100, bg=AVATAR_BG, highlightthickness=0)
+    canvas.create_oval(5, 5, 95, 95, fill="#4f8cff", outline="")
+    canvas.pack(pady=10)
+
+    # Имя
+    name = f"{user.get('name', 'Имя')} {user.get('surname', 'Фамилия')}"
+    tk.Label(frame, text=name, font=("Arial", 14, "bold"), bg=CARD, fg=TEXT).pack()
+
+    tk.Label(frame, text=current_user, fg=SUB, bg=CARD).pack()
+
+    return frame
+
+
+# -------------------------
+# 📝 Центральная колонка
+# -------------------------
+def create_center_column(parent, user):
+    frame = tk.LabelFrame(parent, text="Личная информация", bg=CARD, fg=TEXT, padx=15, pady=15)
+
+    entries = {}
+
+    fields = [
+        ("Имя", "name"),
+        ("Фамилия", "surname"),
+        ("Телефон", "phone")
+    ]
+
+    for i, (label, key) in enumerate(fields):
+        tk.Label(frame, text=label, bg=CARD, fg=SUB).grid(row=i, column=0, sticky="w")
+
+        entry = tk.Entry(frame)
+        entry.insert(0, user.get(key, ""))
+        entry.grid(row=i, column=1, pady=5)
+
+        entries[key] = entry
+
+    def save():
+        user["name"] = entries["name"].get()
+        user["surname"] = entries["surname"].get()
+        user["phone"] = entries["phone"].get()
+
+        save_data()
+        messagebox.showinfo("OK", "Сохранено")
+
+    tk.Button(frame, text="Сохранить", bg=ACCENT, fg="white", command=save)\
+        .grid(row=len(fields), columnspan=2, pady=10)
+
+    return frame
+
+
+# -------------------------
+# ⚙️ Правая колонка
+# -------------------------
+def create_right_column(parent, user):
+    frame = tk.Frame(parent, bg=CARD, padx=15, pady=15)
+
+    # Уведомления
+    var = tk.BooleanVar(value=user.get("notifications", True))
+
+    tk.Checkbutton(frame, text="Уведомления", variable=var, bg=CARD, fg=TEXT).pack(anchor="w")
+
+    def save_notify():
+        user["notifications"] = var.get()
+        save_data()
+
+    tk.Button(frame, text="Применить", command=save_notify).pack(pady=5)
+
+    # Выход
+    def logout():
+        global current_user
+        current_user = None
+        update_user()
+        show_profile()
+
+    tk.Button(frame, text="Выйти", bg=DANGER, fg="white", command=logout).pack(fill="x", pady=10)
+
+    return frame
