@@ -1,4 +1,119 @@
-# ===================== PROFILE =====================
+   # ===================== PROFILE =====================
+def update_user():
+        """Обновляет отображение статуса пользователя в интерфейсе"""
+        if current_user:
+            user_label.config(text=f"Пользователь: {current_user}")
+        else:
+            user_label.config(text="Гость")
+
+
+def show_auth():
+    clear()
+
+    frame = tk.Frame(content, bg=AUTH_BG, padx=30, pady=30)
+    frame.pack(fill="both", expand=True)
+
+    # Заголовок
+    tk.Label(
+        frame,
+        text="Авторизация",
+        bg=AUTH_BG,
+        fg=ACCENT,
+        font=("Arial", 18, "bold")
+    ).pack(pady=(0, 20))
+
+    # Поле для логина
+    tk.Label(frame, text="Логин:", bg=AUTH_BG, fg=TEXT).pack(anchor="w")
+    login_entry = tk.Entry(frame, font=("Arial", 12), width=25)
+    login_entry.pack(pady=(0, 15), fill="x")
+
+    # Поле для пароля
+    tk.Label(frame, text="Пароль:", bg=AUTH_BG, fg=TEXT).pack(anchor="w")
+    password_entry = tk.Entry(frame, show="*", font=("Arial", 12), width=25)
+    password_entry.pack(pady=(0, 20), fill="x")
+
+    # Кнопка входа
+    def login():
+        login = login_entry.get().strip()
+        password = password_entry.get()
+
+        if not login or not password:
+            messagebox.showerror("Ошибка", "Заполните все поля")
+            return
+
+        user_data = data["users"].get(login)
+        if user_data and verify_password(user_data["password"], password):
+            global current_user
+            current_user = login
+            update_user()
+            show_profile()
+        else:
+            messagebox.showerror("Ошибка", "Неверный логин или пароль")
+
+    tk.Button(
+        frame,
+        text="Войти",
+        command=login,
+        bg=ACCENT,
+        fg="white",
+        font=("Arial", 12, "bold"),
+        height=2
+    ).pack(fill="x", pady=(0, 10))
+
+    # Кнопка регистрации
+    def register():
+        login = login_entry.get().strip()
+        password = password_entry.get()
+
+        if not login or not password:
+            messagebox.showerror("Ошибка", "Заполните все поля")
+            return
+
+        if len(password) < 6:
+            messagebox.showerror("Ошибка", "Пароль должен быть не менее 6 символов")
+            return
+
+        if login in data["users"]:
+            messagebox.showerror("Ошибка", "Пользователь с таким логином уже существует")
+            return
+
+        # Создание нового пользователя
+        data["users"][login] = {
+            "name": login,
+            "password": hash_password(password),
+            "registration_date": datetime.now().strftime("%d.%m.%Y"),
+            "notifications": True,
+            "history": [],
+            "cars": []
+        }
+        save_data()
+
+        global current_user
+        current_user = login
+        update_user()
+        show_profile()
+
+    tk.Button(
+        frame,
+        text="Зарегистрироваться",
+        command=register,
+        bg=ACCENT2,
+        fg="white",
+        font=("Arial", 11),
+        height=1
+    ).pack(fill="x")
+
+    # Подвал с информацией
+    tk.Label(
+        frame,
+        text="Используйте существующие учётные данные\nили создайте новую",
+        bg=AUTH_BG,
+        fg=SUB,
+        font=("Arial", 9),
+        justify="center"
+    ).pack(pady=(20, 0))
+
+
 
 def show_profile():
     if not current_user:
@@ -18,6 +133,10 @@ def show_profile():
 
 
 # ===================== HEADER =====================
+
+def show_main_menu():
+    pass
+
 
 def create_header(parent):
     header = tk.Frame(parent, bg=PANEL, height=60)
@@ -305,3 +424,42 @@ def create_right_column(parent, user):
     tk.Button(frame, text="Удалить аккаунт", command=delete_account, bg="#992222", fg="white").pack(fill="x")
 
     return frame
+
+
+
+
+
+
+
+    Exception in Tkinter callback
+Traceback (most recent call last):
+  File "C:\Users\Кирилл\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
+    return self.func(*args)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 126, in <lambda>
+    command=lambda: [cmd(), close()]
+                     ^^^^^
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 774, in show_history
+    f"{record['consumption']:.2f} л/100км",
+       ~~~~~~^^^^^^^^^^^^^^^
+KeyError: 'consumption'
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "C:\Users\Кирилл\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
+    return self.func(*args)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 126, in <lambda>
+    command=lambda: [cmd(), close()]
+                     ^^^^^
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 294, in show_profile
+    create_profile_body(frame, user)
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 333, in create_profile_body
+    right = create_right_column(grid, user)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 459, in create_right_column
+    refresh_history()
+  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 456, in refresh_history
+    if filter_text.lower() in item.lower():
+                              ^^^^^^^^^^
+AttributeError: 'dict' object has no attribute 'lower'
+
