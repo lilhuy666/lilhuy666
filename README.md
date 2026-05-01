@@ -1,1068 +1,419 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-from datetime import datetime
-import json, os
-import hashlib
-import secrets
-
-# ===================== STYLE =====================
-BG = "#0b1220"
-PANEL = "#111a2e"
-CARD = "#162238"
-ACCENT = "#4f8cff"
-ACCENT2 = "#22c55e"
-TEXT = "#e5e7eb"
-SUB = "#94a3b8"
-DANGER = "#ef4444"
-PROFILE_BG = "#162238"  # единый фон с основной темой
-AVATAR_BG = "#253145"
-
-
-DATA_FILE = "data.json"
-BACKUP_FILE = "data.json.backup"
-
-# ===================== DATA =====================
-data = {"users": {}}
-current_user = None
-
-def hash_password(password, salt=None):
-    """Хеширование пароля с солью"""
-    if salt is None:
-        salt = secrets.token_hex(16)
-    hashed = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
-    return f"{salt}:{hashed.hex()}"
-
-def verify_password(stored_password, provided_password):
-    """Проверка пароля"""
-    salt, _ = stored_password.split(':')
-    return hash_password(provided_password, salt) == stored_password
-
-
-def load_data():
-    global data
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if "users" not in data:
-                data = {"users": {}}
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось загрузить данные: {e}")
-            data = {"users": {}}
-    # Создаём бэкап при загрузке
-    create_backup()
-
-def create_backup():
-    """Создание бэкапа данных"""
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f_in:
-            with open(BACKUP_FILE, "w", encoding="utf-8") as f_out:
-                f_out.write(f_in.read())
-    except:
-        pass
-
-def save_data():
-    try:
-        # Создаём бэкап перед сохранением
-        create_backup()
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        messagebox.showerror("Ошибка", f"Не удалось сохранить данные: {e}")
-
-
-# ===================== WINDOW =====================
-root = tk.Tk()
-root.title("CalculatCar")
-root.geometry("1200x750")
-root.configure(bg=BG)
-
-main = tk.Frame(root, bg=BG)
-main.pack(fill="both", expand=True)
-
-# ===================== HEADER =====================
-header = tk.Frame(main, bg=ACCENT, height=70)
-header.pack(fill="x")
-header.pack_propagate(False)
-
-menu_window = None
-
-def toggle_menu():
-    global menu_window
-
-    if menu_window and menu_window.winfo_exists():
-        menu_window.destroy()
-        return
-
-    x = root.winfo_x() + 20
-    y = root.winfo_y() + 70
-
-    menu_window = tk.Toplevel(root)
-    menu_window.overrideredirect(True)
-    menu_window.configure(bg=PANEL)
-    menu_window.geometry(f"220x240+{x}+{y}")
-
-    def close(e=None):
-        if menu_window:
-            menu_window.destroy()
-
-    menu_window.bind("<FocusOut>", close)
-    menu_window.bind("<Escape>", close)  # Закрытие по Esc
-
-    def nav(text, cmd):
-        tk.Button(menu_window,
-                  text=text,
-                  bg=PANEL,
-                  fg=TEXT,
-                  bd=0,
-                  anchor="w",
-                  padx=15,
-                  pady=10,
-                  font=("Arial", 11),
-                  activebackground=CARD,
-                  activeforeground=ACCENT,
-                  command=lambda: [cmd(), close()]
-                  ).pack(fill="x")
-
-    nav("Калькулятор", show_calc)
-    nav("Профиль", show_profile)
-    nav("История", show_history)
-    nav("Настройки", show_settings)
-    nav("О программе", show_about)
-
-    menu_window.focus_force()
-
-tk.Button(header, text="☰", bg=ACCENT, fg="white",
-          font=("Arial", 16, "bold"), bd=0,
-          command=toggle_menu).pack(side="left", padx=15)
-
-tk.Label(header, text="CalculatCar",
-         bg=ACCENT, fg="white",
-         font=("Arial", 20, "bold")).pack(side="left")
-
-user_label = tk.Label(header, text="",
-                      bg=ACCENT, fg="white",
-                      font=("Arial", 11))
-user_label.pack(side="right", padx=15)
-
-# ===================== CONTENT =====================
-content = tk.Frame(main, bg=BG)
-content.pack(fill="both", expand=True)
-
-def clear():
-    for w in content.winfo_children():
-        w.destroy()
-
-def card():
-    f = tk.Frame(content, bg=CARD, padx=40, pady=40)
-    f.pack(pady=30)
-    return f
-
-# ===================== PROFILE =====================
+   # ===================== PROFILE =====================
 def update_user():
-    """Обновляет отображение статуса пользователя в интерфейсе"""
-    if current_user:
-        user_label.config(text=f"Пользователь: {current_user}")
-    else:
-        user_label.config(text="Гость")
-
-
+        """Обновляет отображение статуса пользователя в интерфейсе"""
+        if current_user:
+            user_label.config(text=f"Пользователь: {current_user}")
+        else:
+            user_label.config(text="Гость")
 
 def show_profile():
-    clear()
+        clear()
 
-    if not current_user:
+        if not current_user:
+            return show_auth()
+
+        user = data["users"][current_user]
+
+        profile_frame = tk.Frame(content, bg=PROFILE_BG, padx=20, pady=20)
+        profile_frame.pack(fill="both", expand=True)
+
+        create_header(profile_frame)
+        create_profile_body(profile_frame, user)
+
+    # -------------------------
+    # 🔐 Авторизация
+    # -------------------------
+def show_auth():
         c = card()
 
         tk.Label(c, text="Вход / Регистрация",
                  bg=CARD, fg=TEXT,
                  font=("Arial", 20, "bold")).pack(pady=10)
 
-        email = tk.Entry(c, font=("Arial", 14))
-        password = tk.Entry(c, show="*", font=("Arial", 14))
+        # Поле email с подсказкой
+        email_frame = tk.Frame(c, bg=CARD)
+        email_frame.pack(fill="x", pady=8)
+        tk.Label(email_frame, text="Email:", bg=CARD, fg=SUB, font=("Arial", 10)).pack(anchor="w")
+        email = tk.Entry(email_frame, font=("Arial", 14))
+        email.pack(fill="x")
 
-        email.pack(fill="x", pady=8)
-        password.pack(fill="x", pady=8)
+        # Поле пароля с подсказкой
+        password_frame = tk.Frame(c, bg=CARD)
+        password_frame.pack(fill="x", pady=8)
+        tk.Label(password_frame, text="Пароль:", bg=CARD, fg=SUB, font=("Arial", 10)).pack(anchor="w")
+        password = tk.Entry(password_frame, show="*", font=("Arial", 14))
+        password.pack(fill="x")
 
         def login():
             global current_user
-            e = email.get().strip()
-            p = password.get().strip()
+            e, p = email.get().strip(), password.get().strip()
+
+            if not e or not p:
+                return messagebox.showerror("Ошибка", "Заполните все поля")
 
             if e in data["users"] and verify_password(data["users"][e]["password"], p):
                 current_user = e
                 update_user()
                 show_profile()
             else:
-                messagebox.showerror("Ошибка", "Неверные данные")
+                messagebox.showerror("Ошибка", "Неверные данные для входа")
 
         def register():
-            e = email.get().strip()
-            p = password.get().strip()
+            e, p = email.get().strip(), password.get().strip()
 
             if not e or not p:
-                return messagebox.showerror("Ошибка", "Заполни поля")
+                return messagebox.showerror("Ошибка", "Заполните все поля")
+
+            # Проверка формата email
+            if "@" not in e or "." not in e:
+                return messagebox.showerror("Ошибка", "Неверный формат email")
+
+            if len(p) < 6:
+                return messagebox.showerror("Ошибка", "Пароль должен содержать минимум 6 символов")
 
             if e in data["users"]:
-                return messagebox.showerror("Ошибка", "Уже существует")
+                return messagebox.showerror("Ошибка", "Пользователь с таким email уже существует")
 
             data["users"][e] = {
                 "password": hash_password(p),
-                "name": "",
-                "surname": "",
-                "phone": "",
-                "car_make": "",
-                "car_model": "",
-                "car_year": "",
+                "cars": [],  # Список автомобилей
                 "notifications": True,
-                "history": []
+                "history": [],
+                "registration_date": datetime.now().strftime("%d.%m.%Y")
             }
+
             save_data()
-            messagebox.showinfo("OK", "Аккаунт создан")
+            messagebox.showinfo("Успех", "Аккаунт успешно создан! Теперь войдите в систему")
+            login()  # Автоматический вход после регистрации
 
-        tk.Button(c, text="Войти", bg=ACCENT, fg="white",
-                  command=login).pack(fill="x", pady=10)
+        login_btn = tk.Button(c, text="Войти", bg=ACCENT, fg="white", command=login,
+                              font=("Arial", 12, "bold"), height=2)
+        login_btn.pack(fill="x", pady=(10, 5))
 
-        tk.Button(c, text="Регистрация", bg=ACCENT2, fg="black",
-                  command=register).pack(fill="x")
-        return
+        register_btn = tk.Button(c, text="Регистрация", bg=ACCENT2, fg="black", command=register,
+                                 font=("Arial", 12), height=2)
+        register_btn.pack(fill="x", pady=(0, 10))
 
-    user = data["users"][current_user]
+    # -------------------------
+    # 🧱 Header
+    # -------------------------
+def show_main_menu():
+        """Отображает главное меню приложения"""
+        clear()  # Очищаем текущее содержимое интерфейса
 
-    # Основной контейнер профиля с единым стилем
-    profile_frame = tk.Frame(content, bg=PROFILE_BG, padx=20, pady=20)
-    profile_frame.pack(padx=20, pady=20, fill="both", expand=True)
+        # Создаём основной фрейм для главного меню
+        main_frame = tk.Frame(content, bg=BG, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True)
 
-    # Заголовок профиля
-    title_frame = tk.Frame(profile_frame, bg=PANEL, height=60)
-    title_frame.pack(fill="x", pady=(0, 20))
-    title_frame.pack_propagate(False)
-    tk.Label(title_frame, text="Профиль пользователя",
-             bg=PANEL, fg=ACCENT,
-             font=("Arial", 16, "bold")).pack(pady=10)
+        # Заголовок главного меню
+        title_label = tk.Label(
+            main_frame,
+            text="Главное меню",
+            bg=BG,
+            fg=ACCENT,
+            font=("Arial", 24, "bold")
+        )
+        title_label.pack(pady=(0, 30))
 
-    # Основная сетка профиля
-    main_grid = tk.Frame(profile_frame, bg=PROFILE_BG)
-    main_grid.pack(fill="both", expand=True)
+        # Список кнопок меню: текст и соответствующая функция
+        menu_buttons = [
+            ("Профиль", show_profile),
+            ("История заказов", show_history),
+            ("Настройки приложения", show_settings),
+        ]
 
-    # Левая колонка — аватар и основная информация
-    left_col = tk.Frame(main_grid, bg=CARD, padx=20, pady=20)
-    left_col.grid(row=0, column=0, padx=(0, 20), sticky="nsw")
+        # Создаём и размещаем кнопки
+        for button_text, button_command in menu_buttons:
+            button = tk.Button(
+                main_frame,
+                text=button_text,
+                bg=ACCENT,
+                fg="white",
+                command=button_command,
+                font=("Arial", 14),
+                height=2,
+                relief="flat",
+                cursor="hand2"
+            )
+            # Добавляем эффект наведения (изменение цвета при наведении)
+            button.bind(
+                "<Enter>",
+                lambda e, btn=button: btn.config(bg=ACCENT2)
+            )
+            button.bind(
+                "<Leave>",
+                lambda e, btn=button: btn.config(bg=ACCENT)
+            )
+            button.pack(fill="x", pady=8, ipady=5)
 
-    # Аватар с закруглёнными углами
-    avatar_frame = tk.Frame(left_col, bg=AVATAR_BG, width=120, height=120)
-    avatar_frame.pack(pady=(0, 15))
-    avatar_frame.pack_propagate(False)
+        # Дополнительная информация о пользователе (если авторизован)
+        if current_user:
+            user_info = tk.Label(
+                main_frame,
+                text=f"Добро пожаловать, {current_user}!",
+                bg=BG,
+                fg=SUB,
+                font=("Arial", 10)
+            )
+            user_info.pack(pady=(20, 0))
 
-    avatar = tk.Canvas(avatar_frame, width=110, height=110, bg=AVATAR_BG, bd=0, highlightthickness=0)
-    avatar.pack(pady=5, padx=5)
-    # Рисуем закруглённый прямоугольник (имитация аватара)
-    avatar.create_oval(5, 5, 105, 105, fill="#4f8cff", outline="", width=0)
+def create_header(parent):
+        header = tk.Frame(parent, bg=PANEL, height=60)
+        header.pack(fill="x", pady=(0, 20))
+        header.pack_propagate(False)
 
-    # Имя и фамилия
-    full_name = f"{user.get('name', 'Имя')} {user.get('surname', 'Фамилия')}"
-    name_label = tk.Label(
-        left_col,
-        text=full_name,
-        font=("Arial", 14, "bold"),
-        fg=TEXT,
-        bg=CARD
-    )
-    name_label.pack(pady=(0, 5))
+        title = tk.Label(header, text="Профиль пользователя",
+                         bg=PANEL, fg=ACCENT,
+                         font=("Arial", 16, "bold"))
+        title.pack(pady=10)
 
-    email_label = tk.Label(
-        left_col,
-        text=current_user,
-        fg=SUB,
-        bg=CARD,
-        font=("Arial", 10)
-    )
-    email_label.pack()
+        # Кнопка «Назад» в шапке — теперь вызывает существующую функцию
+        back_btn = tk.Button(header, text="← Назад", bg=DANGER, fg="white",
+                             command=lambda: (clear(), show_main_menu()),
+                             font=("Arial", 10), width=8)
+        back_btn.place(x=10, y=15)
 
-    # Кнопка редактирования
-    edit_btn = tk.Button(
-        left_col,
-        text="Редактировать профиль",
-        bg=ACCENT,
-        fg="white",
-        padx=15,
-        pady=8,
-        font=("Arial", 10),
-        relief="flat"
-    )
-    edit_btn.pack(pady=15)
+def create_right_column(parent, user):
+        """Создаёт правую колонку профиля с настройками и действиями"""
+        frame = tk.Frame(parent, bg=CARD, padx=15, pady=15)
 
-    # Информация об автомобиле
-    car_info = tk.LabelFrame(left_col, text="Автомобиль", bg=CARD, fg=TEXT, padx=10, pady=10)
-    car_info.pack(fill="x", pady=10)
+        # --- Блок уведомлений ---
+        notify_frame = tk.LabelFrame(frame, text="Настройки уведомлений", bg=CARD, fg=TEXT,
+                                     font=("Arial", 10, "bold"))
+        notify_frame.pack(fill="x", pady=(0, 20))
 
-    tk.Label(car_info, text="Марка:", font=("Arial", 9, "bold"), bg=CARD, fg=SUB).grid(
-        row=0, column=0, sticky="w", pady=3)
-    make_var = tk.StringVar(value=user.get("car_make", ""))
-    make_dropdown = ttk.Combobox(car_info, textvariable=make_var, values=[
-        "Toyota", "Honda", "BMW", "Mercedes", "Audi", "Volkswagen", "Ford", "Kia"
-    ], state="readonly")
-    make_dropdown.grid(row=0, column=1, padx=5, pady=3, sticky="ew")
+        var = tk.BooleanVar(value=user.get("notifications", True))
 
-    tk.Label(car_info, text="Модель:", font=("Arial", 9, "bold"), bg=CARD, fg=SUB).grid(
-        row=1, column=0, sticky="w", pady=3)
-    model_var = tk.StringVar(value=user.get("car_model", ""))
-    model_dropdown = ttk.Combobox(car_info, textvariable=model_var, values=[
-        "Camry", "RAV4", "Corolla", "Civic", "Accord", "X5", "E-Class"
-    ], state="readonly")
-    model_dropdown.grid(row=1, column=1, padx=5, pady=3, sticky="ew")
+        notify_cb = tk.Checkbutton(notify_frame, text="Получать уведомления",
+                                   variable=var, bg=CARD, fg=TEXT,
+                                   font=("Arial", 11))
+        notify_cb.pack(anchor="w", padx=5, pady=5)
 
-    tk.Label(car_info, text="Год:", font=("Arial", 9, "bold"), bg=CARD, fg=SUB).grid(
-        row=2, column=0, sticky="w", pady=3)
-    year_var = tk.StringVar(value=user.get("car_year", ""))
-    year_entry = tk.Entry(car_info, textvariable=year_var, width=8, bg=PANEL, fg=TEXT)
-    year_entry.grid(row=2, column=1, padx=5, pady=3, sticky="w")
+        def save_notify():
+            user["notifications"] = var.get()
+            save_data()
+            messagebox.showinfo("Успех", "Настройки уведомлений сохранены")
 
-    def save_car_info():
-        make = make_var.get()
-        model = model_var.get()
-        year_text = year_var.get()
+        tk.Button(notify_frame, text="Применить", bg=ACCENT, fg="white",
+                  command=save_notify, font=("Arial", 9)).pack(pady=5)
 
-        if year_text:
-            try:
-                year = int(year_text)
-                if not (1900 <= year <= datetime.now().year):
-                    messagebox.showerror("Ошибка", "Год должен быть от 1900 до текущего года")
-                    return
-            except ValueError:
-                messagebox.showerror("Ошибка", "Год должен быть числом")
-                return
+        # --- Конец блока уведомлений ---
+
+        # --- Блок истории заказов ---
+        history_frame = tk.LabelFrame(frame, text="История заказов", bg=CARD, fg=TEXT,
+                                      font=("Arial", 10, "bold"))
+        history_frame.pack(fill="x", pady=(0, 20))
+
+        history = user.get("history", [])
+        if history:
+            history_label = tk.Label(history_frame, text=f"Всего заказов: {len(history)}",
+                                     bg=CARD, fg=SUB, font=("Arial", 10))
+            history_label.pack(anchor="w", padx=5, pady=2)
+
+            last_order = history[-1] if history else "Нет данных"
+            last_label = tk.Label(history_frame, text=f"Последний: {last_order}",
+                                  bg=CARD, fg=SUB, font=("Arial", 9))
+            last_label.pack(anchor="w", padx=5, pady=2)
         else:
-            year = ""
+            no_history = tk.Label(history_frame, text="История пуста",
+                                  bg=CARD, fg=SUB, font=("Arial", 10))
+            no_history.pack(padx=5, pady=10)
+        # --- Конец блока истории заказов ---
 
-        user["car_make"] = make
-        user["car_model"] = model
-        user["car_year"] = str(year) if year else ""
-        save_data()
-        messagebox.showinfo("OK", "Данные об автомобиле сохранены")
+        # --- Блок управления автомобилями ---
+        cars_frame = tk.LabelFrame(frame, text="Мои автомобили", bg=CARD, fg=TEXT,
+                                   font=("Arial", 10, "bold"))
+        cars_frame.pack(fill="x", pady=(0, 20))
 
-    save_car_btn = tk.Button(car_info, text="Сохранить", bg=ACCENT2, fg="black",
-                            command=save_car_info, font=("Arial", 9), padx=8, pady=4)
-    save_car_btn.grid(row=3, column=0, columnspan=2, pady=8)
+        cars_listbox = tk.Listbox(cars_frame, height=6, font=("Arial", 10))
+        cars_listbox.pack(fill="x", pady=5)
 
-    # Центральная колонка — личная информация
-    center_col = tk.LabelFrame(main_grid, text="Личная информация", bg=CARD, fg=TEXT, padx=15, pady=15)
-    center_col.grid(row=0, column=1, padx=20, sticky="nsew", fill="both")
+        # Заполняем список автомобилей
+        for car in user.get("cars", []):
+            cars_listbox.insert(tk.END, f"{car['make']} {car['model']} ({car['year']})")
 
-    fields = [
-        ("Имя:", "name", user.get("name", "")),
-        ("Фамилия:", "surname", user.get("surname", "")),
-        ("E-mail:", "email", current_user),
-        ("Телефон:", "phone", user.get("phone", ""))
-    ]
-    entries = {}
+        def add_car():
+            # Создаём диалоговое окно для добавления автомобиля
+            add_window = tk.Toplevel(frame)
+            add_window.title("Добавить автомобиль")
+            add_window.geometry("300x600")
+            add_window.resizable(False, False)
 
-    for i, (label_text, field_name, default_value) in enumerate(fields):
-        tk.Label(center_col, text=label_text, font=("Arial", 9, "bold"), bg=CARD, fg=SUB).grid(
-            row=i, column=0, sticky="w", pady=5)
-        entry = tk.Entry(center_col, width=25, bg=PANEL, fg=TEXT, font=("Arial", 10))
-        entry.insert(0, default_value)
-        entry.grid(row=i, column=1, padx=10, pady=5)
-        entries[field_name] = entry
+            # Марки автомобилей (можно расширить)
+            makes = ["Toyota", "Honda", "BMW", "Mercedes", "Audi", "Volkswagen", "Ford", "Nissan"]
 
+            tk.Label(add_window, text="Марка:", bg=CARD, fg=SUB).pack(anchor="w", padx=10, pady=(10, 5))
+            make_var = tk.StringVar(value=makes[0])
+            make_combo = ttk.Combobox(add_window, textvariable=make_var, values=makes, state="readonly")
+            make_combo.pack(fill="x", padx=10, pady=2)
 
-    def save_personal_info():
-        user["name"] = entries["name"].get().strip()
-        user["surname"] = entries["surname"].get().strip()
-        user["phone"] = entries["phone"].get().strip()
+            tk.Label(add_window, text="Модель:", bg=CARD, fg=SUB).pack(anchor="w", padx=10, pady=(10, 5))
+            model_entry = tk.Entry(add_window, font=("Arial", 10))
+            model_entry.pack(fill="x", padx=10, pady=2)
 
+            tk.Label(add_window, text="Год выпуска:", bg=CARD, fg=SUB).pack(anchor="w", padx=10, pady=(10, 5))
+            year_entry = tk.Entry(add_window, font=("Arial", 10))
+            year_entry.pack(fill="x", padx=10, pady=2)
 
-        # Базовая валидация данных
-        if not user["name"]:
-            messagebox.showerror("Ошибка", "Имя не может быть пустым")
-            return
+            def save_car():
+                make = make_var.get()
+                model = model_entry.get().strip()
+                year = year_entry.get().strip()
 
-        if not user["surname"]:
-            messagebox.showerror("Ошибка", "Фамилия не может быть пустой")
-            return
+                # Валидация
+                if not model:
+                    messagebox.showerror("Ошибка", "Введите модель автомобиля")
+                    return
+                if not year.isdigit() or not (1900 <= int(year) <= 2026):
+                    messagebox.showerror("Ошибка", "Год выпуска должен быть числом от 1900 до 2026")
+                    return
 
-        # Проверка формата телефона (упрощённая — минимум 7 цифр)
-        phone = user["phone"]
-        if phone and len([c for c in phone if c.isdigit()]) < 7:
-            messagebox.showerror("Ошибка", "Номер телефона должен содержать минимум 7 цифр")
-            return
+                # Добавляем автомобиль в список пользователя
+                user["cars"].append({
+                    "make": make,
+                    "model": model,
+                    "year": year
+                })
+                save_data()
 
-        save_data()
-        messagebox.showinfo("Успех", "Личные данные успешно обновлены")
+                # Обновляем список в интерфейсе
+                cars_listbox.insert(tk.END, f"{make} {model} ({year})")
+                messagebox.showinfo("Успех", "Автомобиль добавлен!")
+                add_window.destroy()
 
-        # Обновляем отображение имени в профиле
-        full_name = f"{user['name']} {user['surname']}"
-        name_label.config(text=full_name)
+            tk.Button(add_window, text="Добавить", bg=ACCENT, fg="white",
+                      command=save_car, font=("Arial", 10)).pack(pady=15)
 
-    save_personal_btn = tk.Button(center_col, text="Сохранить изменения", bg=ACCENT, fg="white",
-                              command=save_personal_info, font=("Arial", 10), padx=12, pady=6)
-    save_personal_btn.grid(row=len(fields), column=0, columnspan=2, pady=10)
-
-    # Правая колонка — настройки профиля и уведомления
-    right_col = tk.Frame(main_grid, bg=CARD, padx=15, pady=15)
-    right_col.grid(row=0, column=2, padx=(20, 0), sticky="nsew")
-
-    # Настройки уведомлений
-    notifications_frame = tk.LabelFrame(right_col, text="Уведомления", bg=CARD, fg=TEXT, padx=10, pady=10)
-    notifications_frame.pack(fill="x", pady=(0, 15))
-
-    notify_var = tk.BooleanVar(value=user.get("notifications", True))
-
-    notify_check = tk.Checkbutton(notifications_frame,
-                               text="Получать уведомления о событиях",
-                               variable=notify_var,
-                               bg=CARD,
-                               fg=TEXT,
-                               selectcolor=ACCENT,
-                               activebackground=CARD)
-    notify_check.pack(anchor="w")
-
-    def toggle_notifications():
-        user["notifications"] = notify_var.get()
-        save_data()
-        status = "включены" if user["notifications"] else "отключены"
-        messagebox.showinfo("Статус", f"Уведомления {status}")
-
-    tk.Button(notifications_frame, text="Применить", bg=ACCENT2, fg="black",
-              command=toggle_notifications, font=("Arial", 9), padx=8, pady=4).pack(pady=5)
-
-    # Настройки безопасности
-    security_frame = tk.LabelFrame(right_col, text="Безопасность", bg=CARD, fg=TEXT, padx=10, pady=10)
-    security_frame.pack(fill="x")
-
-    def change_password():
-        change_pass_window = tk.Toplevel(root)
-        change_pass_window.title("Сменить пароль")
-        change_pass_window.geometry("300x200")
-        change_pass_window.configure(bg=BG)
-
-        tk.Label(change_pass_window, text="Старый пароль:", bg=BG, fg=TEXT).pack(pady=5)
-        old_pass = tk.Entry(change_pass_window, show="*", font=("Arial", 12))
-        old_pass.pack(pady=5)
-
-        tk.Label(change_pass_window, text="Новый пароль:", bg=BG, fg=TEXT).pack(pady=5)
-        new_pass1 = tk.Entry(change_pass_window, show="*", font=("Arial", 12))
-        new_pass1.pack(pady=5)
-
-        tk.Label(change_pass_window, text="Повторите пароль:", bg=BG, fg=TEXT).pack(pady=5)
-        new_pass2 = tk.Entry(change_pass_window, show="*", font=("Arial", 12))
-        new_pass2.pack(pady=5)
-
-        def save_new_password():
-            stored_password = user["password"]
-            if not verify_password(stored_password, old_pass.get()):
-                messagebox.showerror("Ошибка", "Неверный старый пароль")
+        def delete_car():
+            selection = cars_listbox.curselection()
+            if not selection:
+                messagebox.showwarning("Предупреждение", "Выберите автомобиль для удаления")
                 return
 
-            new_pass_1 = new_pass1.get().strip()
-            new_pass_2 = new_pass2.get().strip()
-
-            if not new_pass_1 or not new_pass_2:
-                messagebox.showerror("Ошибка", "Поля с новым паролем не могут быть пустыми")
-                return
-
-            if new_pass_1 != new_pass_2:
-                messagebox.showerror("Ошибка", "Пароли не совпадают")
-                return
-
-            if len(new_pass_1) < 6:
-                messagebox.showerror("Ошибка", "Пароль должен содержать минимум 6 символов")
-                return
-
-            user["password"] = hash_password(new_pass_1)
+            index = selection[0]
+            cars_listbox.delete(index)
+            user["cars"].pop(index)
             save_data()
-            messagebox.showinfo("Успех", "Пароль успешно изменён")
-            change_pass_window.destroy()
+            messagebox.showinfo("Успех", "Автомобиль удалён!")
 
+        add_car_btn = tk.Button(cars_frame, text="Добавить автомобиль", bg=ACCENT2, fg="black",
+                                command=add_car, font=("Arial", 9))
+        add_car_btn.pack(fill="x", pady=(0, 5))
 
-        tk.Button(change_pass_window, text="Сохранить", bg=ACCENT, fg="white", command=save_new_password).pack(pady=10)
+        delete_car_btn = tk.Button(cars_frame, text="Удалить выбранный", bg=DANGER, fg="white",
+                                   command=delete_car, font=("Arial", 9))
+        delete_car_btn.pack(fill="x")
+        # --- Конец блока управления автомобилями ---
 
-
-    change_pass_btn = tk.Button(security_frame,
-        text="Сменить пароль",
-        bg="#63b3ed",
-        fg="white",
-        padx=10,
-        pady=5,
-        command=change_password
-    )
-    change_pass_btn.pack(fill="x", pady=(0, 5))
-
-    def delete_account():
-        global current_user  # Объявляем глобальную переменную В САМОМ НАЧАЛЕ функции
-
-        # Проверяем, авторизован ли пользователь
-        if not current_user:
-            messagebox.showwarning("Предупреждение", "Нет активного пользователя для удаления")
-            return
-
-        # Проверяем, существует ли пользователь в данных
-        if current_user not in data["users"]:
-            messagebox.showerror("Ошибка", "Пользователь не найден в базе данных")
-            return
-
-        # Запрашиваем подтверждение удаления
-        if messagebox.askyesno("Подтверждение",
-                               "Вы уверены, что хотите удалить аккаунт?\nЭто действие нельзя отменить!"):
-            try:
-                # Удаляем пользователя из данных
-                del data["users"][current_user]
-                save_data()  # Сохраняем изменения в файл
-
-                # Сбрасываем текущий пользовательский сеанс
-                current_user = None
-                update_user()  # Обновляем отображение статуса пользователя в интерфейсе
-                show_profile()  # Показываем экран профиля (вероятно, для гостя)
-                messagebox.showinfo("Аккаунт удалён", "Ваш аккаунт успешно удалён")
-
-            except KeyError:
-                messagebox.showerror("Ошибка", "Не удалось удалить аккаунт — пользователь не найден")
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Произошла непредвиденная ошибка: {str(e)}")
-
-        delete_btn = tk.Button(security_frame,
-                               text="Удалить аккаунт",
-                               bg=DANGER,
-                               fg="white",
-                               padx=10,
-                               pady=5,
-                               command=delete_account
-                               )
-        delete_btn.pack(fill="x")
+        # --- Блок действий пользователя ---
+        actions_frame = tk.LabelFrame(frame, text="Действия", bg=CARD, fg=TEXT,
+                                      font=("Arial", 10, "bold"))
+        actions_frame.pack(fill="x")
 
         def logout():
-            """Выходит из аккаунта текущего пользователя"""
             global current_user
             current_user = None
-            update_user()  # Обновляем отображение статуса пользователя
-            show_profile()  # Показываем экран профиля (возможно, для гостя)
-            messagebox.showinfo("Выход", "Вы успешно вышли из аккаунта")
-
-        # Кнопка выхода из аккаунта
-        logout_btn = tk.Button(right_col,
-                               text="Выйти из аккаунта",
-                               bg=DANGER,
-                               fg="white",
-                               padx=15,
-                               pady=8,
-                               font=("Arial", 10),
-                               command=logout)  # Теперь ссылка на функцию существует
-        logout_btn.pack(fill="x", pady=20)
-
-        # Настройка растяжения колонок для адаптивности
-        main_grid.columnconfigure(0, weight=1)  # левая колонка
-        main_grid.columnconfigure(1, weight=2)  # центральная колонка (шире)
-        main_grid.columnconfigure(2, weight=1)  # правая колонка
-
-        # Обновление отображения информации при изменении данных
-        def refresh_profile():
-            # Обновляем имя в профиле
-            full_name = f"{user.get('name', 'Имя')} {user.get('surname', 'Фамилия')}"
-            name_label.config(text=full_name)
-            # Обновляем email
-            email_label.config(text=current_user)
-
-        # Привязываем обновление к событиям изменения данных
-        make_dropdown.bind("<<ComboboxSelected>>", lambda e: save_car_info())
-        model_dropdown.bind("<<ComboboxSelected>>", lambda e: save_car_info())
-
-    # ===================== CALCULATOR =====================
-def show_calc():
-        clear()
-
-        tk.Label(content, text="Калькулятор расхода топлива",
-                 bg=BG, fg=TEXT,
-                 font=("Arial", 20, "bold")).pack(pady=20)
-
-        calc_frame = tk.Frame(content, bg=CARD, padx=30, pady=30)
-        calc_frame.pack(fill="both", expand=True, padx=20, pady=10)
-
-        # Поля ввода
-        tk.Label(calc_frame, text="Пробег (км):", bg=CARD, fg=TEXT, font=("Arial", 12)).grid(row=0, column=0,
-                                                                                             sticky="w", pady=10)
-        mileage_entry = tk.Entry(calc_frame, width=20, font=("Arial", 12), bg=PANEL, fg=TEXT)
-        mileage_entry.grid(row=0, column=1, padx=10, pady=10)
-
-        tk.Label(calc_frame, text="Расход топлива (л):", bg=CARD, fg=TEXT, font=("Arial", 12)).grid(row=1, column=0,
-                                                                                                    sticky="w", pady=10)
-        fuel_entry = tk.Entry(calc_frame, width=20, font=("Arial", 12), bg=PANEL, fg=TEXT)
-        fuel_entry.grid(row=1, column=1, padx=10, pady=10)
-
-        tk.Label(calc_frame, text="Цена за литр (руб):", bg=CARD, fg=TEXT, font=("Arial", 12)).grid(row=2, column=0,
-                                                                                                    sticky="w", pady=10)
-        price_entry = tk.Entry(calc_frame, width=20, font=("Arial", 12), bg=PANEL, fg=TEXT)
-        price_entry.grid(row=2, column=1, padx=10, pady=10)
-
-        def calculate():
-            try:
-                mileage = float(mileage_entry.get())
-                fuel = float(fuel_entry.get())
-                price = float(price_entry.get())
-
-                if mileage <= 0 or fuel <= 0 or price <= 0:
-                    messagebox.showerror("Ошибка", "Все значения должны быть положительными")
-                    return
-
-                consumption = (fuel / mileage) * 100  # л/100км
-                total_cost = fuel * price
-
-                result_text = f"Расход: {consumption:.2f} л/100км\nСтоимость: {total_cost:.2f} руб"
-                result_label.config(text=result_text)
-
-                # Сохраняем в историю
-                if current_user:
-                    record = {
-                        "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                        "mileage": mileage,
-                        "fuel": fuel,
-                        "price": price,
-                        "consumption": consumption,
-                        "total_cost": total_cost
-                    }
-                    data["users"][current_user]["history"].append(record)
-                    save_data()
-            except ValueError:
-                messagebox.showerror("Ошибка", "Введите корректные числовые значения")
-
-        calc_btn = tk.Button(calc_frame, text="Рассчитать", bg=ACCENT, fg="white",
-                             font=("Arial", 12, "bold"), command=calculate, padx=20, pady=8)
-        calc_btn.grid(row=3, column=0, columnspan=2, pady=20)
-
-        result_label = tk.Label(calc_frame, text="", bg=CARD, fg=ACCENT2, font=("Arial", 14, "bold"))
-        result_label.grid(row=4, column=0, columnspan=2)
-
-    # ===================== HISTORY =====================
-def show_history():
-        clear()
-
-        tk.Label(content, text="История расчётов",
-                 bg=BG, fg=TEXT,
-                 font=("Arial", 20, "bold")).pack(pady=20)
-
-        if not current_user or not data["users"][current_user].get("history"):
-            tk.Label(content, text="История пуста", bg=BG, fg=SUB,
-                     font=("Arial", 14)).pack()
-            return
-
-        history_frame = tk.Frame(content, bg=CARD)
-        history_frame.pack(fill="both", expand=True, padx=20, pady=10)
-
-        # Заголовки таблицы
-        headers = ["Дата", "Пробег", "Топливо", "Цена", "Расход", "Стоимость"]
-        for col, header in enumerate(headers):
-            tk.Label(history_frame, text=header, bg=PANEL, fg=TEXT,
-                     font=("Arial", 10, "bold"), padx=10).grid(row=0, column=col, sticky="ew")
-
-        # Данные истории
-        history = data["users"][current_user]["history"]
-        for row, record in enumerate(history, start=1):
-            values = [
-                record["date"],
-                f"{record['mileage']} км",
-                f"{record['fuel']} л",
-                f"{record['price']} руб",
-                f"{record['consumption']:.2f} л/100км",
-                f"{record['total_cost']:.2f} руб"
-            ]
-            for col, value in enumerate(values):
-                tk.Label(history_frame, text=value, bg=CARD, fg=TEXT,
-                         font=("Arial", 9)).grid(row=row, column=col, sticky="ew", padx=5, pady=5)
-
-            # Кнопка для повторного использования расчёта
-            def reuse(rec, mileage_entry, fuel_entry, price_entry):
-                clear()
-                show_calc()
-                mileage_entry.insert(0, str(rec["mileage"]))
-                fuel_entry.insert(0, str(rec["fuel"]))
-                price_entry.insert(0, str(rec["price"]))
-
-            tk.Button(history_frame, text="↻", bg=ACCENT2, fg="black",
-                      command=reuse, font=("Arial", 8)).grid(row=row, column=len(values), padx=5)
-
-        # Настройка растяжения колонок
-        for col in range(len(headers)):
-            history_frame.columnconfigure(col, weight=1)
-
-    # ===================== SETTINGS =====================
-def show_settings():
-        clear()
-
-        tk.Label(content, text="Настройки приложения",
-                 bg=BG, fg=TEXT,
-                 font=("Arial", 20, "bold")).pack(pady=20)
-
-        settings_frame = tk.Frame(content, bg=CARD, padx=30, pady=30)
-        settings_frame.pack(fill="both", expand=True, padx=20, pady=10)
-
-        # Тема оформления
-        theme_frame = tk.LabelFrame(settings_frame, text="Тема оформления", bg=CARD, fg=TEXT, padx=15, pady=15)
-        theme_frame.pack(fill="x", pady=(0, 20))
-
-        theme_var = tk.StringVar(value="Тёмная")
-        themes = ["Тёмная", "Светлая", "Синяя"]
-
-        for i, theme in enumerate(themes):
-            tk.Radiobutton(theme_frame,
-                           text=theme,
-                           variable=theme_var,
-                           value=theme,
-                           bg=CARD,
-                           fg=TEXT,
-                           selectcolor=ACCENT,
-                           activebackground=CARD,
-                           font=("Arial", 10)
-                           ).pack(anchor="w", pady=5)
-
-        def apply_theme():
-            theme = theme_var.get()
-
-            # Сохраняем выбранную тему в данные пользователя
-            if current_user:
-                data["users"][current_user]["theme"] = theme
-                save_data()
-
-            # Применяем тему к интерфейсу
-            if theme == "Тёмная":
-                apply_dark_theme()
-            elif theme == "Светлая":
-                apply_light_theme()
-            elif theme == "Синяя":
-                apply_blue_theme()
-
-            messagebox.showinfo("Тема", f"Тема '{theme}' успешно применена")
-
-        apply_theme_btn = tk.Button(theme_frame, text="Применить тему", bg=ACCENT, fg="white",
-                                    command=apply_theme, font=("Arial", 9), padx=10, pady=4)
-        apply_theme_btn.pack(pady=10)
-
-        # Настройки уведомлений
-        notifications_settings = tk.LabelFrame(settings_frame, text="Уведомления", bg=CARD, fg=TEXT, padx=15, pady=15)
-        notifications_settings.pack(fill="x", pady=(0, 20))
-
-        notify_options = [
-            ("О новых версиях приложения", True),
-            ("О специальных предложениях", True),
-            ("Напоминания о ТО", False),
-            ("Новости автоиндустрии", False)
-        ]
-        notify_vars = {}
-
-        for text, default in notify_options:
-            var = tk.BooleanVar(value=default)
-            notify_vars[text] = var
-            tk.Checkbutton(notifications_settings,
-                           text=text,
-                           variable=var,
-                           bg=CARD,
-                           fg=TEXT,
-                           selectcolor=ACCENT,
-                           activebackground=CARD
-                           ).pack(anchor="w", pady=3)
-
-        def save_notifications():
-            selected = [text for text, var in notify_vars.items() if var.get()]
-            if current_user:
-                data["users"][current_user]["notification_settings"] = selected
-                save_data()
-            messagebox.showinfo("Настройки сохранены",
-                                f"Вы подписаны на: {', '.join(selected) if selected else 'ничего'}")
-
-        save_notify_btn = tk.Button(notifications_settings, text="Сохранить настройки", bg=ACCENT2, fg="black",
-                                    command=save_notifications, font=("Arial", 9), padx=10, pady=4)
-        save_notify_btn.pack(pady=10)
-
-        # Резервное копирование
-        backup_frame = tk.LabelFrame(settings_frame, text="Резервное копирование", bg=CARD, fg=TEXT, padx=15, pady=15)
-        backup_frame.pack(fill="x")
-
-        tk.Label(backup_frame, text=f"Файл данных: {DATA_FILE}", bg=CARD, fg=SUB).pack(anchor="w")
-        tk.Label(backup_frame, text=f"Бэкап: {BACKUP_FILE}", bg=CARD, fg=SUB).pack(anchor="w", pady=(0, 10))
-
-        def create_manual_backup():
-            create_backup()
-            last_backup = datetime.fromtimestamp(os.path.getmtime(BACKUP_FILE)).strftime("%d.%m.%Y %H:%M")
-            backup_status.config(text=f"Последний бэкап: {last_backup}")
-            messagebox.showinfo("Бэкап", "Ручной бэкап создан успешно")
-
-        backup_btn = tk.Button(backup_frame, text="Создать бэкап сейчас", bg=ACCENT, fg="white",
-                               command=create_manual_backup, font=("Arial", 9), padx=10, pady=4)
-        backup_btn.pack(anchor="w")
-
-        last_backup = "Не создавался"
-        if os.path.exists(BACKUP_FILE):
-            last_backup = datetime.fromtimestamp(os.path.getmtime(BACKUP_FILE)).strftime("%d.%m.%Y %H:%M")
-        backup_status = tk.Label(backup_frame, text=f"Последний бэкап: {last_backup}", bg=CARD, fg=SUB)
-        backup_status.pack(anchor="w", pady=(10, 0))
-
-    # Функции смены темы6:
-def apply_dark_theme():
-        global BG, PANEL, CARD, ACCENT, ACCENT2, TEXT, SUB, DANGER, PROFILE_BG, AVATAR_BG
-        BG = "#0b1220"
-        PANEL = "#111a2e"
-        CARD = "#162238"
-        ACCENT = "#4f8cff"
-        ACCENT2 = "#22c55e"
-        TEXT = "#e5e7eb"
-        SUB = "#94a3b8"
-        DANGER = "#ef4444"
-        PROFILE_BG = "#162238"
-        AVATAR_BG = "#253145"
-        refresh_ui()
-
-def apply_light_theme():
-        global BG, PANEL, CARD, ACCENT, ACCENT2, TEXT, SUB, DANGER, PROFILE_BG, AVATAR_BG
-        BG = "#f8fafc"
-        PANEL = "#e2e8f0"
-        CARD = "#ffffff"
-        ACCENT = "#3b82f6"
-        ACCENT2 = "#10b981"
-        TEXT = "#1e293b"
-        SUB = "#64748b"
-        DANGER = "#dc2626"
-        PROFILE_BG = "#ffffff"
-        AVATAR_BG = "#e2e8f0"
-        refresh_ui()
-
-def apply_blue_theme():
-        global BG, PANEL, CARD, ACCENT, ACCENT2, TEXT, SUB, DANGER, PROFILE_BG, AVATAR_BG
-        BG = "#0c1b33"
-        PANEL = "#1a2b4d"
-        CARD = "#2a3f66"
-        ACCENT = "#60a5fa"
-        ACCENT2 = "#818cf8"
-        TEXT = "#dbeafe"
-        SUB = "#93c5fd"
-        DANGER = "#fca5a5"
-        PROFILE_BG = "#2a3f66"
-        AVATAR_BG = "#384e77"
-        refresh_ui()
-
-def refresh_ui():
-        """Обновляет цвета всех элементов интерфейса"""
-        root.configure(bg=BG)
-        header.configure(bg=BG)
-        user_label.configure(bg=BG, fg=TEXT)
-        content.configure(bg=BG)
-
-        # Обновляем все фреймы и метки в content
-        for widget in content.winfo_children():
-            if isinstance(widget, tk.Frame):
-                widget.configure(bg=CARD)
-            elif isinstance(widget, tk.Label):
-                if widget.cget("text") in ["Калькулятор расхода топлива", "История расчётов", "Настройки приложения",
-                                           "О программе"]:
-                    widget.configure(bg=BG, fg=ACCENT)
-                else:
-                    widget.configure(bg=CARD, fg=TEXT)
-
-    # ===================== ABOUT =====================
-def show_about():
-        clear()
-
-        about_frame = tk.Frame(content, bg=CARD, padx=40, pady=40)
-        about_frame.pack(fill="both", expand=True, padx=20, pady=20)
-
-        tk.Label(about_frame, text="CalculatCar",
-                 bg=CARD, fg=ACCENT,
-                 font=("Arial", 24, "bold")).pack(pady=(0, 10))
-        tk.Label(about_frame, text="Версия 1.0.0",
-                 bg=CARD, fg=SUB,
-                 font=("Arial", 12)).pack(pady=(0, 20))
-
-        features = [
-            "Калькулятор расхода топлива",
-            "История расчётов с возможностью повторного использования",
-            "Персональный профиль с данными автомобиля",
-            "Система уведомлений",
-            "Резервное копирование данных"
-        ]
-
-        tk.Label(about_frame, text="Возможности:",
-                 bg=CARD, fg=TEXT,
-                 font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 5))
-
-        for feature in features:
-            tk.Label(about_frame, text=f"• {feature}",
-                     bg=CARD, fg=SUB,
-                     font=("Arial", 11)).pack(anchor="w", pady=2)
-
-        tk.Label(about_frame, text="© 2024 CalculatCar. Все права защищены.",
-                 bg=CARD, fg=SUB,
-                 font=("Arial", 10)).pack(side="bottom", pady=(30, 0))
-
-    # ===================== INITIALIZATION =====================
-    # Загружаем данные при старте
-load_data()
-update_user()
-
-    # Показываем калькулятор по умолчанию
-show_calc()
-
-    # Запускаем главный цикл
-root.mainloop()
-
-
-def show_profile():
-    clear()
-
-    if not current_user:
-        messagebox.showinfo("Ошибка", "Сначала войдите")
-        return
-
-    user = data["users"][current_user]
-
-    # -------------------------
-    # 🧱 ОСНОВА
-    # -------------------------
-    frame = tk.Frame(content, bg=PROFILE_BG, padx=30, pady=30)
-    frame.pack(fill="both", expand=True)
-
-    tk.Label(frame,
-             text="Профиль пользователя",
-             font=("Arial", 18, "bold"),
-             fg=ACCENT,
-             bg=PROFILE_BG).pack(pady=10)
-
-    card = tk.Frame(frame, bg=CARD, padx=25, pady=25)
-    card.pack(pady=20)
-
-    # -------------------------
-    # 🚗 ДАННЫЕ АВТО
-    # -------------------------
-    tk.Label(card, text="Марка авто", bg=CARD, fg=TEXT).grid(row=0, column=0, sticky="w")
-
-    make_var = tk.StringVar(value=user.get("car_make", ""))
-    make_box = ttk.Combobox(card, textvariable=make_var, state="readonly",
-                            values=["Toyota", "BMW", "Mercedes", "Audi", "Kia"])
-    make_box.grid(row=0, column=1, pady=5)
-
-    tk.Label(card, text="Модель", bg=CARD, fg=TEXT).grid(row=1, column=0, sticky="w")
-
-    model_var = tk.StringVar(value=user.get("car_model", ""))
-    model_box = ttk.Combobox(card, textvariable=model_var, state="readonly",
-                             values=["Camry", "X5", "E-class", "A4", "Rio"])
-    model_box.grid(row=1, column=1, pady=5)
-
-    tk.Label(card, text="Гос номер", bg=CARD, fg=TEXT).grid(row=2, column=0, sticky="w")
-
-    number_var = tk.StringVar(value=user.get("car_number", ""))
-    number_entry = tk.Entry(card, textvariable=number_var)
-    number_entry.grid(row=2, column=1, pady=5)
-
-    def save_car():
-        user["car_make"] = make_var.get()
-        user["car_model"] = model_var.get()
-        user["car_number"] = number_var.get().strip()
-
-        save_data()
-        messagebox.showinfo("OK", "Сохранено")
-
-    tk.Button(card, text="Сохранить авто",
-              bg=ACCENT, fg="white",
-              command=save_car).grid(row=3, column=0, columnspan=2, pady=10)
-
-    # -------------------------
-    # 🔐 СМЕНА ПАРОЛЯ
-    # -------------------------
-    def change_password():
-        win = tk.Toplevel(root)
-        win.title("Смена пароля")
-        win.geometry("300x220")
-        win.configure(bg=BG)
-
-        tk.Label(win, text="Старый пароль", bg=BG, fg=TEXT).pack(pady=5)
-        old = tk.Entry(win, show="*")
-        old.pack()
-
-        tk.Label(win, text="Новый пароль", bg=BG, fg=TEXT).pack(pady=5)
-        new1 = tk.Entry(win, show="*")
-        new1.pack()
-
-        tk.Label(win, text="Повторите пароль", bg=BG, fg=TEXT).pack(pady=5)
-        new2 = tk.Entry(win, show="*")
-        new2.pack()
-
-        def save():
-            if not verify_password(user["password"], old.get()):
-                return messagebox.showerror("Ошибка", "Неверный пароль")
-
-            if new1.get() != new2.get():
-                return messagebox.showerror("Ошибка", "Пароли не совпадают")
-
-            if len(new1.get()) < 6:
-                return messagebox.showerror("Ошибка", "Минимум 6 символов")
-
-            user["password"] = hash_password(new1.get())
-            save_data()
-
-            messagebox.showinfo("OK", "Пароль изменён")
-            win.destroy()
-
-        tk.Button(win, text="Сохранить", bg=ACCENT, fg="white", command=save).pack(pady=10)
-
-    tk.Button(frame, text="Сменить пароль",
-              bg="#3b82f6", fg="white",
-              command=change_password).pack(pady=10)
-
-    # -------------------------
-    # ❌ УДАЛЕНИЕ АККАУНТА
-    # -------------------------
-    def delete_account():
-        global current_user
-
-        if messagebox.askyesno("Удаление", "Удалить аккаунт?"):
-            del data["users"][current_user]
-            save_data()
-
-            current_user = None
             update_user()
-            show_profile()
+            show_auth()
+            messagebox.showinfo("Выход", "Вы вышли из аккаунта")
 
-            messagebox.showinfo("OK", "Аккаунт удалён")
+        logout_btn = tk.Button(actions_frame, text="Выйти из аккаунта",
+                               bg=DANGER, fg="white", command=logout,
+                               font=("Arial", 10, "bold"), height=2)
+        logout_btn.pack(fill="x", pady=5)
 
-    tk.Button(frame,
-              text="Удалить аккаунт",
-              bg=DANGER,
-              fg="white",
-              command=delete_account).pack(pady=10)
-def register(email_entry, password_entry):
-    email = email_entry.get().strip()
-    password = password_entry.get().strip()
+        def delete_account():
+            if messagebox.askyesno("Подтверждение",
+                                   "Вы уверены, что хотите удалить аккаунт?\n"
+                                   "Это действие нельзя отменить!"):
+                del data["users"][current_user]
+                save_data()
+                logout()
 
-    # проверка почты (простая)
-    if "@" not in email or "." not in email:
-        return messagebox.showerror("Ошибка", "Введите корректный email")
+        delete_btn = tk.Button(actions_frame, text="Удалить аккаунт",
+                               bg="#992222", fg="white", command=delete_account,
+                               font=("Arial", 9), height=1)
+        delete_btn.pack(fill="x", pady=(0, 5))
+        # --- Конец блока действий ---
 
-    if len(password) < 6:
-        return messagebox.showerror("Ошибка", "Пароль минимум 6 символов")
+        return frame
 
-    if email in data["users"]:
-        return messagebox.showerror("Ошибка", "Пользователь уже существует")
+        # -------------------------
+        # 🧩 Основное тело профиля
+        # -------------------------
+def create_profile_body(parent, user):
+            grid = tk.Frame(parent, bg=PROFILE_BG)
+            grid.pack(fill="both", expand=True, pady=(0, 20))
 
-    data["users"][email] = {
-        "password": hash_password(password),
+            left = create_left_column(grid, user)
+            right = create_right_column(grid, user)
 
-        # 🚗 НОВЫЕ ПОЛЯ
-        "car_make": "",
-        "car_model": "",
-        "car_number": ""
-    }
+            left.grid(row=0, column=0, padx=(0, 20), sticky="n")
+            right.grid(row=0, column=1, padx=(20, 0), sticky="nsew")
 
-    save_data()
-    messagebox.showinfo("OK", "Аккаунт создан")
-    # -------------------------
-    # 🚪 ВЫХОД
-    # -------------------------
-    def logout():
-        global current_user
-        current_user = None
-        update_user()
-        show_profile()
+            grid.columnconfigure(1, weight=1)
 
-    tk.Button(frame,
-              text="Выйти",
-              bg="#ef4444",
-              fg="white",
-              command=logout).pack(pady=10)
+        # -------------------------
+        # 👤 Левая колонка
+        # -------------------------
+def create_left_column(parent, user):
+            frame = tk.Frame(parent, bg=CARD, padx=20, pady=20)
+
+            # Блок с базовой информацией пользователя
+            info_frame = tk.Frame(frame, bg=CARD)
+            info_frame.pack(pady=10)
+
+            # Отображение email пользователя (как идентификатор)
+            tk.Label(info_frame, text=current_user,
+                     font=("Arial", 12, "bold"), bg=CARD, fg=TEXT).pack()
 
 
+            # Количество автомобилей
+            cars_count = len(user.get("cars", []))
+            tk.Label(info_frame, text=f"Автомобилей в профиле: {cars_count}", fg=SUB, bg=CARD,
+                     font=("Arial", 9)).pack(pady=(5, 0))
+
+            # Разделитель
+            separator = tk.Frame(frame, height=2, bg=PANEL)
+            separator.pack(fill="x", pady=15)
+
+            # Статистика по заказам
+            history = user.get("history", [])
+            tk.Label(frame, text="Статистика", font=("Arial", 11, "bold"),
+                     bg=CARD, fg=ACCENT).pack(anchor="w")
+
+            tk.Label(frame, text=f"Всего заказов: {len(history)}", fg=SUB, bg=CARD,
+                     font=("Arial", 9)).pack(anchor="w", pady=(5, 2))
+
+            if history:
+                last_order = history[-1]
+                tk.Label(frame, text=f"Последний заказ: {last_order}", fg=SUB, bg=CARD,
+                         font=("Arial", 9)).pack(anchor="w", pady=(2, 0))
+            else:
+                tk.Label(frame, text="Нет выполненных заказов", fg=SUB, bg=CARD,
+                         font=("Arial", 9)).pack(anchor="w", pady=(2, 0))
+
+            return frame
+
+        # -------------------------
+        # 📝 Центральная колонка (убрана, так как больше не нужна)
+        # -------------------------
+
+        # -------------------------
+        # 🧩 Основное тело профиля (обновлено без центральной колонки)
+        # -------------------------
+def create_profile_body(parent, user):
+            grid = tk.Frame(parent, bg=PROFILE_BG)
+            grid.pack(fill="both", expand=True, pady=(0, 20))
+
+            left = create_left_column(grid, user)
+            right = create_right_column(grid, user)
+
+            # Размещаем колонки: левая — фиксированная ширина, правая — растягивается
+            left.grid(row=0, column=0, padx=(0, 20), sticky="n")
+            right.grid(row=0, column=1, padx=(20, 0), sticky="nsew")
+
+            # Настраиваем растягивание правой колонки
+            grid.columnconfigure(1, weight=1)
+
+            return grid
