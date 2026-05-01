@@ -902,191 +902,167 @@ show_calc()
 root.mainloop()
 
 
-
-
-
 def show_profile():
     clear()
 
     if not current_user:
-        return show_auth()
+        messagebox.showinfo("Ошибка", "Сначала войдите")
+        return
 
     user = data["users"][current_user]
 
-    profile_frame = tk.Frame(content, bg=PROFILE_BG, padx=20, pady=20)
-    profile_frame.pack(fill="both", expand=True)
+    # -------------------------
+    # 🧱 ОСНОВА
+    # -------------------------
+    frame = tk.Frame(content, bg=PROFILE_BG, padx=30, pady=30)
+    frame.pack(fill="both", expand=True)
 
-    create_header(profile_frame)
-    create_profile_body(profile_frame, user)
+    tk.Label(frame,
+             text="Профиль пользователя",
+             font=("Arial", 18, "bold"),
+             fg=ACCENT,
+             bg=PROFILE_BG).pack(pady=10)
 
+    card = tk.Frame(frame, bg=CARD, padx=25, pady=25)
+    card.pack(pady=20)
 
-# -------------------------
-# 🔐 Авторизация
-# -------------------------
-def show_auth():
-    c = card()
+    # -------------------------
+    # 🚗 ДАННЫЕ АВТО
+    # -------------------------
+    tk.Label(card, text="Марка авто", bg=CARD, fg=TEXT).grid(row=0, column=0, sticky="w")
 
-    tk.Label(c, text="Вход / Регистрация",
-             bg=CARD, fg=TEXT,
-             font=("Arial", 20, "bold")).pack(pady=10)
+    make_var = tk.StringVar(value=user.get("car_make", ""))
+    make_box = ttk.Combobox(card, textvariable=make_var, state="readonly",
+                            values=["Toyota", "BMW", "Mercedes", "Audi", "Kia"])
+    make_box.grid(row=0, column=1, pady=5)
 
-    email = tk.Entry(c, font=("Arial", 14))
-    password = tk.Entry(c, show="*", font=("Arial", 14))
+    tk.Label(card, text="Модель", bg=CARD, fg=TEXT).grid(row=1, column=0, sticky="w")
 
-    email.pack(fill="x", pady=8)
-    password.pack(fill="x", pady=8)
+    model_var = tk.StringVar(value=user.get("car_model", ""))
+    model_box = ttk.Combobox(card, textvariable=model_var, state="readonly",
+                             values=["Camry", "X5", "E-class", "A4", "Rio"])
+    model_box.grid(row=1, column=1, pady=5)
 
-    def login():
-        global current_user
-        e, p = email.get().strip(), password.get().strip()
+    tk.Label(card, text="Гос номер", bg=CARD, fg=TEXT).grid(row=2, column=0, sticky="w")
 
-        if e in data["users"] and verify_password(data["users"][e]["password"], p):
-            current_user = e
-            update_user()
-            show_profile()
-        else:
-            messagebox.showerror("Ошибка", "Неверные данные")
+    number_var = tk.StringVar(value=user.get("car_number", ""))
+    number_entry = tk.Entry(card, textvariable=number_var)
+    number_entry.grid(row=2, column=1, pady=5)
 
-    def register():
-        e, p = email.get().strip(), password.get().strip()
-
-        if not e or not p:
-            return messagebox.showerror("Ошибка", "Заполни поля")
-
-        if e in data["users"]:
-            return messagebox.showerror("Ошибка", "Уже существует")
-
-        data["users"][e] = {
-            "password": hash_password(p),
-            "name": "",
-            "surname": "",
-            "phone": "",
-            "car_make": "",
-            "car_model": "",
-            "car_year": "",
-            "notifications": True,
-            "history": []
-        }
-
-        save_data()
-        messagebox.showinfo("OK", "Аккаунт создан")
-
-    tk.Button(c, text="Войти", bg=ACCENT, fg="white", command=login).pack(fill="x", pady=10)
-    tk.Button(c, text="Регистрация", bg=ACCENT2, fg="black", command=register).pack(fill="x")
-
-
-# -------------------------
-# 🧱 Header
-# -------------------------
-def create_header(parent):
-    header = tk.Frame(parent, bg=PANEL, height=60)
-    header.pack(fill="x", pady=(0, 20))
-    header.pack_propagate(False)
-
-    tk.Label(header, text="Профиль пользователя",
-             bg=PANEL, fg=ACCENT,
-             font=("Arial", 16, "bold")).pack(pady=10)
-
-
-# -------------------------
-# 🧩 Основное тело профиля
-# -------------------------
-def create_profile_body(parent, user):
-    grid = tk.Frame(parent, bg=PROFILE_BG)
-    grid.pack(fill="both", expand=True)
-
-    left = create_left_column(grid, user)
-    center = create_center_column(grid, user)
-    right = create_right_column(grid, user)
-
-    left.grid(row=0, column=0, padx=(0, 20), sticky="n")
-    center.grid(row=0, column=1, padx=20, sticky="nsew")
-    right.grid(row=0, column=2, padx=(20, 0), sticky="n")
-
-    grid.columnconfigure(1, weight=1)
-
-
-# -------------------------
-# 👤 Левая колонка
-# -------------------------
-def create_left_column(parent, user):
-    frame = tk.Frame(parent, bg=CARD, padx=20, pady=20)
-
-    # Аватар
-    canvas = tk.Canvas(frame, width=100, height=100, bg=AVATAR_BG, highlightthickness=0)
-    canvas.create_oval(5, 5, 95, 95, fill="#4f8cff", outline="")
-    canvas.pack(pady=10)
-
-    # Имя
-    name = f"{user.get('name', 'Имя')} {user.get('surname', 'Фамилия')}"
-    tk.Label(frame, text=name, font=("Arial", 14, "bold"), bg=CARD, fg=TEXT).pack()
-
-    tk.Label(frame, text=current_user, fg=SUB, bg=CARD).pack()
-
-    return frame
-
-
-# -------------------------
-# 📝 Центральная колонка
-# -------------------------
-def create_center_column(parent, user):
-    frame = tk.LabelFrame(parent, text="Личная информация", bg=CARD, fg=TEXT, padx=15, pady=15)
-
-    entries = {}
-
-    fields = [
-        ("Имя", "name"),
-        ("Фамилия", "surname"),
-        ("Телефон", "phone")
-    ]
-
-    for i, (label, key) in enumerate(fields):
-        tk.Label(frame, text=label, bg=CARD, fg=SUB).grid(row=i, column=0, sticky="w")
-
-        entry = tk.Entry(frame)
-        entry.insert(0, user.get(key, ""))
-        entry.grid(row=i, column=1, pady=5)
-
-        entries[key] = entry
-
-    def save():
-        user["name"] = entries["name"].get()
-        user["surname"] = entries["surname"].get()
-        user["phone"] = entries["phone"].get()
+    def save_car():
+        user["car_make"] = make_var.get()
+        user["car_model"] = model_var.get()
+        user["car_number"] = number_var.get().strip()
 
         save_data()
         messagebox.showinfo("OK", "Сохранено")
 
-    tk.Button(frame, text="Сохранить", bg=ACCENT, fg="white", command=save)\
-        .grid(row=len(fields), columnspan=2, pady=10)
+    tk.Button(card, text="Сохранить авто",
+              bg=ACCENT, fg="white",
+              command=save_car).grid(row=3, column=0, columnspan=2, pady=10)
 
-    return frame
+    # -------------------------
+    # 🔐 СМЕНА ПАРОЛЯ
+    # -------------------------
+    def change_password():
+        win = tk.Toplevel(root)
+        win.title("Смена пароля")
+        win.geometry("300x220")
+        win.configure(bg=BG)
 
+        tk.Label(win, text="Старый пароль", bg=BG, fg=TEXT).pack(pady=5)
+        old = tk.Entry(win, show="*")
+        old.pack()
 
-# -------------------------
-# ⚙️ Правая колонка
-# -------------------------
-def create_right_column(parent, user):
-    frame = tk.Frame(parent, bg=CARD, padx=15, pady=15)
+        tk.Label(win, text="Новый пароль", bg=BG, fg=TEXT).pack(pady=5)
+        new1 = tk.Entry(win, show="*")
+        new1.pack()
 
-    # Уведомления
-    var = tk.BooleanVar(value=user.get("notifications", True))
+        tk.Label(win, text="Повторите пароль", bg=BG, fg=TEXT).pack(pady=5)
+        new2 = tk.Entry(win, show="*")
+        new2.pack()
 
-    tk.Checkbutton(frame, text="Уведомления", variable=var, bg=CARD, fg=TEXT).pack(anchor="w")
+        def save():
+            if not verify_password(user["password"], old.get()):
+                return messagebox.showerror("Ошибка", "Неверный пароль")
 
-    def save_notify():
-        user["notifications"] = var.get()
-        save_data()
+            if new1.get() != new2.get():
+                return messagebox.showerror("Ошибка", "Пароли не совпадают")
 
-    tk.Button(frame, text="Применить", command=save_notify).pack(pady=5)
+            if len(new1.get()) < 6:
+                return messagebox.showerror("Ошибка", "Минимум 6 символов")
 
-    # Выход
+            user["password"] = hash_password(new1.get())
+            save_data()
+
+            messagebox.showinfo("OK", "Пароль изменён")
+            win.destroy()
+
+        tk.Button(win, text="Сохранить", bg=ACCENT, fg="white", command=save).pack(pady=10)
+
+    tk.Button(frame, text="Сменить пароль",
+              bg="#3b82f6", fg="white",
+              command=change_password).pack(pady=10)
+
+    # -------------------------
+    # ❌ УДАЛЕНИЕ АККАУНТА
+    # -------------------------
+    def delete_account():
+        global current_user
+
+        if messagebox.askyesno("Удаление", "Удалить аккаунт?"):
+            del data["users"][current_user]
+            save_data()
+
+            current_user = None
+            update_user()
+            show_profile()
+
+            messagebox.showinfo("OK", "Аккаунт удалён")
+
+    tk.Button(frame,
+              text="Удалить аккаунт",
+              bg=DANGER,
+              fg="white",
+              command=delete_account).pack(pady=10)
+def register(email_entry, password_entry):
+    email = email_entry.get().strip()
+    password = password_entry.get().strip()
+
+    # проверка почты (простая)
+    if "@" not in email or "." not in email:
+        return messagebox.showerror("Ошибка", "Введите корректный email")
+
+    if len(password) < 6:
+        return messagebox.showerror("Ошибка", "Пароль минимум 6 символов")
+
+    if email in data["users"]:
+        return messagebox.showerror("Ошибка", "Пользователь уже существует")
+
+    data["users"][email] = {
+        "password": hash_password(password),
+
+        # 🚗 НОВЫЕ ПОЛЯ
+        "car_make": "",
+        "car_model": "",
+        "car_number": ""
+    }
+
+    save_data()
+    messagebox.showinfo("OK", "Аккаунт создан")
+    # -------------------------
+    # 🚪 ВЫХОД
+    # -------------------------
     def logout():
         global current_user
         current_user = None
         update_user()
         show_profile()
 
-    tk.Button(frame, text="Выйти", bg=DANGER, fg="white", command=logout).pack(fill="x", pady=10)
+    tk.Button(frame,
+              text="Выйти",
+              bg="#ef4444",
+              fg="white",
+              command=logout).pack(pady=10)
 
-    return frame
+
