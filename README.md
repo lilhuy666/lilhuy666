@@ -1,40 +1,8 @@
 def show_history():
     clear()
 
-    tk.Label(content, text="История расчётов",
-             bg=BG, fg=TEXT,
-             font=("Arial", 20, "bold")).pack(pady=20)
+    # ... твой код ...
 
-    # 🔒 Проверка пользователя
-    if not current_user:
-        tk.Label(content, text="Вы не авторизованы",
-                 bg=BG, fg=SUB,
-                 font=("Arial", 14)).pack()
-        return
-
-    user = data["users"].get(current_user)
-
-    if not user:
-        tk.Label(content, text="Ошибка пользователя",
-                 bg=BG, fg=SUB,
-                 font=("Arial", 14)).pack()
-        return
-
-    history = user.get("history", [])
-
-    if not history:
-        tk.Label(content, text="История пуста",
-                 bg=BG, fg=SUB,
-                 font=("Arial", 14)).pack()
-        return
-
-    frame = tk.Frame(content, bg=CARD)
-    frame.pack(fill="both", expand=True, padx=20, pady=10)
-
-    listbox = tk.Listbox(frame, font=("Arial", 11))
-    listbox.pack(fill="both", expand=True, padx=10, pady=10)
-
-    # 📄 Заполнение истории
     for record in history:
         text = (
             f"{record.get('date', '')} | "
@@ -45,7 +13,7 @@ def show_history():
         )
         listbox.insert(tk.END, text)
 
-    # 🗑 Очистка истории
+    # 🗑 Очистка истории (ВАЖНО: с отступом!)
     def clear_history():
         if messagebox.askyesno("Очистка", "Удалить всю историю?"):
             user["history"] = []
