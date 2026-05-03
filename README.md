@@ -1,5 +1,8 @@
-Traceback (most recent call last):
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 756, in <module>
-    history = data["users"][current_user].get("history", [])
-              ~~~~~~~~~~~~~^^^^^^^^^^^^^^
-KeyError: None
+def show_history():
+    clear()
+
+    if not current_user:
+        tk.Label(content, text="Сначала войдите в аккаунт",
+                 bg=BG, fg=SUB,
+                 font=("Arial", 14)).pack(pady=20)
+        return
