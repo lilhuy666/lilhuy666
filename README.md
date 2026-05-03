@@ -1,4 +1,166 @@
-   # ===================== PROFILE =====================
+import tkinter as tk
+from tkinter import ttk, messagebox
+from datetime import datetime
+import json, os
+import hashlib
+import secrets
+
+# ===================== STYLE =====================
+MAIN_BG = "#f8f9fa"  # фон главного меню
+AUTH_BG = "#f8f9fa"   # фон формы авторизации
+BG = "#0b1220"
+PANEL = "#111a2e"
+CARD = "#162238"
+ACCENT = "#4f8cff"
+ACCENT2 = "#22c55e"
+TEXT = "#e5e7eb"
+SUB = "#94a3b8"
+DANGER = "#ef4444"
+PROFILE_BG = "#162238"  # единый фон с основной темой
+AVATAR_BG = "#253145"
+
+
+DATA_FILE = "data.json"
+BACKUP_FILE = "data.json.backup"
+
+# ===================== DATA =====================
+data = {"users": {}}
+current_user = None
+
+def hash_password(password, salt=None):
+    """Хеширование пароля с солью"""
+    if salt is None:
+        salt = secrets.token_hex(16)
+    hashed = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+    return f"{salt}:{hashed.hex()}"
+
+def verify_password(stored_password, provided_password):
+    """Проверка пароля"""
+    salt, _ = stored_password.split(':')
+    return hash_password(provided_password, salt) == stored_password
+
+
+def load_data():
+    global data
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if "users" not in data:
+                data = {"users": {}}
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось загрузить данные: {e}")
+            data = {"users": {}}
+    # Создаём бэкап при загрузке
+    create_backup()
+
+def create_backup():
+    """Создание бэкапа данных"""
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f_in:
+            with open(BACKUP_FILE, "w", encoding="utf-8") as f_out:
+                f_out.write(f_in.read())
+    except:
+        pass
+
+def save_data():
+    try:
+        # Создаём бэкап перед сохранением
+        create_backup()
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Не удалось сохранить данные: {e}")
+
+
+# ===================== WINDOW =====================
+root = tk.Tk()
+root.title("CalculatCar")
+root.geometry("1200x750")
+root.configure(bg=BG)
+
+main = tk.Frame(root, bg=BG)
+main.pack(fill="both", expand=True)
+
+# ===================== HEADER =====================
+header = tk.Frame(main, bg=ACCENT, height=70)
+header.pack(fill="x")
+header.pack_propagate(False)
+
+menu_window = None
+
+def toggle_menu():
+    global menu_window
+
+    if menu_window and menu_window.winfo_exists():
+        menu_window.destroy()
+        return
+
+    x = root.winfo_x() + 20
+    y = root.winfo_y() + 70
+
+    menu_window = tk.Toplevel(root)
+    menu_window.overrideredirect(True)
+    menu_window.configure(bg=PANEL)
+    menu_window.geometry(f"220x240+{x}+{y}")
+
+    def close(e=None):
+        if menu_window:
+            menu_window.destroy()
+
+    menu_window.bind("<FocusOut>", close)
+    menu_window.bind("<Escape>", close)  # Закрытие по Esc
+
+    def nav(text, cmd):
+        tk.Button(menu_window,
+                  text=text,
+                  bg=PANEL,
+                  fg=TEXT,
+                  bd=0,
+                  anchor="w",
+                  padx=15,
+                  pady=10,
+                  font=("Arial", 11),
+                  activebackground=CARD,
+                  activeforeground=ACCENT,
+                  command=lambda: [cmd(), close()]
+                  ).pack(fill="x")
+
+    nav("Калькулятор", show_calc)
+    nav("Профиль", show_profile)
+    nav("История", show_history)
+    nav("Настройки", show_settings)
+    nav("О программе", show_about)
+
+    menu_window.focus_force()
+
+tk.Button(header, text="☰", bg=ACCENT, fg="white",
+          font=("Arial", 16, "bold"), bd=0,
+          command=toggle_menu).pack(side="left", padx=15)
+
+tk.Label(header, text="CalculatCar",
+         bg=ACCENT, fg="white",
+         font=("Arial", 20, "bold")).pack(side="left")
+
+user_label = tk.Label(header, text="",
+                      bg=ACCENT, fg="white",
+                      font=("Arial", 11))
+user_label.pack(side="right", padx=15)
+
+# ===================== CONTENT =====================
+content = tk.Frame(main, bg=BG)
+content.pack(fill="both", expand=True)
+
+def clear():
+    for w in content.winfo_children():
+        w.destroy()
+
+def card():
+    f = tk.Frame(content, bg=CARD, padx=40, pady=40)
+    f.pack(pady=30)
+    return f
+
+    # ===================== PROFILE =====================
 def update_user():
         """Обновляет отображение статуса пользователя в интерфейсе"""
         if current_user:
@@ -424,42 +586,427 @@ def create_right_column(parent, user):
     tk.Button(frame, text="Удалить аккаунт", command=delete_account, bg="#992222", fg="white").pack(fill="x")
 
     return frame
+    # ===================== CALCULATOR =====================
+def show_calc():
+    clear()
+
+    # Заголовок по центру
+    tk.Label(content, text="Калькулятор расхода топлива",
+              bg=BG, fg=TEXT,
+              font=("Arial", 20, "bold")).pack(pady=20)
+
+    # Основной фрейм калькулятора
+    calc_frame = tk.Frame(content, bg=CARD, padx=40, pady=40)
+    calc_frame.pack(fill="both", expand=True, padx=50, pady=30)
+
+    # Настраиваем сетку для адаптивности
+    for i in range(2):
+        calc_frame.columnconfigure(i, weight=1)
+    calc_frame.rowconfigure(6, weight=1)  # последняя строка растягивается
+
+    # Переменная для выбора режима расчёта
+    calc_mode = tk.StringVar(value="consumption")  # по умолчанию — расход
+
+    # Кнопки для выбора режима (вместо радиокнопок)
+    mode_frame = tk.Frame(calc_frame, bg=CARD)
+    mode_frame.grid(row=0, column=0, columnspan=2, pady=(0, 20), sticky="ew")
+
+    # Кнопка «Рассчитать средний расход на 100 км»
+    consumption_btn = tk.Button(
+        mode_frame,
+        text="Рассчитать средний расход на 100 км",
+        bg=ACCENT,
+        fg="white",
+        font=("Arial", 14),
+        command=lambda: calc_mode.set("consumption"),
+        padx=20,
+        pady=10
+    )
+    consumption_btn.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+    # Кнопка «Рассчитать стоимость поездки»
+    cost_btn = tk.Button(
+        mode_frame,
+        text="Рассчитать стоимость поездки",
+        bg=ACCENT,
+        fg="white",
+        font=("Arial", 14),
+        command=lambda: calc_mode.set("cost"),
+        padx=20,
+        pady=10
+    )
+    cost_btn.pack(side="left", fill="x", expand=True, padx=(10, 0))
+
+    # Метка пробега/расстояния — делаем её динамической
+    mileage_label = tk.Label(calc_frame, text="Расстояние (км):", bg=CARD, fg=TEXT, font=("Arial", 14))
+    mileage_label.grid(row=1, column=0, sticky="e", pady=15, padx=(0, 15))
+
+    # Поле ввода пробега
+    mileage_entry = tk.Entry(calc_frame, width=25, font=("Arial", 14), bg=PANEL, fg=TEXT)
+    mileage_entry.grid(row=1, column=1, pady=15, sticky="w")
+
+    # Метка израсходованного топлива — делаем её динамической
+    fuel_label = tk.Label(calc_frame, text="Израсходовано топлива (л):", bg=CARD, fg=TEXT, font=("Arial", 14))
+    fuel_label.grid(row=2, column=0, sticky="e", pady=15, padx=(0, 15))
 
 
+    # Поле ввода израсходованного топлива
+    fuel_entry = tk.Entry(calc_frame, width=25, font=("Arial", 14), bg=PANEL, fg=TEXT)
+    fuel_entry.grid(row=2, column=1, pady=15, sticky="w")
+
+    # Цена за литр
+    tk.Label(calc_frame, text="Цена за литр (руб):", bg=CARD, fg=TEXT, font=("Arial", 14)).grid(
+        row=3, column=0, sticky="e", pady=15, padx=(0, 15))
+    price_entry = tk.Entry(calc_frame, width=25, font=("Arial", 14), bg=PANEL, fg=TEXT)
+    price_entry.grid(row=3, column=1, pady=15, sticky="w")
 
 
+    def update_labels():
+        """Обновляет текст меток в зависимости от выбранного режима"""
+        if calc_mode.get() == "cost":
+            mileage_label.config(text="Расстояние (км):")
+            fuel_label.config(text="Расход топлива (л):")
+        else:
+            mileage_label.config(text="Расстояние (км):")
+            fuel_label.config(text="Израсходовано топлива (л):")
+
+    # Привязываем обновление меток к изменению режима
+    calc_mode.trace_add("write", lambda *args: update_labels())
+
+    def calculate():
+        try:
+            mileage = float(mileage_entry.get().strip())
+            fuel = float(fuel_entry.get().strip())
+            price = float(price_entry.get().strip())
+
+            if mileage <= 0 or fuel <= 0 or price <= 0:
+                messagebox.showerror("Ошибка", "Все значения должны быть положительными числами больше нуля")
+                return
+
+            mode = calc_mode.get()
+            result_text = ""
+
+            if mode == "consumption":
+                # Расход на 100 км
+                consumption = (fuel / mileage) * 100
+                result_text = f"Расход топлива: {consumption:.2f} л/100км"
+            else:  # mode == "cost"
+                # Общая стоимость
+                total_cost = fuel * price
+                result_text = f"Общая стоимость поездки: {total_cost:.2f} руб"
+
+            result_label.config(text=result_text)
+
+            # Сохраняем в историю, если пользователь авторизован
+            if current_user:
+                record = {
+                    "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                    "mileage": mileage,
+                    "fuel": fuel,
+                    "price": price,
+                    "mode": "Расход на 100 км" if mode == "consumption" else "Стоимость поездки",
+                    "result": result_text
+                }
+                data["users"][current_user]["history"].append(record)
+                save_data()
+
+        except ValueError:
+            messagebox.showerror(
+                "Ошибка",
+                "Введите корректные числовые значения во всех полях"
+            )
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла непредвиденная ошибка: {str(e)}")
+
+    # Кнопка расчёта
+    calc_btn = tk.Button(calc_frame, text="Рассчитать", bg=ACCENT, fg="white",
+                        font=("Arial", 16, "bold"), command=calculate,
+                        padx=30, pady=12)
+    calc_btn.grid(row=4, column=0, columnspan=2, pady=25)
+
+    # Фрейм для результата
+    result_frame = tk.Frame(calc_frame, bg=CARD)
+    result_frame.grid(row=5, column=0, columnspan=2, pady=20, sticky="ew")
+    result_frame.columnconfigure(0, weight=1)
+
+    # Метка результата
+    result_label = tk.Label(result_frame, text="", bg=CARD, fg=ACCENT2,
+                           font=("Arial", 16, "bold"))
+    result_label.pack(padx=20, pady=15)
+
+    # Дополнительная информация
+    info_label = tk.Label(calc_frame,
+                      text="Выберите режим расчёта и введите данные",
+                      bg=CARD, fg=SUB, font=("Arial", 12))
+    info_label.grid(row=6, column=0, columnspan=2, pady=(10, 0))
 
 
+    # ===================== HISTORY =====================
+def show_history():
+        clear()
 
-    Exception in Tkinter callback
-Traceback (most recent call last):
-  File "C:\Users\Кирилл\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
-    return self.func(*args)
-           ^^^^^^^^^^^^^^^^
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 126, in <lambda>
-    command=lambda: [cmd(), close()]
-                     ^^^^^
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 774, in show_history
-    f"{record['consumption']:.2f} л/100км",
-       ~~~~~~^^^^^^^^^^^^^^^
-KeyError: 'consumption'
-Exception in Tkinter callback
-Traceback (most recent call last):
-  File "C:\Users\Кирилл\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
-    return self.func(*args)
-           ^^^^^^^^^^^^^^^^
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 126, in <lambda>
-    command=lambda: [cmd(), close()]
-                     ^^^^^
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 294, in show_profile
-    create_profile_body(frame, user)
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 333, in create_profile_body
-    right = create_right_column(grid, user)
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 459, in create_right_column
-    refresh_history()
-  File "C:\Users\Кирилл\PycharmProjects\PythonProject6\main.py", line 456, in refresh_history
-    if filter_text.lower() in item.lower():
-                              ^^^^^^^^^^
-AttributeError: 'dict' object has no attribute 'lower'
+        tk.Label(content, text="История расчётов",
+                 bg=BG, fg=TEXT,
+                 font=("Arial", 20, "bold")).pack(pady=20)
 
+        if not current_user or not data["users"][current_user].get("history"):
+            tk.Label(content, text="История пуста", bg=BG, fg=SUB,
+                     font=("Arial", 14)).pack()
+            return
+
+        history_frame = tk.Frame(content, bg=CARD)
+        history_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # Заголовки таблицы
+        headers = ["Дата", "Пробег", "Топливо", "Цена", "Расход", "Стоимость"]
+        for col, header in enumerate(headers):
+            tk.Label(history_frame, text=header, bg=PANEL, fg=TEXT,
+                     font=("Arial", 10, "bold"), padx=10).grid(row=0, column=col, sticky="ew")
+
+        # Данные истории
+        history = data["users"][current_user]["history"]
+        for row, record in enumerate(history, start=1):
+            values = [
+                record["date"],
+                f"{record['mileage']} км",
+                f"{record['fuel']} л",
+                f"{record['price']} руб",
+                f"{record['consumption']:.2f} л/100км",
+                f"{record['total_cost']:.2f} руб"
+            ]
+            for col, value in enumerate(values):
+                tk.Label(history_frame, text=value, bg=CARD, fg=TEXT,
+                         font=("Arial", 9)).grid(row=row, column=col, sticky="ew", padx=5, pady=5)
+
+            # Кнопка для повторного использования расчёта
+            def reuse(rec, mileage_entry, fuel_entry, price_entry):
+                clear()
+                show_calc()
+                mileage_entry.insert(0, str(rec["mileage"]))
+                fuel_entry.insert(0, str(rec["fuel"]))
+                price_entry.insert(0, str(rec["price"]))
+
+            tk.Button(history_frame, text="↻", bg=ACCENT2, fg="black",
+                      command=reuse, font=("Arial", 8)).grid(row=row, column=len(values), padx=5)
+
+        # Настройка растяжения колонок
+        for col in range(len(headers)):
+            history_frame.columnconfigure(col, weight=1)
+
+    # ===================== SETTINGS =====================
+def show_settings():
+        clear()
+
+        tk.Label(content, text="Настройки приложения",
+                 bg=BG, fg=TEXT,
+                 font=("Arial", 20, "bold")).pack(pady=20)
+
+        settings_frame = tk.Frame(content, bg=CARD, padx=30, pady=30)
+        settings_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # Тема оформления
+        theme_frame = tk.LabelFrame(settings_frame, text="Тема оформления", bg=CARD, fg=TEXT, padx=15, pady=15)
+        theme_frame.pack(fill="x", pady=(0, 20))
+
+        theme_var = tk.StringVar(value="Тёмная")
+        themes = ["Тёмная", "Светлая", "Синяя"]
+
+        for i, theme in enumerate(themes):
+            tk.Radiobutton(theme_frame,
+                           text=theme,
+                           variable=theme_var,
+                           value=theme,
+                           bg=CARD,
+                           fg=TEXT,
+                           selectcolor=ACCENT,
+                           activebackground=CARD,
+                           font=("Arial", 10)
+                           ).pack(anchor="w", pady=5)
+
+        def apply_theme():
+            theme = theme_var.get()
+
+            # Сохраняем выбранную тему в данные пользователя
+            if current_user:
+                data["users"][current_user]["theme"] = theme
+                save_data()
+
+            # Применяем тему к интерфейсу
+            if theme == "Тёмная":
+                apply_dark_theme()
+            elif theme == "Светлая":
+                apply_light_theme()
+            elif theme == "Синяя":
+                apply_blue_theme()
+
+            messagebox.showinfo("Тема", f"Тема '{theme}' успешно применена")
+
+        apply_theme_btn = tk.Button(theme_frame, text="Применить тему", bg=ACCENT, fg="white",
+                                    command=apply_theme, font=("Arial", 9), padx=10, pady=4)
+        apply_theme_btn.pack(pady=10)
+
+        # Настройки уведомлений
+        notifications_settings = tk.LabelFrame(settings_frame, text="Уведомления", bg=CARD, fg=TEXT, padx=15, pady=15)
+        notifications_settings.pack(fill="x", pady=(0, 20))
+
+        notify_options = [
+            ("О новых версиях приложения", True),
+            ("О специальных предложениях", True),
+            ("Напоминания о ТО", False),
+            ("Новости автоиндустрии", False)
+        ]
+        notify_vars = {}
+
+        for text, default in notify_options:
+            var = tk.BooleanVar(value=default)
+            notify_vars[text] = var
+            tk.Checkbutton(notifications_settings,
+                           text=text,
+                           variable=var,
+                           bg=CARD,
+                           fg=TEXT,
+                           selectcolor=ACCENT,
+                           activebackground=CARD
+                           ).pack(anchor="w", pady=3)
+
+        def save_notifications():
+            selected = [text for text, var in notify_vars.items() if var.get()]
+            if current_user:
+                data["users"][current_user]["notification_settings"] = selected
+                save_data()
+            messagebox.showinfo("Настройки сохранены",
+                                f"Вы подписаны на: {', '.join(selected) if selected else 'ничего'}")
+
+        save_notify_btn = tk.Button(notifications_settings, text="Сохранить настройки", bg=ACCENT2, fg="black",
+                                    command=save_notifications, font=("Arial", 9), padx=10, pady=4)
+        save_notify_btn.pack(pady=10)
+
+        # Резервное копирование
+        backup_frame = tk.LabelFrame(settings_frame, text="Резервное копирование", bg=CARD, fg=TEXT, padx=15, pady=15)
+        backup_frame.pack(fill="x")
+
+        tk.Label(backup_frame, text=f"Файл данных: {DATA_FILE}", bg=CARD, fg=SUB).pack(anchor="w")
+        tk.Label(backup_frame, text=f"Бэкап: {BACKUP_FILE}", bg=CARD, fg=SUB).pack(anchor="w", pady=(0, 10))
+
+        def create_manual_backup():
+            create_backup()
+            last_backup = datetime.fromtimestamp(os.path.getmtime(BACKUP_FILE)).strftime("%d.%m.%Y %H:%M")
+            backup_status.config(text=f"Последний бэкап: {last_backup}")
+            messagebox.showinfo("Бэкап", "Ручной бэкап создан успешно")
+
+        backup_btn = tk.Button(backup_frame, text="Создать бэкап сейчас", bg=ACCENT, fg="white",
+                               command=create_manual_backup, font=("Arial", 9), padx=10, pady=4)
+        backup_btn.pack(anchor="w")
+
+        last_backup = "Не создавался"
+        if os.path.exists(BACKUP_FILE):
+            last_backup = datetime.fromtimestamp(os.path.getmtime(BACKUP_FILE)).strftime("%d.%m.%Y %H:%M")
+        backup_status = tk.Label(backup_frame, text=f"Последний бэкап: {last_backup}", bg=CARD, fg=SUB)
+        backup_status.pack(anchor="w", pady=(10, 0))
+
+    # Функции смены темы6:
+def apply_dark_theme():
+        global BG, PANEL, CARD, ACCENT, ACCENT2, TEXT, SUB, DANGER, PROFILE_BG, AVATAR_BG
+        BG = "#0b1220"
+        PANEL = "#111a2e"
+        CARD = "#162238"
+        ACCENT = "#4f8cff"
+        ACCENT2 = "#22c55e"
+        TEXT = "#e5e7eb"
+        SUB = "#94a3b8"
+        DANGER = "#ef4444"
+        PROFILE_BG = "#162238"
+        AVATAR_BG = "#253145"
+        refresh_ui()
+
+def apply_light_theme():
+        global BG, PANEL, CARD, ACCENT, ACCENT2, TEXT, SUB, DANGER, PROFILE_BG, AVATAR_BG
+        BG = "#f8fafc"
+        PANEL = "#e2e8f0"
+        CARD = "#ffffff"
+        ACCENT = "#3b82f6"
+        ACCENT2 = "#10b981"
+        TEXT = "#1e293b"
+        SUB = "#64748b"
+        DANGER = "#dc2626"
+        PROFILE_BG = "#ffffff"
+        AVATAR_BG = "#e2e8f0"
+        refresh_ui()
+
+def apply_blue_theme():
+        global BG, PANEL, CARD, ACCENT, ACCENT2, TEXT, SUB, DANGER, PROFILE_BG, AVATAR_BG
+        BG = "#0c1b33"
+        PANEL = "#1a2b4d"
+        CARD = "#2a3f66"
+        ACCENT = "#60a5fa"
+        ACCENT2 = "#818cf8"
+        TEXT = "#dbeafe"
+        SUB = "#93c5fd"
+        DANGER = "#fca5a5"
+        PROFILE_BG = "#2a3f66"
+        AVATAR_BG = "#384e77"
+        refresh_ui()
+
+def refresh_ui():
+        """Обновляет цвета всех элементов интерфейса"""
+        root.configure(bg=BG)
+        header.configure(bg=BG)
+        user_label.configure(bg=BG, fg=TEXT)
+        content.configure(bg=BG)
+
+        # Обновляем все фреймы и метки в content
+        for widget in content.winfo_children():
+            if isinstance(widget, tk.Frame):
+                widget.configure(bg=CARD)
+            elif isinstance(widget, tk.Label):
+                if widget.cget("text") in ["Калькулятор расхода топлива", "История расчётов", "Настройки приложения",
+                                           "О программе"]:
+                    widget.configure(bg=BG, fg=ACCENT)
+                else:
+                    widget.configure(bg=CARD, fg=TEXT)
+
+    # ===================== ABOUT =====================
+def show_about():
+        clear()
+
+        about_frame = tk.Frame(content, bg=CARD, padx=40, pady=40)
+        about_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        tk.Label(about_frame, text="CalculatCar",
+                 bg=CARD, fg=ACCENT,
+                 font=("Arial", 24, "bold")).pack(pady=(0, 10))
+        tk.Label(about_frame, text="Версия 1.0.0",
+                 bg=CARD, fg=SUB,
+                 font=("Arial", 12)).pack(pady=(0, 20))
+
+        features = [
+            "Калькулятор расхода топлива",
+            "История расчётов с возможностью повторного использования",
+            "Персональный профиль с данными автомобиля",
+            "Система уведомлений",
+            "Резервное копирование данных"
+        ]
+
+        tk.Label(about_frame, text="Возможности:",
+                 bg=CARD, fg=TEXT,
+                 font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 5))
+
+        for feature in features:
+            tk.Label(about_frame, text=f"• {feature}",
+                     bg=CARD, fg=SUB,
+                     font=("Arial", 11)).pack(anchor="w", pady=2)
+
+        tk.Label(about_frame, text="© 2024 CalculatCar. Все права защищены.",
+                 bg=CARD, fg=SUB,
+                 font=("Arial", 10)).pack(side="bottom", pady=(30, 0))
+
+    # ===================== INITIALIZATION =====================
+    # Загружаем данные при старте
+load_data()
+update_user()
+
+    # Показываем калькулятор по умолчанию
+show_calc()
+
+    # Запускаем главный цикл
+root.mainloop()
