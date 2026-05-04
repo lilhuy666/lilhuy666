@@ -1,29 +1,23 @@
 COLORS = {
-    # ── БАЗА ─────────────────────────────
-    "bg_dark":       "#0B0F1A",   # почти чёрный, но с синим тоном
-    "bg_panel":      "#111827",   # slate-900
-    "bg_card":       "#151B2E",   # мягче и глубже
+    "bg_dark":       "#0B0F1A",
+    "bg_panel":      "#111827",
+    "bg_card":       "#151B2E",
     "bg_input":      "#0E1424",
-    
-    # ── АКЦЕНТЫ ──────────────────────────
-    "accent":        "#22D3EE",   # modern cyan (tailwind cyan-400)
-    "accent2":       "#F97316",   # orange-500 (вместо кислотного)
-    "accent3":       "#34D399",   # emerald-400 (живой, но мягкий)
-    "accent_warn":   "#FBBF24",   # amber-400
-    
-    # ── ТЕКСТ ────────────────────────────
-    "text_primary":  "#E5E7EB",   # gray-200
-    "text_secondary":"#9CA3AF",   # gray-400
-    "text_dim":      "#6B7280",   # gray-500
-    
-    # ── ГРАНИЦЫ ──────────────────────────
-    "border":        "#1F2937",   # gray-800
+
+    "accent":        "#22D3EE",
+    "accent2":       "#F97316",
+    "accent3":       "#34D399",
+    "accent_warn":   "#FBBF24",
+
+    "text_primary":  "#E5E7EB",
+    "text_secondary":"#9CA3AF",
+    "text_dim":      "#6B7280",
+
+    "border":        "#1F2937",
     "border_bright": "#22D3EE",
-    
-    # ── СОСТОЯНИЯ ────────────────────────
-    "red":           "#F87171",   # red-400 (мягче)
-    "green":         "#4ADE80",   # green-400
-    
-    # ── СПЕЦ ─────────────────────────────
-    "gauge_bg":      "#0A1220",   # чуть глубже для контраста
+
+    "red":           "#F87171",
+    "green":         "#4ADE80",
+
+    "gauge_bg":      "#0A1220",
 }
