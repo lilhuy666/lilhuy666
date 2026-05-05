@@ -1,1183 +1,929 @@
+"""
+==============================================================
+  КАЛЬКУЛЯТОР РАСХОДА ТОПЛИВА ТРАНСПОРТНЫХ СРЕДСТВ
+  Дипломная работа
+==============================================================
+"""
+
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, colorchooser
+from tkinter import ttk, messagebox, simpledialog
 import json
 import os
-import datetime
-from PIL import Image, ImageTk, ImageFilter, ImageDraw
-import io
-import base64
+import hashlib
+import re
+from datetime import datetime
 
-# ─────────────────────────────────────────────
-#  Путь к файлу данных
-# ─────────────────────────────────────────────
-DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fuel_data.json")
+# ─────────────────────────────────────────────────────────────
+#  КОНФИГУРАЦИЯ И ДАННЫЕ
+# ─────────────────────────────────────────────────────────────
 
-# ─────────────────────────────────────────────
-#  Палитра
-# ─────────────────────────────────────────────
-C = {
-    "bg":          "#0F1923",
-    "surface":     "#162030",
-    "card":        "#1C2B3A",
-    "card2":       "#1A2535",
-    "accent":      "#00D4AA",
-    "accent2":     "#FF6B35",
-    "accent3":     "#4FC3F7",
-    "text":        "#E8F4FD",
-    "text_dim":    "#7A9BB5",
-    "border":      "#2A3F55",
-    "danger":      "#FF4757",
-    "success":     "#2ED573",
-    "warn":        "#FFA502",
-    "overlay":     "#0F192380",
-    "sidebar":     "#0C1520",
-    "header":      "#111E2D",
+DATA_FILE = "users_data.json"
+
+COLORS = {
+    "bg":         "#0f1117",
+    "panel":      "#1a1d27",
+    "card":       "#232736",
+    "accent":     "#4f8ef7",
+    "accent2":    "#7c5cfc",
+    "success":    "#3ecf8e",
+    "danger":     "#f75f5f",
+    "warning":    "#f7b731",
+    "text":       "#e8eaf0",
+    "subtext":    "#8a8fa8",
+    "border":     "#2e3248",
+    "input_bg":   "#161824",
+    "hover":      "#2a2f45",
 }
 
-FONT_H1   = ("Segoe UI", 22, "bold")
-FONT_H2   = ("Segoe UI", 16, "bold")
-FONT_H3   = ("Segoe UI", 13, "bold")
-FONT_BODY = ("Segoe UI", 11)
-FONT_SM   = ("Segoe UI", 9)
-FONT_MONO = ("Consolas", 11)
+FONTS = {
+    "title":    ("Segoe UI", 22, "bold"),
+    "heading":  ("Segoe UI", 14, "bold"),
+    "subhead":  ("Segoe UI", 11, "bold"),
+    "body":     ("Segoe UI", 10),
+    "small":    ("Segoe UI", 9),
+    "mono":     ("Consolas", 10),
+    "big":      ("Segoe UI", 32, "bold"),
+}
 
-# ─────────────────────────────────────────────
-#  Утилиты данных
-# ─────────────────────────────────────────────
+VEHICLE_TYPES = {
+    "Легковой автомобиль":       {"norm": 8.5,  "icon": "🚗"},
+    "Внедорожник / SUV":         {"norm": 11.0, "icon": "🚙"},
+    "Минивэн":                   {"norm": 10.5, "icon": "🚐"},
+    "Грузовик (малый)":          {"norm": 14.0, "icon": "🚚"},
+    "Грузовик (большой/фура)":   {"norm": 28.0, "icon": "🚛"},
+    "Автобус":                   {"norm": 20.0, "icon": "🚌"},
+    "Мотоцикл":                  {"norm": 5.0,  "icon": "🏍️"},
+    "Спецтехника":               {"norm": 25.0, "icon": "🚜"},
+}
 
-def load_data():
+FUEL_TYPES = ["АИ-92", "АИ-95", "АИ-98", "ДТ (Дизель)", "Газ (LPG)", "Газ (CNG)"]
+
+ROAD_CONDITIONS = {
+    "Трасса (ровная)":      1.0,
+    "Смешанный режим":      1.15,
+    "Городской цикл":       1.30,
+    "Горная дорога":        1.40,
+    "Бездорожье / грунт":   1.55,
+}
+
+SEASON_FACTORS = {
+    "Лето":         1.0,
+    "Весна / Осень": 1.05,
+    "Зима":         1.18,
+}
+
+LOAD_FACTORS = {
+    "Пустой (без груза)":   0.90,
+    "Лёгкая загрузка":      1.0,
+    "Средняя загрузка":     1.12,
+    "Полная загрузка":      1.25,
+    "Сверхнагрузка":        1.40,
+}
+
+
+# ─────────────────────────────────────────────────────────────
+#  УТИЛИТЫ
+# ─────────────────────────────────────────────────────────────
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def load_data() -> dict:
     if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"vehicles": [], "history": [], "profile": {"name": "", "email": ""}, "settings": {"bg_image": "", "bg_color": C["bg"]}}
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"users": {}}
 
-def save_data(data):
-    try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print("Ошибка сохранения:", e)
+def save_data(data: dict):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ─────────────────────────────────────────────
-#  Кастомные виджеты
-# ─────────────────────────────────────────────
+def is_valid_email(email: str) -> bool:
+    return bool(re.match(r"^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$", email))
 
-class RoundedFrame(tk.Canvas):
-    def __init__(self, parent, width, height, radius=16, bg=C["card"], border_color=C["border"], **kwargs):
-        super().__init__(parent, width=width, height=height,
-                         bg=parent.cget("bg") if hasattr(parent, "cget") else C["bg"],
-                         highlightthickness=0, **kwargs)
-        self._bg = bg
-        self._radius = radius
-        self._border = border_color
-        self._w = width
-        self._h = height
-        self._draw()
-        self.bind("<Configure>", self._on_resize)
-
-    def _draw(self):
-        self.delete("all")
-        r = self._radius
-        w, h = self._w, self._h
-        self.create_rounded_rect(2, 2, w-2, h-2, r, fill=self._bg, outline=self._border, width=1)
-
-    def create_rounded_rect(self, x1, y1, x2, y2, r, **kw):
-        pts = [
-            x1+r, y1,   x2-r, y1,
-            x2, y1,     x2, y1+r,
-            x2, y2-r,   x2, y2,
-            x2-r, y2,   x1+r, y2,
-            x1, y2,     x1, y2-r,
-            x1, y1+r,   x1, y1,
-        ]
-        return self.create_polygon(pts, smooth=True, **kw)
-
-    def _on_resize(self, e):
-        self._w, self._h = e.width, e.height
-        self._draw()
+def is_valid_password(password: str) -> bool:
+    return len(password) == 6 and password.isdigit()
 
 
-class GlowButton(tk.Frame):
-    def __init__(self, parent, text, command=None, color=C["accent"], width=160, height=42, icon="", **kwargs):
-        super().__init__(parent, bg=parent.cget("bg") if hasattr(parent, "cget") else C["bg"],
-                         highlightthickness=0, **kwargs)
-        self._color = color
-        self._cmd = command
-        self._hovered = False
+# ─────────────────────────────────────────────────────────────
+#  ВИДЖЕТЫ-ПОМОЩНИКИ
+# ─────────────────────────────────────────────────────────────
 
-        self.canvas = tk.Canvas(self, width=width, height=height, bg=self["bg"],
-                                highlightthickness=0, cursor="hand2")
-        self.canvas.pack()
-        self._w, self._h = width, height
-        self._text = (icon + "  " + text) if icon else text
-        self._draw(False)
+def styled_button(parent, text, command, color=None, width=20, **kwargs):
+    color = color or COLORS["accent"]
+    btn = tk.Button(
+        parent, text=text, command=command,
+        bg=color, fg=COLORS["text"],
+        font=FONTS["subhead"],
+        relief="flat", cursor="hand2",
+        width=width, pady=8,
+        activebackground=COLORS["hover"],
+        activeforeground=COLORS["text"],
+        **kwargs
+    )
+    btn.bind("<Enter>", lambda e: btn.config(bg=_lighten(color)))
+    btn.bind("<Leave>", lambda e: btn.config(bg=color))
+    return btn
 
-        self.canvas.bind("<Enter>", lambda e: self._draw(True))
-        self.canvas.bind("<Leave>", lambda e: self._draw(False))
-        self.canvas.bind("<Button-1>", lambda e: self._click())
-        self.canvas.bind("<ButtonRelease-1>", lambda e: self._draw(True))
+def _lighten(hex_color: str) -> str:
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    r, g, b = min(255, r + 30), min(255, g + 30), min(255, b + 30)
+    return f"#{r:02x}{g:02x}{b:02x}"
 
-    def _draw(self, hover):
-        self.canvas.delete("all")
-        w, h = self._w, self._h
-        r = h // 2
-        color = self._color
-        if hover:
-            self.canvas.create_rounded_rect = lambda *a, **k: None
-            # glow shadow
-            for i in range(6, 0, -1):
-                alpha_color = self._lighten(color, i * 8)
-                self._rounded_rect(self.canvas, i, i, w-i, h-i, r-i+6,
-                                   fill="", outline=alpha_color, width=1)
-            self._rounded_rect(self.canvas, 0, 0, w, h, r, fill=color, outline="")
-        else:
-            dark = self._darken(color, 40)
-            self._rounded_rect(self.canvas, 0, 0, w, h, r, fill=dark, outline=color, width=1.5)
-        txt_color = C["bg"] if hover else color
-        self.canvas.create_text(w//2, h//2, text=self._text, fill=txt_color,
-                                font=("Segoe UI", 10, "bold"), anchor="center")
+def labeled_entry(parent, label_text, show=None, width=30):
+    frame = tk.Frame(parent, bg=COLORS["panel"])
+    tk.Label(frame, text=label_text, bg=COLORS["panel"],
+             fg=COLORS["subtext"], font=FONTS["small"]).pack(anchor="w")
+    entry = tk.Entry(frame, show=show, width=width,
+                     bg=COLORS["input_bg"], fg=COLORS["text"],
+                     insertbackground=COLORS["text"],
+                     relief="flat", font=FONTS["body"],
+                     highlightthickness=1,
+                     highlightbackground=COLORS["border"],
+                     highlightcolor=COLORS["accent"])
+    entry.pack(fill="x", pady=(2, 0))
+    return frame, entry
 
-    def _rounded_rect(self, canvas, x1, y1, x2, y2, r, **kw):
-        pts = [
-            x1+r, y1,   x2-r, y1,
-            x2, y1,     x2, y1+r,
-            x2, y2-r,   x2, y2,
-            x2-r, y2,   x1+r, y2,
-            x1, y2,     x1, y2-r,
-            x1, y1+r,   x1, y1,
-        ]
-        return canvas.create_polygon(pts, smooth=True, **kw)
+def section_label(parent, text):
+    tk.Label(parent, text=text, bg=COLORS["bg"],
+             fg=COLORS["subtext"], font=FONTS["small"]).pack(anchor="w", padx=6)
 
-    def _lighten(self, hex_color, amount):
-        hex_color = hex_color.lstrip("#")
-        r, g, b = int(hex_color[:2], 16), int(hex_color[2:4], 16), int(hex_color[4:], 16)
-        return "#{:02x}{:02x}{:02x}".format(min(255,r+amount), min(255,g+amount), min(255,b+amount))
-
-    def _darken(self, hex_color, amount):
-        hex_color = hex_color.lstrip("#")
-        r, g, b = int(hex_color[:2], 16), int(hex_color[2:4], 16), int(hex_color[4:], 16)
-        return "#{:02x}{:02x}{:02x}".format(max(0,r-amount), max(0,g-amount), max(0,b-amount))
-
-    def _click(self):
-        self._draw(False)
-        if self._cmd:
-            self._cmd()
+def card_frame(parent, **kwargs):
+    return tk.Frame(parent, bg=COLORS["card"],
+                    highlightthickness=1,
+                    highlightbackground=COLORS["border"],
+                    **kwargs)
 
 
-class StyledEntry(tk.Frame):
-    def __init__(self, parent, placeholder="", width=220, **kwargs):
-        bg = parent.cget("bg") if hasattr(parent, "cget") else C["bg"]
-        super().__init__(parent, bg=bg, highlightthickness=0)
-        self._placeholder = placeholder
-        self._ph_active = True
+# ─────────────────────────────────────────────────────────────
+#  ГЛАВНОЕ ПРИЛОЖЕНИЕ
+# ─────────────────────────────────────────────────────────────
 
-        self.entry = tk.Entry(self, bg=C["card2"], fg=C["text_dim"],
-                              insertbackground=C["accent"], relief="flat",
-                              font=FONT_BODY, width=int(width/8),
-                              highlightthickness=1, highlightbackground=C["border"],
-                              highlightcolor=C["accent"])
-        self.entry.pack(ipady=8, ipadx=10, fill="x")
-        self.entry.insert(0, placeholder)
-        self.entry.bind("<FocusIn>", self._on_focus_in)
-        self.entry.bind("<FocusOut>", self._on_focus_out)
-
-    def _on_focus_in(self, e):
-        if self._ph_active:
-            self.entry.delete(0, "end")
-            self.entry.config(fg=C["text"])
-            self._ph_active = False
-
-    def _on_focus_out(self, e):
-        if not self.entry.get():
-            self.entry.insert(0, self._placeholder)
-            self.entry.config(fg=C["text_dim"])
-            self._ph_active = True
-
-    def get(self):
-        if self._ph_active:
-            return ""
-        return self.entry.get()
-
-    def set(self, val):
-        self.entry.delete(0, "end")
-        if val:
-            self.entry.insert(0, val)
-            self.entry.config(fg=C["text"])
-            self._ph_active = False
-        else:
-            self.entry.insert(0, self._placeholder)
-            self.entry.config(fg=C["text_dim"])
-            self._ph_active = True
-
-
-class Label(tk.Label):
-    def __init__(self, parent, text="", style="body", color=None, **kwargs):
-        fonts = {"h1": FONT_H1, "h2": FONT_H2, "h3": FONT_H3, "body": FONT_BODY, "sm": FONT_SM, "mono": FONT_MONO}
-        colors = {"h1": C["text"], "h2": C["text"], "h3": C["accent"], "body": C["text"], "sm": C["text_dim"], "mono": C["accent"]}
-        bg = parent.cget("bg") if hasattr(parent, "cget") else C["bg"]
-        super().__init__(parent, text=text, font=fonts.get(style, FONT_BODY),
-                         fg=color or colors.get(style, C["text"]),
-                         bg=bg, **kwargs)
-
-
-# ─────────────────────────────────────────────
-#  Главное приложение
-# ─────────────────────────────────────────────
-
-class FuelApp(tk.Tk):
+class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("⛽ FuelTrack Pro")
-        self.geometry("1100x720")
-        self.minsize(900, 600)
-        self.configure(bg=C["bg"])
+        self.title("Калькулятор расхода топлива")
+        self.geometry("1000x680")
+        self.minsize(900, 620)
+        self.configure(bg=COLORS["bg"])
+        self.resizable(True, True)
 
         self.data = load_data()
-        self._bg_image = None
-        self._bg_photo = None
-        self._sidebar_open = False
-        self._current_page = "calculator"
-        self._anim_offset = tk.IntVar(value=-260)
+        self.current_user = None           # email текущего пользователя
+        self.history = []                  # история расчётов сессии
 
-        self._build_ui()
-        self._load_bg()
-        self._show_page("calculator")
+        self._center_window()
+        self.show_auth_screen()
 
-        self.bind("<Configure>", self._on_resize)
+    def _center_window(self):
+        self.update_idletasks()
+        w, h = 1000, 680
+        x = (self.winfo_screenwidth() - w) // 2
+        y = (self.winfo_screenheight() - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
-    # ── Построение интерфейса ──────────────────
+    # ── очистка экрана ──────────────────────────────────────
+    def clear(self):
+        for w in self.winfo_children():
+            w.destroy()
 
-    def _build_ui(self):
-        # Фоновый canvas
-        self.bg_canvas = tk.Canvas(self, highlightthickness=0, bg=C["bg"])
-        self.bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+    # ══════════════════════════════════════════════════════════
+    #  ЭКРАН АВТОРИЗАЦИИ / РЕГИСТРАЦИИ
+    # ══════════════════════════════════════════════════════════
 
-        # Оверлей (затемнение при открытом сайдбаре)
-        self.overlay = tk.Frame(self, bg="#0F1923", cursor="arrow")
-        self.overlay.bind("<Button-1>", lambda e: self._close_sidebar())
+    def show_auth_screen(self, mode="login"):
+        self.clear()
+        self.title("Калькулятор расхода топлива — Вход")
 
-        # ── Header ──
-        self.header = tk.Frame(self, bg=C["header"], height=58)
-        self.header.pack(fill="x", side="top")
-        self.header.pack_propagate(False)
+        # Левая декоративная панель
+        left = tk.Frame(self, bg=COLORS["accent2"], width=340)
+        left.pack(side="left", fill="y")
+        left.pack_propagate(False)
 
-        # Бургер
-        self.burger_btn = tk.Button(self.header, text="☰", font=("Segoe UI", 18),
-                                    bg=C["header"], fg=C["accent"], relief="flat",
-                                    activebackground=C["surface"], activeforeground=C["accent"],
-                                    cursor="hand2", padx=14, command=self._toggle_sidebar)
-        self.burger_btn.pack(side="left", pady=4)
+        tk.Label(left, text="⛽", font=("Segoe UI Emoji", 52),
+                 bg=COLORS["accent2"], fg=COLORS["text"]).pack(pady=(80, 10))
+        tk.Label(left, text="Калькулятор\nрасхода топлива",
+                 font=FONTS["title"], bg=COLORS["accent2"],
+                 fg=COLORS["text"], justify="center").pack()
+        tk.Label(left, text="Дипломная работа",
+                 font=FONTS["small"], bg=COLORS["accent2"],
+                 fg="#d0c8ff").pack(pady=(6, 0))
 
-        # Заголовок
-        self.title_label = tk.Label(self.header, text="⛽  FuelTrack Pro",
-                                    font=("Segoe UI", 15, "bold"), bg=C["header"], fg=C["accent"])
-        self.title_label.pack(side="left", padx=8)
+        # Правая форма
+        right = tk.Frame(self, bg=COLORS["panel"])
+        right.pack(side="left", fill="both", expand=True)
 
-        # Кнопка настроек
-        self.settings_btn = tk.Button(self.header, text="⚙", font=("Segoe UI", 17),
-                                      bg=C["header"], fg=C["text_dim"], relief="flat",
-                                      activebackground=C["surface"], activeforeground=C["accent"],
-                                      cursor="hand2", padx=14, command=self._open_settings)
-        self.settings_btn.pack(side="right", pady=4)
+        form = tk.Frame(right, bg=COLORS["panel"])
+        form.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Индикатор страницы
-        self.page_label = tk.Label(self.header, text="Калькулятор",
-                                   font=("Segoe UI", 10), bg=C["header"], fg=C["text_dim"])
-        self.page_label.pack(side="right", padx=4)
+        if mode == "login":
+            tk.Label(form, text="Войти в аккаунт", font=FONTS["heading"],
+                     bg=COLORS["panel"], fg=COLORS["text"]).pack(pady=(0, 20))
 
-        # ── Sidebar ──
-        self.sidebar = tk.Frame(self, bg=C["sidebar"], width=260)
-        self.sidebar.place(x=-260, y=58, relheight=1, height=-58, width=260)
-        self._build_sidebar()
+            _, self.e_email = labeled_entry(form, "Электронная почта")
+            self.e_email.master.pack(fill="x", pady=6)
 
-        # ── Контент ──
-        self.content = tk.Frame(self, bg=C["bg"])
-        self.content.pack(fill="both", expand=True)
+            _, self.e_pass = labeled_entry(form, "Пароль (6 цифр)", show="●")
+            self.e_pass.master.pack(fill="x", pady=6)
 
-        # Страницы
-        self.pages = {}
-        for name, cls in [("calculator", CalcPage), ("profile", ProfilePage),
-                          ("history", HistoryPage), ("about", AboutPage)]:
-            frame = cls(self.content, self)
-            frame.place(relx=0, rely=0, relwidth=1, relheight=1)
-            self.pages[name] = frame
+            styled_button(form, "🔐  Войти", self._do_login,
+                          color=COLORS["accent"]).pack(fill="x", pady=(16, 6))
+            styled_button(form, "📝  Регистрация",
+                          lambda: self.show_auth_screen("register"),
+                          color=COLORS["card"]).pack(fill="x")
 
-    def _build_sidebar(self):
-        # Шапка sidebar
-        header = tk.Frame(self.sidebar, bg=C["sidebar"], height=70)
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        tk.Label(header, text="⛽ FuelTrack", font=("Segoe UI", 14, "bold"),
-                 bg=C["sidebar"], fg=C["accent"]).pack(side="left", padx=20, pady=20)
-
-        sep = tk.Frame(self.sidebar, bg=C["border"], height=1)
-        sep.pack(fill="x", padx=16)
-
-        # Пункты меню
-        menu_items = [
-            ("calculator", "🧮", "Калькулятор"),
-            ("profile",    "🚗", "Профиль & Авто"),
-            ("history",    "📋", "История"),
-            ("about",      "ℹ️",  "О приложении"),
-        ]
-        self._menu_buttons = {}
-        for page, icon, label in menu_items:
-            btn = self._sidebar_item(self.sidebar, icon, label, page)
-            self._menu_buttons[page] = btn
-
-        # Нижняя часть
-        bottom = tk.Frame(self.sidebar, bg=C["sidebar"])
-        bottom.pack(side="bottom", fill="x", pady=20)
-        tk.Frame(bottom, bg=C["border"], height=1).pack(fill="x", padx=16, pady=(0,12))
-        tk.Label(bottom, text="v1.0  •  by Тарасов К.А.", font=FONT_SM,
-                 bg=C["sidebar"], fg=C["text_dim"]).pack(padx=20)
-
-    def _sidebar_item(self, parent, icon, label, page):
-        frame = tk.Frame(parent, bg=C["sidebar"], cursor="hand2")
-        frame.pack(fill="x", pady=2, padx=10)
-
-        inner = tk.Frame(frame, bg=C["sidebar"])
-        inner.pack(fill="x")
-
-        icon_l = tk.Label(inner, text=icon, font=("Segoe UI", 14), bg=C["sidebar"], fg=C["text_dim"], width=3)
-        icon_l.pack(side="left", padx=(10,6), pady=10)
-        text_l = tk.Label(inner, text=label, font=("Segoe UI", 11), bg=C["sidebar"], fg=C["text_dim"], anchor="w")
-        text_l.pack(side="left", fill="x", expand=True)
-
-        accent_bar = tk.Frame(inner, bg=C["sidebar"], width=3)
-        accent_bar.pack(side="right", fill="y")
-
-        def on_enter(e):
-            if self._current_page != page:
-                for w in [inner, icon_l, text_l]: w.config(bg=C["surface"])
-        def on_leave(e):
-            if self._current_page != page:
-                for w in [inner, icon_l, text_l]: w.config(bg=C["sidebar"])
-        def on_click(e):
-            self._show_page(page)
-            self._close_sidebar()
-
-        for w in [frame, inner, icon_l, text_l]:
-            w.bind("<Enter>", on_enter)
-            w.bind("<Leave>", on_leave)
-            w.bind("<Button-1>", on_click)
-
-        return (inner, icon_l, text_l, accent_bar)
-
-    # ── Навигация ──────────────────────────────
-
-    def _show_page(self, name):
-        # Сброс стиля предыдущего
-        if self._current_page in self._menu_buttons:
-            inner, icon_l, text_l, bar = self._menu_buttons[self._current_page]
-            for w in [inner, icon_l, text_l]: w.config(bg=C["sidebar"])
-            bar.config(bg=C["sidebar"])
-
-        self._current_page = name
-        # Активный стиль
-        if name in self._menu_buttons:
-            inner, icon_l, text_l, bar = self._menu_buttons[name]
-            for w in [inner, icon_l, text_l]: w.config(bg=C["card"])
-            icon_l.config(fg=C["accent"])
-            text_l.config(fg=C["text"])
-            bar.config(bg=C["accent"])
-
-        labels = {"calculator": "Калькулятор", "profile": "Профиль & Авто",
-                  "history": "История", "about": "О приложении"}
-        self.page_label.config(text=labels.get(name, ""))
-
-        for n, frame in self.pages.items():
-            if n == name:
-                frame.lift()
-                if hasattr(frame, "refresh"):
-                    frame.refresh()
-            else:
-                frame.lower()
-
-    def _toggle_sidebar(self):
-        if self._sidebar_open:
-            self._close_sidebar()
         else:
-            self._open_sidebar()
+            tk.Label(form, text="Создать аккаунт", font=FONTS["heading"],
+                     bg=COLORS["panel"], fg=COLORS["text"]).pack(pady=(0, 20))
 
-    def _open_sidebar(self):
-        self._sidebar_open = True
-        self.overlay.place(x=0, y=58, relwidth=1, relheight=1)
-        self.overlay.lift()
-        self.sidebar.lift()
-        self._animate_sidebar(target=0)
+            _, self.e_email = labeled_entry(form, "Электронная почта")
+            self.e_email.master.pack(fill="x", pady=6)
 
-    def _close_sidebar(self):
-        self._sidebar_open = False
-        self._animate_sidebar(target=-260, on_done=lambda: self.overlay.place_forget())
+            _, self.e_pass = labeled_entry(form, "Пароль (ровно 6 цифр)", show="●")
+            self.e_pass.master.pack(fill="x", pady=6)
 
-    def _animate_sidebar(self, target, step=20, on_done=None):
-        cur = int(self.sidebar.place_info().get("x", -260))
-        if cur == target:
-            if on_done: on_done()
+            _, self.e_pass2 = labeled_entry(form, "Повторите пароль", show="●")
+            self.e_pass2.master.pack(fill="x", pady=6)
+
+            tk.Label(form, text="⚠  Пароль должен состоять из 6 цифр",
+                     bg=COLORS["panel"], fg=COLORS["warning"],
+                     font=FONTS["small"]).pack(anchor="w", pady=(0, 6))
+
+            styled_button(form, "✅  Зарегистрироваться", self._do_register,
+                          color=COLORS["success"]).pack(fill="x", pady=(10, 6))
+            styled_button(form, "← Уже есть аккаунт",
+                          lambda: self.show_auth_screen("login"),
+                          color=COLORS["card"]).pack(fill="x")
+
+    # ── Вход ──────────────────────────────────────────────────
+    def _do_login(self):
+        email = self.e_email.get().strip().lower()
+        password = self.e_pass.get().strip()
+
+        if not is_valid_email(email):
+            messagebox.showerror("Ошибка", "Введите корректный e-mail.")
             return
-        new = cur + step if cur < target else cur - step
-        if (step > 0 and new >= target) or (step < 0 and new <= target):
-            new = target
-        self.sidebar.place_configure(x=new)
-        self.after(12, lambda: self._animate_sidebar(target, step, on_done))
+        if not is_valid_password(password):
+            messagebox.showerror("Ошибка", "Пароль — 6 цифр.")
+            return
 
-    # ── Фон ───────────────────────────────────
+        users = self.data.get("users", {})
+        if email not in users:
+            messagebox.showerror("Ошибка", "Пользователь не найден.")
+            return
+        if users[email]["password"] != hash_password(password):
+            messagebox.showerror("Ошибка", "Неверный пароль.")
+            return
 
-    def _load_bg(self):
-        path = self.data["settings"].get("bg_image", "")
-        if path and os.path.exists(path):
-            self._apply_bg_image(path)
+        self.current_user = email
+        self.show_main_screen()
 
-    def _apply_bg_image(self, path):
-        try:
-            img = Image.open(path)
-            w, h = self.winfo_width() or 1100, self.winfo_height() or 720
-            img = img.resize((w, h), Image.LANCZOS)
-            # Затемнение
-            overlay = Image.new("RGBA", img.size, (15, 25, 35, 180))
-            if img.mode != "RGBA":
-                img = img.convert("RGBA")
-            img = Image.alpha_composite(img, overlay)
-            self._bg_photo = ImageTk.PhotoImage(img)
-            self.bg_canvas.delete("all")
-            self.bg_canvas.create_image(0, 0, anchor="nw", image=self._bg_photo)
-            self._bg_image = path
-        except Exception as e:
-            print("Ошибка загрузки фона:", e)
+    # ── Регистрация ───────────────────────────────────────────
+    def _do_register(self):
+        email = self.e_email.get().strip().lower()
+        password = self.e_pass.get().strip()
+        password2 = self.e_pass2.get().strip()
 
-    def _on_resize(self, e):
-        if self._bg_image:
-            self._apply_bg_image(self._bg_image)
+        if not is_valid_email(email):
+            messagebox.showerror("Ошибка", "Введите корректный e-mail.")
+            return
+        if not is_valid_password(password):
+            messagebox.showerror("Ошибка", "Пароль должен состоять ровно из 6 цифр.")
+            return
+        if password != password2:
+            messagebox.showerror("Ошибка", "Пароли не совпадают.")
+            return
+        if email in self.data.get("users", {}):
+            messagebox.showerror("Ошибка", "Этот e-mail уже зарегистрирован.")
+            return
 
-    # ── Настройки ─────────────────────────────
-
-    def _open_settings(self):
-        win = tk.Toplevel(self)
-        win.title("Настройки")
-        win.geometry("420x340")
-        win.configure(bg=C["bg"])
-        win.resizable(False, False)
-        win.grab_set()
-
-        tk.Label(win, text="⚙  Настройки", font=FONT_H2, bg=C["bg"], fg=C["accent"]).pack(pady=(20,4))
-        tk.Frame(win, bg=C["border"], height=1).pack(fill="x", padx=24, pady=8)
-
-        # Фон — изображение
-        frm = tk.Frame(win, bg=C["surface"], padx=20, pady=16)
-        frm.pack(fill="x", padx=24, pady=6)
-        tk.Label(frm, text="🖼  Фоновое изображение", font=FONT_H3, bg=C["surface"], fg=C["text"]).pack(anchor="w")
-        tk.Label(frm, text="Выберите изображение для фона приложения", font=FONT_SM, bg=C["surface"], fg=C["text_dim"]).pack(anchor="w", pady=(2,10))
-
-        path_var = tk.StringVar(value=self.data["settings"].get("bg_image", "") or "Не выбрано")
-        path_lbl = tk.Label(frm, textvariable=path_var, font=("Consolas",9), bg=C["card2"],
-                            fg=C["text_dim"], padx=8, pady=4, wraplength=300, anchor="w")
-        path_lbl.pack(fill="x", pady=(0,8))
-
-        def pick_image():
-            fp = filedialog.askopenfilename(
-                title="Выберите изображение",
-                filetypes=[("Изображения", "*.png *.jpg *.jpeg *.bmp *.gif *.webp"), ("Все файлы", "*.*")])
-            if fp:
-                path_var.set(fp)
-                self.data["settings"]["bg_image"] = fp
-                save_data(self.data)
-                self._apply_bg_image(fp)
-
-        def clear_image():
-            path_var.set("Не выбрано")
-            self.data["settings"]["bg_image"] = ""
-            save_data(self.data)
-            self._bg_image = None
-            self.bg_canvas.delete("all")
-
-        btn_row = tk.Frame(frm, bg=C["surface"])
-        btn_row.pack(fill="x")
-        GlowButton(btn_row, "Выбрать файл", pick_image, C["accent"], 170, 36, "📂").pack(side="left", padx=(0,8))
-        GlowButton(btn_row, "Сбросить", clear_image, C["danger"], 120, 36, "✕").pack(side="left")
-
-        tk.Frame(win, bg=C["border"], height=1).pack(fill="x", padx=24, pady=10)
-        GlowButton(win, "Закрыть", win.destroy, C["accent"], 140, 38).pack(pady=4)
-
-    def refresh_pages(self):
-        for frame in self.pages.values():
-            if hasattr(frame, "refresh"):
-                frame.refresh()
+        self.data.setdefault("users", {})[email] = {
+            "password": hash_password(password),
+            "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "calculations": [],
+            "settings": {
+                "fuel_price": 55.0,
+                "default_vehicle": "Легковой автомобиль",
+                "default_fuel": "АИ-95",
+                "currency": "₽",
+            }
+        }
+        save_data(self.data)
+        messagebox.showinfo("Успех", f"Аккаунт создан!\nДобро пожаловать, {email}")
+        self.current_user = email
+        self.show_main_screen()
 
 
-# ─────────────────────────────────────────────
-#  Страница: КАЛЬКУЛЯТОР
-# ─────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════
+    #  ГЛАВНЫЙ ЭКРАН (sidebar + content)
+    # ══════════════════════════════════════════════════════════
 
-class CalcPage(tk.Frame):
-    def __init__(self, parent, app):
-        super().__init__(parent, bg=C["bg"])
-        self.app = app
-        self._build()
+    def show_main_screen(self):
+        self.clear()
+        self.title("Калькулятор расхода топлива")
 
-    def _build(self):
-        # Скролл
-        canvas = tk.Canvas(self, bg=C["bg"], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        self.scroll_frame = tk.Frame(canvas, bg=C["bg"])
-        self.scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+        # ── Sidebar ─────────────────────────────────────────
+        sidebar = tk.Frame(self, bg=COLORS["panel"], width=210)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
 
-        wrap = self.scroll_frame
-        pad = tk.Frame(wrap, bg=C["bg"])
-        pad.pack(fill="both", expand=True, padx=36, pady=24)
+        tk.Label(sidebar, text="⛽", font=("Segoe UI Emoji", 30),
+                 bg=COLORS["panel"], fg=COLORS["accent"]).pack(pady=(24, 4))
+        tk.Label(sidebar, text="ТопливоКалк",
+                 font=FONTS["subhead"], bg=COLORS["panel"],
+                 fg=COLORS["text"]).pack()
+        tk.Label(sidebar, text=self.current_user,
+                 font=FONTS["small"], bg=COLORS["panel"],
+                 fg=COLORS["subtext"], wraplength=190).pack(pady=(2, 20))
+
+        tk.Frame(sidebar, bg=COLORS["border"], height=1).pack(fill="x", padx=16)
+
+        self.content = tk.Frame(self, bg=COLORS["bg"])
+        self.content.pack(side="left", fill="both", expand=True)
+
+        nav_items = [
+            ("🧮  Калькулятор",   self.show_calculator),
+            ("📋  История",       self.show_history),
+            ("👤  Профиль",       self.show_profile),
+            ("⚙️   Настройки",    self.show_settings),
+        ]
+        for label, cmd in nav_items:
+            btn = tk.Button(
+                sidebar, text=label, command=cmd,
+                bg=COLORS["panel"], fg=COLORS["text"],
+                font=FONTS["body"], relief="flat",
+                cursor="hand2", anchor="w", padx=20, pady=10,
+                activebackground=COLORS["hover"],
+                activeforeground=COLORS["accent"],
+            )
+            btn.pack(fill="x")
+            btn.bind("<Enter>", lambda e, b=btn: b.config(bg=COLORS["hover"]))
+            btn.bind("<Leave>", lambda e, b=btn: b.config(bg=COLORS["panel"]))
+
+        tk.Frame(sidebar, bg=COLORS["border"], height=1).pack(fill="x", padx=16, pady=10)
+
+        logout_btn = tk.Button(
+            sidebar, text="🚪  Выйти", command=self._logout,
+            bg=COLORS["panel"], fg=COLORS["danger"],
+            font=FONTS["body"], relief="flat", cursor="hand2",
+            anchor="w", padx=20, pady=10,
+            activebackground=COLORS["hover"],
+        )
+        logout_btn.pack(fill="x", side="bottom", pady=(0, 20))
+
+        self.show_calculator()
+
+    def _logout(self):
+        self.current_user = None
+        self.history = []
+        self.show_auth_screen()
+
+    def _clear_content(self):
+        for w in self.content.winfo_children():
+            w.destroy()
+
+    # ══════════════════════════════════════════════════════════
+    #  КАЛЬКУЛЯТОР
+    # ══════════════════════════════════════════════════════════
+
+    def show_calculator(self):
+        self._clear_content()
+        user = self.data["users"][self.current_user]
+        settings = user.get("settings", {})
 
         # Заголовок
-        hdr = tk.Frame(pad, bg=C["bg"])
-        hdr.pack(fill="x", pady=(0,20))
-        tk.Label(hdr, text="🧮", font=("Segoe UI", 32), bg=C["bg"], fg=C["accent"]).pack(side="left", padx=(0,14))
-        col = tk.Frame(hdr, bg=C["bg"])
-        col.pack(side="left")
-        tk.Label(col, text="Калькулятор расхода топлива", font=FONT_H1, bg=C["bg"], fg=C["text"]).pack(anchor="w")
-        tk.Label(col, text="Точный расчёт затрат и расхода для любого маршрута", font=FONT_BODY, bg=C["bg"], fg=C["text_dim"]).pack(anchor="w")
+        hdr = tk.Frame(self.content, bg=COLORS["bg"])
+        hdr.pack(fill="x", padx=28, pady=(22, 10))
+        tk.Label(hdr, text="🧮  Калькулятор расхода топлива",
+                 font=FONTS["heading"], bg=COLORS["bg"],
+                 fg=COLORS["text"]).pack(side="left")
 
-        # Выбор авто
-        car_card = self._card(pad, "🚗  Транспортное средство")
-        self._car_var = tk.StringVar(value="— Без привязки к авто —")
-        self._car_combo = ttk.Combobox(car_card, textvariable=self._car_var,
-                                       font=FONT_BODY, state="readonly", width=40)
-        self._style_combo()
-        self._car_combo.pack(anchor="w", pady=(0,4))
-        tk.Label(car_card, text="Выберите авто из профиля или введите данные вручную",
-                 font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(anchor="w")
-        self._car_combo.bind("<<ComboboxSelected>>", self._on_car_select)
+        # Прокручиваемая область
+        canvas = tk.Canvas(self.content, bg=COLORS["bg"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.content, orient="vertical",
+                                  command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg=COLORS["bg"])
 
-        # Две колонки ввода
-        row = tk.Frame(pad, bg=C["bg"])
-        row.pack(fill="x", pady=(0,10))
+        scroll_frame.bind("<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-        # Левая колонка
-        left = tk.Frame(row, bg=C["bg"])
-        left.pack(side="left", fill="both", expand=True, padx=(0,8))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-        lcard = self._card(left, "📏  Расстояние и топливо")
-        self._dist_entry = self._field(lcard, "Расстояние (км)", "Например: 350")
-        self._consumption_entry = self._field(lcard, "Расход топлива (л/100 км)", "Например: 8.5")
-        self._price_entry = self._field(lcard, "Цена топлива (руб/л)", "Например: 58.50")
+        canvas.pack(side="left", fill="both", expand=True, padx=(28, 0))
+        scrollbar.pack(side="right", fill="y", padx=(0, 8))
 
-        # Правая колонка
-        right = tk.Frame(row, bg=C["bg"])
-        right.pack(side="left", fill="both", expand=True, padx=(8,0))
+        # ── Форма ────────────────────────────────────────────
+        row1 = tk.Frame(scroll_frame, bg=COLORS["bg"])
+        row1.pack(fill="x", pady=6)
 
-        rcard = self._card(right, "⚙️  Параметры расчёта")
-        self._fuel_type_var = tk.StringVar(value="АИ-95")
-        tk.Label(rcard, text="Тип топлива", font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(anchor="w", pady=(0,4))
-        fuel_combo = ttk.Combobox(rcard, textvariable=self._fuel_type_var,
-                                  values=["АИ-92", "АИ-95", "АИ-98", "Дизель", "Газ (LPG)", "Электро"],
-                                  font=FONT_BODY, state="readonly", width=22)
-        fuel_combo.pack(anchor="w", pady=(0,10))
+        # Тип ТС
+        col1 = card_frame(row1)
+        col1.pack(side="left", fill="both", expand=True, padx=(0, 8))
+        tk.Label(col1, text="Тип транспортного средства",
+                 font=FONTS["subhead"], bg=COLORS["card"],
+                 fg=COLORS["text"]).pack(anchor="w", padx=12, pady=(10, 4))
+        self.var_vehicle = tk.StringVar(
+            value=settings.get("default_vehicle", "Легковой автомобиль"))
+        for vtype, info in VEHICLE_TYPES.items():
+            rb = tk.Radiobutton(
+                col1, text=f"{info['icon']}  {vtype}",
+                variable=self.var_vehicle, value=vtype,
+                bg=COLORS["card"], fg=COLORS["text"],
+                selectcolor=COLORS["accent2"],
+                activebackground=COLORS["card"],
+                font=FONTS["body"], cursor="hand2",
+                command=self._update_norm,
+            )
+            rb.pack(anchor="w", padx=16, pady=1)
+        tk.Frame(col1, bg=COLORS["bg"], height=8).pack()
 
-        self._passengers_entry = self._field(rcard, "Пассажиры (чел.)", "1")
-        self._route_entry = self._field(rcard, "Название маршрута", "Например: Москва → Тула")
-        self._note_entry = self._field(rcard, "Заметка", "Необязательно")
+        # Маршрут и параметры
+        col2 = tk.Frame(row1, bg=COLORS["bg"])
+        col2.pack(side="left", fill="both", expand=True)
 
-        # Кнопки
-        btn_row = tk.Frame(pad, bg=C["bg"])
-        btn_row.pack(fill="x", pady=(6,16))
-        GlowButton(btn_row, "Рассчитать", self._calculate, C["accent"], 180, 44, "⚡").pack(side="left", padx=(0,12))
-        GlowButton(btn_row, "Очистить", self._clear, C["text_dim"], 140, 44, "🗑").pack(side="left")
+        # Расстояние
+        dist_card = card_frame(col2)
+        dist_card.pack(fill="x", pady=(0, 8))
+        tk.Label(dist_card, text="Расстояние (км)",
+                 font=FONTS["subhead"], bg=COLORS["card"],
+                 fg=COLORS["text"]).pack(anchor="w", padx=12, pady=(10, 4))
+        self.e_dist = tk.Entry(dist_card, width=14,
+                               bg=COLORS["input_bg"], fg=COLORS["text"],
+                               insertbackground=COLORS["text"],
+                               relief="flat", font=FONTS["heading"],
+                               highlightthickness=1,
+                               highlightbackground=COLORS["border"],
+                               highlightcolor=COLORS["accent"])
+        self.e_dist.insert(0, "100")
+        self.e_dist.pack(padx=12, pady=(0, 10), anchor="w")
 
-        # Результат
-        self.result_frame = tk.Frame(pad, bg=C["bg"])
-        self.result_frame.pack(fill="x")
+        # Норма расхода
+        norm_card = card_frame(col2)
+        norm_card.pack(fill="x", pady=(0, 8))
+        tk.Label(norm_card, text="Норма расхода (л/100км)",
+                 font=FONTS["subhead"], bg=COLORS["card"],
+                 fg=COLORS["text"]).pack(anchor="w", padx=12, pady=(10, 4))
+        self.e_norm = tk.Entry(norm_card, width=14,
+                               bg=COLORS["input_bg"], fg=COLORS["text"],
+                               insertbackground=COLORS["text"],
+                               relief="flat", font=FONTS["heading"],
+                               highlightthickness=1,
+                               highlightbackground=COLORS["border"],
+                               highlightcolor=COLORS["accent"])
+        self.e_norm.insert(0, str(VEHICLE_TYPES[self.var_vehicle.get()]["norm"]))
+        self.e_norm.pack(padx=12, pady=(0, 10), anchor="w")
 
-    def _card(self, parent, title):
-        outer = tk.Frame(parent, bg=C["card"], highlightthickness=1,
-                         highlightbackground=C["border"])
-        outer.pack(fill="x", pady=8)
-        tk.Label(outer, text=title, font=FONT_H3, bg=C["card"], fg=C["accent"]).pack(anchor="w", padx=16, pady=(12,6))
-        tk.Frame(outer, bg=C["border"], height=1).pack(fill="x", padx=16, pady=(0,10))
-        inner = tk.Frame(outer, bg=C["card"])
-        inner.pack(fill="x", padx=16, pady=(0,14))
-        return inner
+        # Цена топлива
+        price_card = card_frame(col2)
+        price_card.pack(fill="x")
+        tk.Label(price_card, text=f"Цена топлива ({settings.get('currency','₽')}/л)",
+                 font=FONTS["subhead"], bg=COLORS["card"],
+                 fg=COLORS["text"]).pack(anchor="w", padx=12, pady=(10, 4))
+        self.e_price = tk.Entry(price_card, width=14,
+                                bg=COLORS["input_bg"], fg=COLORS["text"],
+                                insertbackground=COLORS["text"],
+                                relief="flat", font=FONTS["heading"],
+                                highlightthickness=1,
+                                highlightbackground=COLORS["border"],
+                                highlightcolor=COLORS["accent"])
+        self.e_price.insert(0, str(settings.get("fuel_price", 55.0)))
+        self.e_price.pack(padx=12, pady=(0, 10), anchor="w")
 
-    def _field(self, parent, label, placeholder):
-        tk.Label(parent, text=label, font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(anchor="w", pady=(6,2))
-        e = tk.Entry(parent, bg=C["card2"], fg=C["text"], insertbackground=C["accent"],
-                     relief="flat", font=FONT_BODY, width=28,
-                     highlightthickness=1, highlightbackground=C["border"], highlightcolor=C["accent"])
-        e.pack(anchor="w", ipady=7, ipadx=8)
-        e.insert(0, placeholder)
-        e.bind("<FocusIn>", lambda ev, en=e, ph=placeholder: self._ph_in(ev, en, ph))
-        e.bind("<FocusOut>", lambda ev, en=e, ph=placeholder: self._ph_out(ev, en, ph))
-        e._placeholder = placeholder
-        return e
+        # ── Строка 2: Условия ────────────────────────────────
+        row2 = tk.Frame(scroll_frame, bg=COLORS["bg"])
+        row2.pack(fill="x", pady=6)
 
-    def _ph_in(self, e, entry, ph):
-        if entry.get() == ph:
-            entry.delete(0, "end")
-            entry.config(fg=C["text"])
+        def combo_card(parent, title, values, default):
+            cf = card_frame(parent)
+            cf.pack(side="left", fill="both", expand=True, padx=(0, 8))
+            tk.Label(cf, text=title, font=FONTS["subhead"],
+                     bg=COLORS["card"], fg=COLORS["text"]).pack(
+                         anchor="w", padx=12, pady=(10, 4))
+            var = tk.StringVar(value=default)
+            combo = ttk.Combobox(cf, textvariable=var, values=values,
+                                 state="readonly", width=22)
+            combo.pack(padx=12, pady=(0, 10), anchor="w")
+            return var
 
-    def _ph_out(self, e, entry, ph):
-        if not entry.get():
-            entry.insert(0, ph)
-            entry.config(fg=C["text_dim"])
+        self.var_road = combo_card(row2, "Тип дороги",
+                                   list(ROAD_CONDITIONS.keys()),
+                                   "Смешанный режим")
+        self.var_season = combo_card(row2, "Сезон",
+                                     list(SEASON_FACTORS.keys()), "Лето")
+        self.var_load = combo_card(row2, "Загрузка",
+                                   list(LOAD_FACTORS.keys()),
+                                   "Лёгкая загрузка")
 
-    def _get_val(self, entry):
-        v = entry.get()
-        if v == entry._placeholder:
-            return ""
-        return v
+        # Тип топлива
+        fuel_cf = card_frame(row2)
+        fuel_cf.pack(side="left", fill="both", expand=True)
+        tk.Label(fuel_cf, text="Тип топлива", font=FONTS["subhead"],
+                 bg=COLORS["card"], fg=COLORS["text"]).pack(
+                     anchor="w", padx=12, pady=(10, 4))
+        self.var_fuel = tk.StringVar(
+            value=settings.get("default_fuel", "АИ-95"))
+        fuel_combo = ttk.Combobox(fuel_cf, textvariable=self.var_fuel,
+                                  values=FUEL_TYPES, state="readonly", width=16)
+        fuel_combo.pack(padx=12, pady=(0, 10), anchor="w")
 
-    def _style_combo(self):
-        style = ttk.Style()
-        style.configure("TCombobox", fieldbackground=C["card2"], background=C["card2"],
-                        foreground=C["text"], selectbackground=C["accent"],
-                        arrowcolor=C["accent"])
+        # ── Кнопка расчёта ───────────────────────────────────
+        btn_frame = tk.Frame(scroll_frame, bg=COLORS["bg"])
+        btn_frame.pack(pady=14)
+        styled_button(btn_frame, "⚡  Рассчитать", self._calculate,
+                      color=COLORS["accent"], width=28).pack()
 
-    def refresh(self):
-        vehicles = self.app.data.get("vehicles", [])
-        names = ["— Без привязки к авто —"] + [f"{v['brand']} {v['model']} ({v['year']})" for v in vehicles]
-        self._car_combo["values"] = names
-        if self._car_var.get() not in names:
-            self._car_var.set(names[0])
+        # ── Результат ────────────────────────────────────────
+        self.result_frame = card_frame(scroll_frame)
+        self.result_frame.pack(fill="x", pady=(0, 20))
+        self.result_lbl = tk.Label(
+            self.result_frame,
+            text="Заполните параметры и нажмите «Рассчитать»",
+            font=FONTS["body"], bg=COLORS["card"],
+            fg=COLORS["subtext"], pady=18)
+        self.result_lbl.pack()
 
-    def _on_car_select(self, e):
-        sel = self._car_var.get()
-        if sel == "— Без привязки к авто —":
-            return
-        idx = list(self._car_combo["values"]).index(sel) - 1
-        if 0 <= idx < len(self.app.data["vehicles"]):
-            v = self.app.data["vehicles"][idx]
-            if v.get("consumption"):
-                self._consumption_entry.delete(0, "end")
-                self._consumption_entry.insert(0, str(v["consumption"]))
-                self._consumption_entry.config(fg=C["text"])
-            if v.get("fuel_type"):
-                self._fuel_type_var.set(v["fuel_type"])
+    def _update_norm(self):
+        vtype = self.var_vehicle.get()
+        norm = VEHICLE_TYPES[vtype]["norm"]
+        self.e_norm.delete(0, "end")
+        self.e_norm.insert(0, str(norm))
 
     def _calculate(self):
         try:
-            dist_raw = self._get_val(self._dist_entry)
-            cons_raw = self._get_val(self._consumption_entry)
-            price_raw = self._get_val(self._price_entry)
-
-            if not dist_raw or not cons_raw or not price_raw:
-                messagebox.showwarning("Недостаточно данных", "Заполните расстояние, расход и цену топлива!")
-                return
-
-            dist = float(dist_raw.replace(",", "."))
-            cons = float(cons_raw.replace(",", "."))
-            price = float(price_raw.replace(",", "."))
-
-            if dist <= 0 or cons <= 0 or price <= 0:
-                messagebox.showwarning("Ошибка", "Значения должны быть больше нуля!")
-                return
-
-            total_fuel = dist * cons / 100
-            total_cost = total_fuel * price
-            cost_per_km = total_cost / dist
-
-            pax_raw = self._get_val(self._passengers_entry)
-            pax = int(pax_raw) if pax_raw and pax_raw.isdigit() and int(pax_raw) > 0 else 1
-            cost_per_person = total_cost / pax
-
-            self._show_result(dist, cons, price, total_fuel, total_cost, cost_per_km, pax, cost_per_person)
-
-            # Сохранение в историю
-            car_name = self._car_var.get()
-            if car_name == "— Без привязки к авто —":
-                car_name = "Без авто"
-
-            record = {
-                "id": datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
-                "date": datetime.datetime.now().strftime("%d.%m.%Y %H:%M"),
-                "route": self._get_val(self._route_entry) or "Маршрут не указан",
-                "note": self._get_val(self._note_entry) or "",
-                "vehicle": car_name,
-                "fuel_type": self._fuel_type_var.get(),
-                "distance": dist,
-                "consumption": cons,
-                "price": price,
-                "total_fuel": round(total_fuel, 2),
-                "total_cost": round(total_cost, 2),
-                "cost_per_km": round(cost_per_km, 2),
-                "passengers": pax,
-                "cost_per_person": round(cost_per_person, 2),
-            }
-            self.app.data["history"].insert(0, record)
-            if len(self.app.data["history"]) > 200:
-                self.app.data["history"] = self.app.data["history"][:200]
-            save_data(self.app.data)
-
+            distance = float(self.e_dist.get().replace(",", "."))
+            norm = float(self.e_norm.get().replace(",", "."))
+            price = float(self.e_price.get().replace(",", "."))
         except ValueError:
-            messagebox.showerror("Ошибка ввода", "Проверьте правильность введённых числовых значений.")
+            messagebox.showerror("Ошибка", "Введите числовые значения в поля расстояния, нормы и цены.")
+            return
 
-    def _show_result(self, dist, cons, price, total_fuel, total_cost, cost_per_km, pax, cpp):
+        if distance <= 0 or norm <= 0 or price <= 0:
+            messagebox.showerror("Ошибка", "Значения должны быть больше нуля.")
+            return
+
+        road_k   = ROAD_CONDITIONS[self.var_road.get()]
+        season_k = SEASON_FACTORS[self.var_season.get()]
+        load_k   = LOAD_FACTORS[self.var_load.get()]
+
+        base_fuel   = distance * norm / 100
+        total_fuel  = base_fuel * road_k * season_k * load_k
+        total_cost  = total_fuel * price
+
+        currency = self.data["users"][self.current_user]["settings"].get("currency", "₽")
+        vtype    = self.var_vehicle.get()
+        icon     = VEHICLE_TYPES[vtype]["icon"]
+
+        # Обновляем результат
         for w in self.result_frame.winfo_children():
             w.destroy()
 
-        outer = tk.Frame(self.result_frame, bg=C["card"], highlightthickness=2,
-                         highlightbackground=C["accent"])
-        outer.pack(fill="x", pady=8)
+        tk.Label(self.result_frame, text="📊  Результаты расчёта",
+                 font=FONTS["subhead"], bg=COLORS["card"],
+                 fg=COLORS["subtext"]).pack(pady=(12, 4))
 
-        tk.Label(outer, text="✅  Результаты расчёта", font=FONT_H3, bg=C["card"], fg=C["accent"]).pack(anchor="w", padx=16, pady=(14,4))
-        tk.Frame(outer, bg=C["accent"], height=1).pack(fill="x", padx=16, pady=(0,12))
+        results_row = tk.Frame(self.result_frame, bg=COLORS["card"])
+        results_row.pack(pady=10)
 
-        grid = tk.Frame(outer, bg=C["card"])
-        grid.pack(fill="x", padx=16, pady=(0,16))
+        def res_col(parent, label, value, color):
+            col = tk.Frame(parent, bg=COLORS["card"])
+            col.pack(side="left", padx=24)
+            tk.Label(col, text=value, font=FONTS["big"],
+                     bg=COLORS["card"], fg=color).pack()
+            tk.Label(col, text=label, font=FONTS["small"],
+                     bg=COLORS["card"], fg=COLORS["subtext"]).pack()
 
-        items = [
-            ("⛽", "Расход топлива", f"{total_fuel:.2f} л",      C["accent"]),
-            ("💰", "Общая стоимость", f"{total_cost:,.0f} ₽",    C["accent2"]),
-            ("📍", "Стоимость / км", f"{cost_per_km:.2f} ₽/км",  C["accent3"]),
-            ("👥", f"На {pax} чел.", f"{cpp:,.0f} ₽/чел.",        C["warn"]),
-        ]
-        for col_i, (icon, label, value, color) in enumerate(items):
-            cell = tk.Frame(grid, bg=C["card2"], padx=14, pady=12)
-            cell.grid(row=0, column=col_i, padx=6, pady=4, sticky="nsew")
-            grid.columnconfigure(col_i, weight=1)
-            tk.Label(cell, text=icon, font=("Segoe UI", 20), bg=C["card2"], fg=color).pack()
-            tk.Label(cell, text=value, font=("Segoe UI", 15, "bold"), bg=C["card2"], fg=color).pack()
-            tk.Label(cell, text=label, font=FONT_SM, bg=C["card2"], fg=C["text_dim"]).pack()
+        res_col(results_row, "Топливо (л)", f"{total_fuel:.2f}", COLORS["accent"])
+        res_col(results_row, f"Стоимость ({currency})", f"{total_cost:.0f}", COLORS["success"])
+        res_col(results_row, "Расход (л/100км)", f"{total_fuel/distance*100:.2f}", COLORS["warning"])
 
-        tk.Label(outer, text=f"📊  Исходные данные: {dist} км  •  {cons} л/100км  •  {price} ₽/л",
-                 font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(pady=(0,10))
+        tk.Label(self.result_frame,
+                 text=f"{icon}  {vtype}  ·  {distance:.0f} км  ·  {self.var_fuel.get()}  ·  {self.var_road.get()}",
+                 font=FONTS["small"], bg=COLORS["card"],
+                 fg=COLORS["subtext"]).pack(pady=(0, 12))
 
-    def _clear(self):
-        for entry, ph in [(self._dist_entry, "Например: 350"),
-                          (self._consumption_entry, "Например: 8.5"),
-                          (self._price_entry, "Например: 58.50"),
-                          (self._passengers_entry, "1"),
-                          (self._route_entry, "Например: Москва → Тула"),
-                          (self._note_entry, "Необязательно")]:
-            entry.delete(0, "end")
-            entry.insert(0, ph)
-            entry.config(fg=C["text_dim"])
-        for w in self.result_frame.winfo_children():
-            w.destroy()
+        # Сохраняем в историю
+        record = {
+            "date":         datetime.now().strftime("%d.%m.%Y %H:%M"),
+            "vehicle":      vtype,
+            "distance":     distance,
+            "norm":         norm,
+            "fuel_type":    self.var_fuel.get(),
+            "road":         self.var_road.get(),
+            "season":       self.var_season.get(),
+            "load":         self.var_load.get(),
+            "total_fuel":   round(total_fuel, 2),
+            "total_cost":   round(total_cost, 2),
+            "price":        price,
+        }
+        self.data["users"][self.current_user].setdefault("calculations", []).append(record)
+        save_data(self.data)
 
 
-# ─────────────────────────────────────────────
-#  Страница: ПРОФИЛЬ
-# ─────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════
+    #  ИСТОРИЯ
+    # ══════════════════════════════════════════════════════════
 
-class ProfilePage(tk.Frame):
-    def __init__(self, parent, app):
-        super().__init__(parent, bg=C["bg"])
-        self.app = app
-        self._build()
+    def show_history(self):
+        self._clear_content()
+        calcs = self.data["users"][self.current_user].get("calculations", [])
+        currency = self.data["users"][self.current_user]["settings"].get("currency", "₽")
 
-    def _build(self):
-        canvas = tk.Canvas(self, bg=C["bg"], highlightthickness=0)
-        sb = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        self.sf = tk.Frame(canvas, bg=C["bg"])
-        self.sf.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0,0), window=self.sf, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+        hdr = tk.Frame(self.content, bg=COLORS["bg"])
+        hdr.pack(fill="x", padx=28, pady=(22, 10))
+        tk.Label(hdr, text="📋  История расчётов",
+                 font=FONTS["heading"], bg=COLORS["bg"],
+                 fg=COLORS["text"]).pack(side="left")
+        tk.Label(hdr, text=f"{len(calcs)} записей",
+                 font=FONTS["small"], bg=COLORS["bg"],
+                 fg=COLORS["subtext"]).pack(side="left", padx=12)
 
-        self.pad = tk.Frame(self.sf, bg=C["bg"])
-        self.pad.pack(fill="both", expand=True, padx=36, pady=24)
-        self._draw()
+        if calcs:
+            styled_button(hdr, "🗑  Очистить историю",
+                          self._clear_history, color=COLORS["danger"],
+                          width=18).pack(side="right")
 
-    def _draw(self):
-        for w in self.pad.winfo_children():
-            w.destroy()
-
-        hdr = tk.Frame(self.pad, bg=C["bg"])
-        hdr.pack(fill="x", pady=(0,20))
-        tk.Label(hdr, text="🚗", font=("Segoe UI",32), bg=C["bg"], fg=C["accent"]).pack(side="left", padx=(0,14))
-        col = tk.Frame(hdr, bg=C["bg"]); col.pack(side="left")
-        tk.Label(col, text="Профиль и транспортные средства", font=FONT_H1, bg=C["bg"], fg=C["text"]).pack(anchor="w")
-        tk.Label(col, text="Управляйте своими автомобилями и личными данными", font=FONT_BODY, bg=C["bg"], fg=C["text_dim"]).pack(anchor="w")
-
-        # Профиль пользователя
-        pcard = tk.Frame(self.pad, bg=C["card"], highlightthickness=1, highlightbackground=C["border"])
-        pcard.pack(fill="x", pady=(0,16))
-        tk.Label(pcard, text="👤  Личные данные", font=FONT_H3, bg=C["card"], fg=C["accent"]).pack(anchor="w", padx=16, pady=(12,6))
-        tk.Frame(pcard, bg=C["border"], height=1).pack(fill="x", padx=16)
-
-        pinner = tk.Frame(pcard, bg=C["card"]); pinner.pack(fill="x", padx=16, pady=14)
-        left = tk.Frame(pinner, bg=C["card"]); left.pack(side="left", fill="x", expand=True)
-        right = tk.Frame(pinner, bg=C["card"]); right.pack(side="left")
-
-        profile = self.app.data.get("profile", {})
-        tk.Label(left, text="Имя", font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(anchor="w")
-        self._name_e = tk.Entry(left, bg=C["card2"], fg=C["text"], insertbackground=C["accent"],
-                                relief="flat", font=FONT_BODY, width=30,
-                                highlightthickness=1, highlightbackground=C["border"], highlightcolor=C["accent"])
-        self._name_e.insert(0, profile.get("name",""))
-        self._name_e.pack(anchor="w", ipady=7, ipadx=8, pady=(2,10))
-
-        tk.Label(left, text="Email", font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(anchor="w")
-        self._email_e = tk.Entry(left, bg=C["card2"], fg=C["text"], insertbackground=C["accent"],
-                                 relief="flat", font=FONT_BODY, width=30,
-                                 highlightthickness=1, highlightbackground=C["border"], highlightcolor=C["accent"])
-        self._email_e.insert(0, profile.get("email",""))
-        self._email_e.pack(anchor="w", ipady=7, ipadx=8)
-
-        GlowButton(right, "Сохранить", self._save_profile, C["accent"], 130, 38, "💾").pack(padx=(20,0))
-
-        # Мои авто
-        vcard = tk.Frame(self.pad, bg=C["card"], highlightthickness=1, highlightbackground=C["border"])
-        vcard.pack(fill="x", pady=(0,16))
-        vhdr = tk.Frame(vcard, bg=C["card"]); vhdr.pack(fill="x", padx=16, pady=(12,6))
-        tk.Label(vhdr, text="🚘  Мои автомобили", font=FONT_H3, bg=C["card"], fg=C["accent"]).pack(side="left")
-        GlowButton(vhdr, "Добавить авто", self._open_add_vehicle, C["success"], 170, 34, "➕").pack(side="right")
-        tk.Frame(vcard, bg=C["border"], height=1).pack(fill="x", padx=16)
-
-        self._vehicles_frame = tk.Frame(vcard, bg=C["card"])
-        self._vehicles_frame.pack(fill="x", padx=16, pady=14)
-        self._draw_vehicles()
-
-    def _draw_vehicles(self):
-        for w in self._vehicles_frame.winfo_children():
-            w.destroy()
-        vehicles = self.app.data.get("vehicles", [])
-        if not vehicles:
-            tk.Label(self._vehicles_frame, text="Автомобили не добавлены. Нажмите «Добавить авто».",
-                     font=FONT_BODY, bg=C["card"], fg=C["text_dim"]).pack(pady=20)
+        if not calcs:
+            tk.Label(self.content,
+                     text="История расчётов пуста.\nВыполните расчёт в калькуляторе.",
+                     font=FONTS["body"], bg=COLORS["bg"],
+                     fg=COLORS["subtext"], justify="center").pack(expand=True)
             return
 
-        fuel_icons = {"АИ-92":"⛽","АИ-95":"⛽","АИ-98":"⛽","Дизель":"🛢","Газ (LPG)":"🔵","Электро":"⚡"}
-        for i, v in enumerate(vehicles):
-            row = tk.Frame(self._vehicles_frame, bg=C["card2"],
-                           highlightthickness=1, highlightbackground=C["border"])
-            row.pack(fill="x", pady=4)
+        # Таблица
+        container = tk.Frame(self.content, bg=COLORS["bg"])
+        container.pack(fill="both", expand=True, padx=28, pady=(0, 20))
 
-            icon = fuel_icons.get(v.get("fuel_type",""), "🚗")
-            tk.Label(row, text="🚗", font=("Segoe UI",22), bg=C["card2"], fg=C["accent3"]).pack(side="left", padx=14, pady=10)
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Custom.Treeview",
+                         background=COLORS["card"],
+                         foreground=COLORS["text"],
+                         fieldbackground=COLORS["card"],
+                         rowheight=30,
+                         font=FONTS["body"],
+                         borderwidth=0)
+        style.configure("Custom.Treeview.Heading",
+                         background=COLORS["panel"],
+                         foreground=COLORS["accent"],
+                         font=FONTS["small"])
+        style.map("Custom.Treeview",
+                  background=[("selected", COLORS["accent2"])])
 
-            info = tk.Frame(row, bg=C["card2"]); info.pack(side="left", fill="x", expand=True, pady=10)
-            tk.Label(info, text=f"{v['brand']} {v['model']}  {v['year']}",
-                     font=FONT_H3, bg=C["card2"], fg=C["text"]).pack(anchor="w")
-            details = f"{icon} {v.get('fuel_type','—')}   •   {v.get('consumption','—')} л/100км"
-            if v.get("plate"): details += f"   •   {v['plate']}"
-            tk.Label(info, text=details, font=FONT_SM, bg=C["card2"], fg=C["text_dim"]).pack(anchor="w")
+        cols = ("Дата", "ТС", "Км", "Топливо (л)", f"Стоимость ({currency})", "Тип топлива")
+        tree = ttk.Treeview(container, columns=cols, show="headings",
+                            style="Custom.Treeview")
 
-            btn_col = tk.Frame(row, bg=C["card2"]); btn_col.pack(side="right", padx=10)
-            GlowButton(btn_col, "Изменить", lambda idx=i: self._open_edit_vehicle(idx), C["accent3"], 110, 30, "✏️").pack(pady=2)
-            GlowButton(btn_col, "Удалить", lambda idx=i: self._delete_vehicle(idx), C["danger"], 110, 30, "🗑").pack(pady=2)
+        widths = [120, 200, 70, 110, 130, 100]
+        for col, w in zip(cols, widths):
+            tree.heading(col, text=col)
+            tree.column(col, width=w, anchor="center")
 
-    def _open_add_vehicle(self):
-        self._vehicle_dialog(None)
+        for r in reversed(calcs):
+            tree.insert("", "end", values=(
+                r["date"], r["vehicle"], f"{r['distance']:.0f}",
+                f"{r['total_fuel']:.2f}", f"{r['total_cost']:.0f}",
+                r.get("fuel_type", "—")
+            ))
 
-    def _open_edit_vehicle(self, idx):
-        self._vehicle_dialog(idx)
-
-    def _vehicle_dialog(self, idx):
-        win = tk.Toplevel(self.app)
-        win.title("Добавить авто" if idx is None else "Изменить авто")
-        win.geometry("440x480")
-        win.configure(bg=C["bg"])
-        win.resizable(False, False)
-        win.grab_set()
-
-        existing = self.app.data["vehicles"][idx] if idx is not None else {}
-
-        tk.Label(win, text="🚗  " + ("Добавить автомобиль" if idx is None else "Изменить автомобиль"),
-                 font=FONT_H2, bg=C["bg"], fg=C["accent"]).pack(pady=(20,4))
-        tk.Frame(win, bg=C["border"], height=1).pack(fill="x", padx=24, pady=8)
-
-        frm = tk.Frame(win, bg=C["surface"], padx=24, pady=16)
-        frm.pack(fill="x", padx=24)
-
-        def field(label, key, placeholder=""):
-            tk.Label(frm, text=label, font=FONT_SM, bg=C["surface"], fg=C["text_dim"]).pack(anchor="w", pady=(8,2))
-            e = tk.Entry(frm, bg=C["card2"], fg=C["text"], insertbackground=C["accent"],
-                         relief="flat", font=FONT_BODY, width=36,
-                         highlightthickness=1, highlightbackground=C["border"], highlightcolor=C["accent"])
-            e.pack(anchor="w", ipady=7, ipadx=8)
-            val = existing.get(key, "")
-            if val: e.insert(0, str(val))
-            return e
-
-        e_brand = field("Марка *", "brand", "Toyota")
-        e_model = field("Модель *", "model", "Camry")
-        e_year  = field("Год выпуска *", "year", "2020")
-        e_cons  = field("Расход топлива (л/100 км)", "consumption", "8.5")
-        e_plate = field("Гос. номер", "plate", "А123БВ77")
-
-        tk.Label(frm, text="Тип топлива", font=FONT_SM, bg=C["surface"], fg=C["text_dim"]).pack(anchor="w", pady=(8,2))
-        fuel_var = tk.StringVar(value=existing.get("fuel_type","АИ-95"))
-        ttk.Combobox(frm, textvariable=fuel_var,
-                     values=["АИ-92","АИ-95","АИ-98","Дизель","Газ (LPG)","Электро"],
-                     font=FONT_BODY, state="readonly", width=24).pack(anchor="w")
-
-        def save():
-            brand = e_brand.get().strip()
-            model = e_model.get().strip()
-            year  = e_year.get().strip()
-            if not brand or not model or not year:
-                messagebox.showwarning("Ошибка", "Заполните марку, модель и год!", parent=win)
-                return
-            v = {
-                "brand": brand, "model": model, "year": year,
-                "consumption": e_cons.get().strip(),
-                "plate": e_plate.get().strip(),
-                "fuel_type": fuel_var.get(),
-            }
-            if idx is None:
-                self.app.data["vehicles"].append(v)
-            else:
-                self.app.data["vehicles"][idx] = v
-            save_data(self.app.data)
-            self._draw_vehicles()
-            self.app.pages["calculator"].refresh()
-            win.destroy()
-
-        tk.Frame(win, bg=C["bg"]).pack(expand=True)
-        btn_row = tk.Frame(win, bg=C["bg"]); btn_row.pack(pady=16)
-        GlowButton(btn_row, "Сохранить", save, C["accent"], 140, 40, "💾").pack(side="left", padx=8)
-        GlowButton(btn_row, "Отмена", win.destroy, C["text_dim"], 120, 40).pack(side="left")
-
-    def _delete_vehicle(self, idx):
-        v = self.app.data["vehicles"][idx]
-        if messagebox.askyesno("Удалить", f"Удалить {v['brand']} {v['model']}?"):
-            del self.app.data["vehicles"][idx]
-            save_data(self.app.data)
-            self._draw_vehicles()
-            self.app.pages["calculator"].refresh()
-
-    def _save_profile(self):
-        self.app.data["profile"]["name"] = self._name_e.get().strip()
-        self.app.data["profile"]["email"] = self._email_e.get().strip()
-        save_data(self.app.data)
-        messagebox.showinfo("Сохранено", "Профиль успешно обновлён!")
-
-    def refresh(self):
-        self._draw()
-
-
-# ─────────────────────────────────────────────
-#  Страница: ИСТОРИЯ
-# ─────────────────────────────────────────────
-
-class HistoryPage(tk.Frame):
-    def __init__(self, parent, app):
-        super().__init__(parent, bg=C["bg"])
-        self.app = app
-        self._filter_var = tk.StringVar(value="Все")
-        self._search_var = tk.StringVar()
-        self._build()
-
-    def _build(self):
-        hdr_frame = tk.Frame(self, bg=C["bg"])
-        hdr_frame.pack(fill="x", padx=36, pady=(24,0))
-
-        tk.Label(hdr_frame, text="📋", font=("Segoe UI",32), bg=C["bg"], fg=C["accent"]).pack(side="left", padx=(0,14))
-        col = tk.Frame(hdr_frame, bg=C["bg"]); col.pack(side="left")
-        tk.Label(col, text="История расчётов", font=FONT_H1, bg=C["bg"], fg=C["text"]).pack(anchor="w")
-        tk.Label(col, text="Все сохранённые расчёты расхода топлива", font=FONT_BODY, bg=C["bg"], fg=C["text_dim"]).pack(anchor="w")
-
-        # Панель фильтров
-        filter_frame = tk.Frame(self, bg=C["surface"])
-        filter_frame.pack(fill="x", padx=36, pady=12)
-        tk.Label(filter_frame, text="🔍 Поиск:", font=FONT_BODY, bg=C["surface"], fg=C["text_dim"]).pack(side="left", padx=(12,4), pady=10)
-        search_e = tk.Entry(filter_frame, textvariable=self._search_var, bg=C["card2"], fg=C["text"],
-                            insertbackground=C["accent"], relief="flat", font=FONT_BODY, width=22,
-                            highlightthickness=1, highlightbackground=C["border"], highlightcolor=C["accent"])
-        search_e.pack(side="left", ipady=6, ipadx=8, pady=10)
-        search_e.bind("<KeyRelease>", lambda e: self._draw_records())
-
-        GlowButton(filter_frame, "Очистить историю", self._clear_history, C["danger"], 170, 34, "🗑").pack(side="right", padx=12, pady=10)
-        GlowButton(filter_frame, "Обновить", self.refresh, C["accent3"], 130, 34, "🔄").pack(side="right", padx=4, pady=10)
-
-        # Список
-        canvas = tk.Canvas(self, bg=C["bg"], highlightthickness=0)
-        sb = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        self.sf = tk.Frame(canvas, bg=C["bg"])
-        self.sf.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0,0), window=self.sf, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
-
-        self.records_frame = tk.Frame(self.sf, bg=C["bg"])
-        self.records_frame.pack(fill="both", expand=True, padx=36, pady=10)
-        self._draw_records()
-
-    def _draw_records(self):
-        for w in self.records_frame.winfo_children():
-            w.destroy()
-
-        history = self.app.data.get("history", [])
-        q = self._search_var.get().lower().strip()
-        if q:
-            history = [r for r in history if q in r.get("route","").lower() or
-                       q in r.get("vehicle","").lower() or q in r.get("note","").lower()]
-
-        if not history:
-            tk.Label(self.records_frame, text="История пуста. Выполните расчёт в разделе «Калькулятор».",
-                     font=FONT_BODY, bg=C["bg"], fg=C["text_dim"]).pack(pady=60)
-            return
-
-        # Статистика
-        total_cost = sum(r.get("total_cost",0) for r in history)
-        total_fuel = sum(r.get("total_fuel",0) for r in history)
-        total_km   = sum(r.get("distance",0) for r in history)
-        stat = tk.Frame(self.records_frame, bg=C["card2"],
-                        highlightthickness=1, highlightbackground=C["border"])
-        stat.pack(fill="x", pady=(0,16))
-        stats_data = [
-            ("📊", f"{len(history)}", "расчётов"),
-            ("⛽", f"{total_fuel:.1f} л", "топлива"),
-            ("📍", f"{total_km:,.0f} км", "пробег"),
-            ("💰", f"{total_cost:,.0f} ₽", "затрат"),
-        ]
-        for icon, val, lbl in stats_data:
-            cell = tk.Frame(stat, bg=C["card2"]); cell.pack(side="left", expand=True, pady=12, padx=10)
-            tk.Label(cell, text=icon, font=("Segoe UI",16), bg=C["card2"], fg=C["accent"]).pack()
-            tk.Label(cell, text=val, font=("Segoe UI",13,"bold"), bg=C["card2"], fg=C["accent"]).pack()
-            tk.Label(cell, text=lbl, font=FONT_SM, bg=C["card2"], fg=C["text_dim"]).pack()
-
-        for r in history:
-            self._record_card(r)
-
-    def _record_card(self, r):
-        card = tk.Frame(self.records_frame, bg=C["card"],
-                        highlightthickness=1, highlightbackground=C["border"])
-        card.pack(fill="x", pady=5)
-
-        top = tk.Frame(card, bg=C["card"]); top.pack(fill="x", padx=16, pady=(12,4))
-        tk.Label(top, text=r.get("route","Маршрут"), font=FONT_H3, bg=C["card"], fg=C["text"]).pack(side="left")
-        tk.Label(top, text=r.get("date",""), font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(side="right")
-
-        mid = tk.Frame(card, bg=C["card"]); mid.pack(fill="x", padx=16, pady=(0,4))
-        parts = [
-            f"🚗 {r.get('vehicle','')}",
-            f"⛽ {r.get('fuel_type','')}",
-            f"📍 {r.get('distance','')} км",
-            f"💧 {r.get('total_fuel','')} л",
-            f"💰 {r.get('total_cost','')} ₽",
-        ]
-        tk.Label(mid, text="   •   ".join(parts), font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(side="left")
-
-        if r.get("note"):
-            tk.Label(card, text=f"📝 {r['note']}", font=FONT_SM, bg=C["card"], fg=C["text_dim"]).pack(anchor="w", padx=16, pady=(0,4))
-
-        bot = tk.Frame(card, bg=C["card2"]); bot.pack(fill="x")
-        metrics = [
-            ("💰  Стоимость", f"{r.get('total_cost',0):,.0f} ₽",    C["accent2"]),
-            ("⛽  Топливо",   f"{r.get('total_fuel',0):.2f} л",      C["accent"]),
-            ("📍  ₽/км",     f"{r.get('cost_per_km',0):.2f} ₽",     C["accent3"]),
-            ("👥  На чел.",  f"{r.get('cost_per_person',0):,.0f} ₽", C["warn"]),
-        ]
-        for lbl, val, clr in metrics:
-            cell = tk.Frame(bot, bg=C["card2"]); cell.pack(side="left", expand=True, pady=8)
-            tk.Label(cell, text=lbl, font=FONT_SM, bg=C["card2"], fg=C["text_dim"]).pack()
-            tk.Label(cell, text=val, font=("Segoe UI",12,"bold"), bg=C["card2"], fg=clr).pack()
-
-        def del_record(rid=r["id"]):
-            self.app.data["history"] = [x for x in self.app.data["history"] if x["id"] != rid]
-            save_data(self.app.data)
-            self._draw_records()
-
-        GlowButton(card, "Удалить", del_record, C["danger"], 100, 28).pack(anchor="e", padx=16, pady=8)
+        vsb = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+        tree.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
 
     def _clear_history(self):
-        if messagebox.askyesno("Очистить историю", "Удалить всю историю расчётов?"):
-            self.app.data["history"] = []
-            save_data(self.app.data)
-            self._draw_records()
-
-    def refresh(self):
-        self._draw_records()
+        if messagebox.askyesno("Подтверждение",
+                                "Удалить всю историю расчётов?"):
+            self.data["users"][self.current_user]["calculations"] = []
+            save_data(self.data)
+            self.show_history()
 
 
-# ─────────────────────────────────────────────
-#  Страница: О ПРИЛОЖЕНИИ
-# ─────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════
+    #  ПРОФИЛЬ
+    # ══════════════════════════════════════════════════════════
 
-class AboutPage(tk.Frame):
-    def __init__(self, parent, app):
-        super().__init__(parent, bg=C["bg"])
-        self.app = app
-        self._build()
+    def show_profile(self):
+        self._clear_content()
+        user = self.data["users"][self.current_user]
 
-    def _build(self):
-        canvas = tk.Canvas(self, bg=C["bg"], highlightthickness=0)
-        sb = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        sf = tk.Frame(canvas, bg=C["bg"])
-        sf.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0,0), window=sf, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        tk.Label(self.content, text="👤  Профиль пользователя",
+                 font=FONTS["heading"], bg=COLORS["bg"],
+                 fg=COLORS["text"]).pack(anchor="w", padx=28, pady=(22, 10))
 
-        pad = tk.Frame(sf, bg=C["bg"])
-        pad.pack(fill="both", expand=True, padx=60, pady=36)
+        main = tk.Frame(self.content, bg=COLORS["bg"])
+        main.pack(fill="both", padx=28, expand=True)
 
-        # Hero
-        hero = tk.Frame(pad, bg=C["surface"], highlightthickness=2, highlightbackground=C["accent"])
-        hero.pack(fill="x", pady=(0,24))
-        tk.Label(hero, text="⛽", font=("Segoe UI",56), bg=C["surface"], fg=C["accent"]).pack(pady=(30,0))
-        tk.Label(hero, text="FuelTrack Pro", font=("Segoe UI",28,"bold"), bg=C["surface"], fg=C["text"]).pack()
-        tk.Label(hero, text="Профессиональный калькулятор расхода топлива", font=FONT_BODY,
-                 bg=C["surface"], fg=C["text_dim"]).pack(pady=(4,4))
-        tk.Label(hero, text="Версия 1.0.0", font=FONT_SM, bg=C["surface"], fg=C["accent"]).pack(pady=(0,24))
+        # Карточка информации
+        info_card = card_frame(main)
+        info_card.pack(fill="x", pady=(0, 16))
 
-        def section(icon, title, text):
-            frm = tk.Frame(pad, bg=C["card"], highlightthickness=1, highlightbackground=C["border"])
-            frm.pack(fill="x", pady=8)
-            hdr = tk.Frame(frm, bg=C["card"]); hdr.pack(fill="x", padx=20, pady=(16,8))
-            tk.Label(hdr, text=icon, font=("Segoe UI",20), bg=C["card"], fg=C["accent"]).pack(side="left", padx=(0,10))
-            tk.Label(hdr, text=title, font=FONT_H3, bg=C["card"], fg=C["text"]).pack(side="left")
-            tk.Frame(frm, bg=C["border"], height=1).pack(fill="x", padx=20)
-            tk.Label(frm, text=text, font=FONT_BODY, bg=C["card"], fg=C["text_dim"],
-                     wraplength=700, justify="left").pack(anchor="w", padx=20, pady=(10,20))
+        tk.Label(info_card, text="👤", font=("Segoe UI Emoji", 40),
+                 bg=COLORS["card"]).pack(pady=(20, 8))
+        tk.Label(info_card, text=self.current_user,
+                 font=FONTS["heading"], bg=COLORS["card"],
+                 fg=COLORS["text"]).pack()
+        tk.Label(info_card,
+                 text=f"Зарегистрирован: {user.get('created', '—')}",
+                 font=FONTS["small"], bg=COLORS["card"],
+                 fg=COLORS["subtext"]).pack(pady=(4, 0))
 
-        section("📋", "Описание приложения",
-            "FuelTrack Pro — это мощный и удобный инструмент для расчёта расхода и стоимости "
-            "топлива для любых транспортных средств. Приложение позволяет точно планировать "
-            "бюджет поездок, вести учёт всех маршрутов и анализировать затраты на топливо.")
+        calcs = user.get("calculations", [])
+        tk.Label(info_card,
+                 text=f"Всего расчётов: {len(calcs)}",
+                 font=FONTS["small"], bg=COLORS["card"],
+                 fg=COLORS["subtext"]).pack(pady=(2, 16))
 
-        section("✨", "Возможности",
-            "🧮  Точный расчёт расхода топлива и стоимости поездки\n"
-            "🚗  Управление парком транспортных средств в профиле\n"
-            "📋  Полная история расчётов с фильтрацией и поиском\n"
-            "👥  Расчёт стоимости на каждого пассажира\n"
-            "🖼  Настраиваемый фон приложения\n"
-            "⛽  Поддержка всех видов топлива: бензин, дизель, газ, электро\n"
-            "💾  Автоматическое сохранение данных")
+        # Действия
+        actions = card_frame(main)
+        actions.pack(fill="x")
+        tk.Label(actions, text="Управление аккаунтом",
+                 font=FONTS["subhead"], bg=COLORS["card"],
+                 fg=COLORS["subtext"]).pack(anchor="w", padx=16, pady=(12, 8))
 
-        section("👨‍💻", "Разработчик",
-            "Приложение разработано Тарасовым Кириллом Анатольевичем.\n\n"
-            "Создано с любовью к автомобилям и стремлением упростить ежедневные "
-            "расчёты каждого автовладельца. Приложение написано на языке Python "
-            "с использованием библиотек tkinter и Pillow.\n\n"
-            "«Каждая поездка — это история. FuelTrack Pro помогает её записать.»")
+        btn_row = tk.Frame(actions, bg=COLORS["card"])
+        btn_row.pack(padx=16, pady=(0, 16))
 
-        section("🛠", "Технологии",
-            "Python 3.12  •  tkinter (GUI)  •  Pillow (работа с изображениями)  •  JSON (хранение данных)\n\n"
-            "Приложение работает полностью офлайн. Все данные хранятся локально на вашем компьютере "
-            "в файле fuel_data.json рядом с программой.")
+        styled_button(btn_row, "🔑  Сменить пароль",
+                      self._change_password,
+                      color=COLORS["accent"], width=20).pack(side="left", padx=(0, 10))
+        styled_button(btn_row, "🗑  Удалить аккаунт",
+                      self._delete_account,
+                      color=COLORS["danger"], width=20).pack(side="left")
 
-        # Footer
-        footer = tk.Frame(pad, bg=C["surface"])
-        footer.pack(fill="x", pady=(16,0))
-        tk.Label(footer, text="© 2024  Тарасов Кирилл Анатольевич  •  FuelTrack Pro v1.0.0",
-                 font=FONT_SM, bg=C["surface"], fg=C["text_dim"]).pack(pady=16)
+    def _change_password(self):
+        old = simpledialog.askstring("Смена пароля",
+                                     "Введите текущий пароль (6 цифр):",
+                                     show="*", parent=self)
+        if old is None:
+            return
+        if not is_valid_password(old):
+            messagebox.showerror("Ошибка", "Неверный формат пароля.")
+            return
+        if self.data["users"][self.current_user]["password"] != hash_password(old):
+            messagebox.showerror("Ошибка", "Текущий пароль неверен.")
+            return
+
+        new = simpledialog.askstring("Смена пароля",
+                                     "Введите новый пароль (6 цифр):",
+                                     show="*", parent=self)
+        if new is None:
+            return
+        if not is_valid_password(new):
+            messagebox.showerror("Ошибка", "Пароль должен состоять ровно из 6 цифр.")
+            return
+
+        new2 = simpledialog.askstring("Смена пароля",
+                                      "Повторите новый пароль:",
+                                      show="*", parent=self)
+        if new2 is None:
+            return
+        if new != new2:
+            messagebox.showerror("Ошибка", "Пароли не совпадают.")
+            return
+
+        self.data["users"][self.current_user]["password"] = hash_password(new)
+        save_data(self.data)
+        messagebox.showinfo("Успех", "Пароль успешно изменён!")
+
+    def _delete_account(self):
+        confirm = messagebox.askyesno(
+            "Удаление аккаунта",
+            "Вы уверены? Все данные будут удалены безвозвратно!")
+        if not confirm:
+            return
+
+        password = simpledialog.askstring(
+            "Подтверждение", "Введите пароль для подтверждения:",
+            show="*", parent=self)
+        if password is None:
+            return
+        if self.data["users"][self.current_user]["password"] != hash_password(password):
+            messagebox.showerror("Ошибка", "Неверный пароль.")
+            return
+
+        del self.data["users"][self.current_user]
+        save_data(self.data)
+        self.current_user = None
+        messagebox.showinfo("Готово", "Аккаунт удалён.")
+        self.show_auth_screen()
 
 
-# ─────────────────────────────────────────────
-#  Точка входа
-# ─────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════
+    #  НАСТРОЙКИ
+    # ══════════════════════════════════════════════════════════
+
+    def show_settings(self):
+        self._clear_content()
+        user = self.data["users"][self.current_user]
+        settings = user.get("settings", {})
+
+        tk.Label(self.content, text="⚙️  Настройки",
+                 font=FONTS["heading"], bg=COLORS["bg"],
+                 fg=COLORS["text"]).pack(anchor="w", padx=28, pady=(22, 10))
+
+        main = tk.Frame(self.content, bg=COLORS["bg"])
+        main.pack(fill="both", padx=28, expand=True)
+
+        # ── Карточка: Параметры по умолчанию ─────────────────
+        c1 = card_frame(main)
+        c1.pack(fill="x", pady=(0, 12))
+        tk.Label(c1, text="Параметры по умолчанию",
+                 font=FONTS["subhead"], bg=COLORS["card"],
+                 fg=COLORS["text"]).pack(anchor="w", padx=16, pady=(12, 6))
+
+        fields = tk.Frame(c1, bg=COLORS["card"])
+        fields.pack(fill="x", padx=16, pady=(0, 14))
+
+        # Цена топлива
+        def setting_row(parent, label, widget_fn):
+            row = tk.Frame(parent, bg=COLORS["card"])
+            row.pack(fill="x", pady=5)
+            tk.Label(row, text=label, width=28, anchor="w",
+                     font=FONTS["body"], bg=COLORS["card"],
+                     fg=COLORS["text"]).pack(side="left")
+            w = widget_fn(row)
+            w.pack(side="left")
+            return w
+
+        self.s_price = tk.Entry(fields, width=10,
+                                bg=COLORS["input_bg"], fg=COLORS["text"],
+                                insertbackground=COLORS["text"],
+                                relief="flat", font=FONTS["body"],
+                                highlightthickness=1,
+                                highlightbackground=COLORS["border"],
+                                highlightcolor=COLORS["accent"])
+        self.s_price.insert(0, str(settings.get("fuel_price", 55.0)))
+        setting_row(fields, "Цена топлива (руб/л) по умолч.:",
+                    lambda p: self.s_price)
+
+        self.s_vehicle = tk.StringVar(
+            value=settings.get("default_vehicle", "Легковой автомобиль"))
+        def mk_vcombo(parent):
+            c = ttk.Combobox(parent, textvariable=self.s_vehicle,
+                             values=list(VEHICLE_TYPES.keys()),
+                             state="readonly", width=28)
+            return c
+        setting_row(fields, "ТС по умолчанию:", mk_vcombo)
+
+        self.s_fuel = tk.StringVar(value=settings.get("default_fuel", "АИ-95"))
+        def mk_fcombo(parent):
+            c = ttk.Combobox(parent, textvariable=self.s_fuel,
+                             values=FUEL_TYPES, state="readonly", width=28)
+            return c
+        setting_row(fields, "Тип топлива по умолч.:", mk_fcombo)
+
+        # ── Карточка: Валюта ──────────────────────────────────
+        c2 = card_frame(main)
+        c2.pack(fill="x", pady=(0, 12))
+        tk.Label(c2, text="Валюта",
+                 font=FONTS["subhead"], bg=COLORS["card"],
+                 fg=COLORS["text"]).pack(anchor="w", padx=16, pady=(12, 6))
+
+        cur_frame = tk.Frame(c2, bg=COLORS["card"])
+        cur_frame.pack(fill="x", padx=16, pady=(0, 12))
+        self.s_currency = tk.StringVar(value=settings.get("currency", "₽"))
+        for sym, name in [("₽", "Рубль"), ("$", "Доллар"),
+                          ("€", "Евро"), ("₸", "Тенге")]:
+            tk.Radiobutton(cur_frame, text=f"{sym}  {name}",
+                           variable=self.s_currency, value=sym,
+                           bg=COLORS["card"], fg=COLORS["text"],
+                           selectcolor=COLORS["accent2"],
+                           activebackground=COLORS["card"],
+                           font=FONTS["body"], cursor="hand2").pack(
+                               side="left", padx=14)
+
+        # Кнопка сохранить
+        btn_f = tk.Frame(main, bg=COLORS["bg"])
+        btn_f.pack(pady=10)
+        styled_button(btn_f, "💾  Сохранить настройки",
+                      self._save_settings,
+                      color=COLORS["success"], width=26).pack()
+
+    def _save_settings(self):
+        try:
+            price = float(self.s_price.get().replace(",", "."))
+            if price <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Ошибка", "Введите корректную цену топлива.")
+            return
+
+        self.data["users"][self.current_user]["settings"] = {
+            "fuel_price":       price,
+            "default_vehicle":  self.s_vehicle.get(),
+            "default_fuel":     self.s_fuel.get(),
+            "currency":         self.s_currency.get(),
+        }
+        save_data(self.data)
+        messagebox.showinfo("Успех", "Настройки сохранены!")
+
+
+# ─────────────────────────────────────────────────────────────
+#  ЗАПУСК
+# ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    try:
-        from PIL import Image, ImageTk
-    except ImportError:
-        import subprocess, sys
-        print("Устанавливаю Pillow...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
-        from PIL import Image, ImageTk
-
-    app = FuelApp()
+    app = App()
     app.mainloop()
