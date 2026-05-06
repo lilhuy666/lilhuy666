@@ -6,8 +6,7 @@ import re
 import hashlib
 import shutil
 from datetime import datetime, timedelta
-import webbrowser
-import urllib.parse
+import math
 
 try:
     from PIL import Image, ImageTk, ImageDraw
@@ -15,6 +14,18 @@ except ImportError:
     import subprocess, sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
     from PIL import Image, ImageTk, ImageDraw
+
+try:
+    import tkintermapview
+    MAP_AVAILABLE = True
+except ImportError:
+    try:
+        import subprocess, sys
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "tkintermapview"])
+        import tkintermapview
+        MAP_AVAILABLE = True
+    except Exception:
+        MAP_AVAILABLE = False
 
 # ─── Data storage ──────────────────────────────────────────────────────────────
 DATA_FILE = os.path.join(os.path.expanduser("~"), ".fuel_calc_data.json")
@@ -134,10 +145,6 @@ TRANSLATIONS = {
         "currency_desc": "Выберите валюту для расчётов",
         "language_setting": "🌐  Язык / Language",
         "language_desc": "Выберите язык интерфейса",
-        "units_setting": "📏  Единицы измерения",
-        "units_desc": "Выберите единицы расстояния",
-        "km": "Километры (км)",
-        "miles": "Мили (mi)",
         "current": "Текущее:",
         "error": "Ошибка",
         "enter_numbers": "Введите корректные числа!",
@@ -148,15 +155,13 @@ TRANSLATIONS = {
         "no_history_chart": "Нет данных для графика",
         "login_for_chart": "Войдите для просмотра графика",
         "per_100": "л/100",
-        "per_100_mi": "л/100mi",
         "distance_unit": "км",
-        "distance_unit_long": "километрах",
         "about_title": "О приложении",
-        "version": "Версия 2.2  •  2024",
+        "version": "Версия 2.3  •  2024",
         "about_section1_title": "🎯  О приложении",
         "about_section1": "Это профессиональное приложение для расчёта расхода топлива вашего автомобиля. Создано для водителей, которые хотят следить за эффективностью транспортного средства и планировать затраты на топливо.",
         "about_section2_title": "✨  Возможности",
-        "about_section2": "• Точный расчёт расхода топлива в л/100 км\n• Расчёт стоимости поездки с выбором валюты\n• Хранение нескольких автомобилей с фотографиями\n• Полная история всех расчётов с возможностью копирования\n• Личный профиль с регистрацией по email\n• Светлая и тёмная темы оформления\n• Выбор языка и единиц измерения\n• Поиск заправок на карте",
+        "about_section2": "• Точный расчёт расхода топлива в л/100 км\n• Расчёт стоимости поездки с выбором валюты\n• Хранение нескольких автомобилей с фотографиями\n• Полная история всех расчётов с возможностью копирования\n• Личный профиль с регистрацией по email\n• Светлая и тёмная темы оформления\n• Поиск заправок на встроенной карте с расчётом расстояния",
         "about_section3_title": "🚗  Как использовать",
         "about_section3": "Режим «Средний расход»:\n1. Введите пройденное расстояние\n2. Укажите израсходованное топливо в литрах\n3. Введите цену топлива за литр\n4. Нажмите «Рассчитать»\n\nРежим «Стоимость поездки»:\n1. Введите расстояние поездки\n2. Укажите средний расход автомобиля\n3. Введите цену топлива за литр\n4. Нажмите «Рассчитать»",
         "about_section4_title": "🔒  Безопасность",
@@ -166,26 +171,25 @@ TRANSLATIONS = {
         "footer": "© 2024 Калькулятор расхода топлива. Все права защищены.",
         "fuel_unit": "л",
         "price_unit": "за л",
-        # Gas stations
         "gs_title": "⛽  Заправки",
-        "gs_country": "Страна:",
-        "gs_city": "Город:",
+        "gs_city": "Город / адрес:",
         "gs_search": "🔍  Найти заправки",
-        "gs_open_map": "🗺  Открыть карту",
-        "gs_route": "🧭  Маршрут",
         "gs_to_calc": "🧮  В калькулятор",
-        "gs_distance_label": "До заправки:",
         "gs_no_car": "Выберите авто для автозаполнения",
-        "gs_select_station": "Выберите заправку из списка",
+        "gs_select_station": "Кликните на маркер заправки на карте",
         "gs_login_hint": "Войдите для доступа к данным авто",
-        "gs_hint": "Выберите страну и город, затем нажмите «Найти заправки».\nПоиск откроет карту в браузере с отмеченными заправками.",
-        "gs_stations_found": "Найденные заправки (выберите одну):",
-        "gs_fuel_price_hint": "Введите цену топлива на заправке:",
+        "gs_hint": "Введите город или адрес и нажмите «Найти заправки».\nЗатем кликните на маркер заправки для выбора и расчёта расстояния.",
+        "gs_fuel_price_hint": "Цена топлива на заправке:",
         "gs_distance_to": "Расстояние до заправки",
-        "gs_enter_distance": "Введите расстояние до заправки вручную:",
+        "gs_enter_distance": "Расстояние до заправки (км):",
         "gs_send_to_calc": "Отправить в калькулятор",
         "gs_avg_from_car": "Средний расход авто",
         "gs_no_avg": "Нет данных о расходе",
+        "gs_selected_station": "Выбранная заправка:",
+        "gs_calc_distance": "📍 Расстояние рассчитано по карте",
+        "gs_click_hint": "Кликните на маркер ⛽ на карте для выбора заправки",
+        "gs_map_search_hint": "Поиск заправок на карте...",
+        "gs_no_map": "Установите tkintermapview для карты:\npip install tkintermapview",
         "countries": [
             "Россия", "США", "Германия", "Франция", "Великобритания",
             "Украина", "Казахстан", "Беларусь", "Польша", "Италия",
@@ -218,7 +222,7 @@ TRANSLATIONS = {
         "fuel_used": "Fuel used",
         "fuel_price": "Fuel price per litre",
         "avg_consumption_label": "Avg. consumption",
-        "calc_mode_consumption": "Avg. consumption per 100",
+        "calc_mode_consumption": "Avg. consumption per 100 km",
         "calc_mode_cost": "Trip cost",
         "login": "Login",
         "register": "Register",
@@ -277,10 +281,6 @@ TRANSLATIONS = {
         "currency_desc": "Choose currency for calculations",
         "language_setting": "🌐  Language / Язык",
         "language_desc": "Choose interface language",
-        "units_setting": "📏  Distance units",
-        "units_desc": "Choose distance measurement units",
-        "km": "Kilometres (km)",
-        "miles": "Miles (mi)",
         "current": "Current:",
         "error": "Error",
         "enter_numbers": "Enter valid numbers!",
@@ -291,15 +291,13 @@ TRANSLATIONS = {
         "no_history_chart": "No data for chart",
         "login_for_chart": "Log in to view chart",
         "per_100": "L/100",
-        "per_100_mi": "L/100mi",
         "distance_unit": "km",
-        "distance_unit_long": "kilometres",
         "about_title": "About",
-        "version": "Version 2.2  •  2024",
+        "version": "Version 2.3  •  2024",
         "about_section1_title": "🎯  About",
         "about_section1": "A professional application for calculating your vehicle's fuel consumption. Built for drivers who want to track their vehicle's efficiency and plan fuel costs.",
         "about_section2_title": "✨  Features",
-        "about_section2": "• Accurate fuel consumption calculation\n• Trip cost calculation with currency selection\n• Store multiple vehicles with photos\n• Full calculation history with copy option\n• Personal profile with email registration\n• Light and dark themes\n• Language and unit selection\n• Gas station map search",
+        "about_section2": "• Accurate fuel consumption calculation\n• Trip cost calculation with currency selection\n• Store multiple vehicles with photos\n• Full calculation history with copy option\n• Personal profile with email registration\n• Light and dark themes\n• Language selection\n• Gas station map with distance calculation",
         "about_section3_title": "🚗  How to use",
         "about_section3": "Consumption mode:\n1. Enter distance travelled\n2. Enter fuel used in litres\n3. Enter fuel price per litre\n4. Press Calculate\n\nTrip cost mode:\n1. Enter trip distance\n2. Enter vehicle avg. consumption\n3. Enter fuel price per litre\n4. Press Calculate",
         "about_section4_title": "🔒  Security",
@@ -309,26 +307,25 @@ TRANSLATIONS = {
         "footer": "© 2024 Fuel Consumption Calculator. All rights reserved.",
         "fuel_unit": "L",
         "price_unit": "per L",
-        # Gas stations
         "gs_title": "⛽  Gas Stations",
-        "gs_country": "Country:",
-        "gs_city": "City:",
+        "gs_city": "City / address:",
         "gs_search": "🔍  Find Gas Stations",
-        "gs_open_map": "🗺  Open Map",
-        "gs_route": "🧭  Route",
         "gs_to_calc": "🧮  To Calculator",
-        "gs_distance_label": "To station:",
         "gs_no_car": "Select a vehicle for autofill",
-        "gs_select_station": "Select a station from the list",
+        "gs_select_station": "Click on a gas station marker on the map",
         "gs_login_hint": "Log in to access vehicle data",
-        "gs_hint": "Select a country and city, then click Find Gas Stations.\nSearch will open a map in your browser with marked stations.",
-        "gs_stations_found": "Found stations (select one):",
-        "gs_fuel_price_hint": "Enter fuel price at the station:",
+        "gs_hint": "Enter a city or address and click Find Gas Stations.\nThen click on a station marker to select it and calculate the distance.",
+        "gs_fuel_price_hint": "Fuel price at the station:",
         "gs_distance_to": "Distance to station",
-        "gs_enter_distance": "Enter distance to station manually:",
+        "gs_enter_distance": "Distance to station (km):",
         "gs_send_to_calc": "Send to Calculator",
         "gs_avg_from_car": "Vehicle avg. consumption",
         "gs_no_avg": "No consumption data",
+        "gs_selected_station": "Selected station:",
+        "gs_calc_distance": "📍 Distance calculated from map",
+        "gs_click_hint": "Click on a ⛽ marker on the map to select a station",
+        "gs_map_search_hint": "Searching for gas stations on map...",
+        "gs_no_map": "Install tkintermapview for map:\npip install tkintermapview",
         "countries": [
             "Russia", "USA", "Germany", "France", "United Kingdom",
             "Ukraine", "Kazakhstan", "Belarus", "Poland", "Italy",
@@ -388,7 +385,6 @@ THEMES = {
 current_theme    = "dark"
 current_language = "ru"
 current_currency = "₽ RUB"
-current_units    = "km"
 
 def T():
     return THEMES[current_theme]
@@ -400,23 +396,49 @@ def TR(key):
 def get_currency_symbol():
     return CURRENCIES.get(current_currency, "₽")
 
-def get_distance_unit():
-    return TR("distance_unit")
+# ─── Scroll helper ─────────────────────────────────────────────────────────────
+def bind_mousewheel(widget, canvas):
+    """Bind mouse wheel scrolling to canvas via any child widget."""
+    def _on_mousewheel(event):
+        if event.num == 4:
+            canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            canvas.yview_scroll(1, "units")
+        else:
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _bind_to_mousewheel(e):
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Button-4>", _on_mousewheel)
+        canvas.bind_all("<Button-5>", _on_mousewheel)
+
+    def _unbind_from_mousewheel(e):
+        canvas.unbind_all("<MouseWheel>")
+        canvas.unbind_all("<Button-4>")
+        canvas.unbind_all("<Button-5>")
+
+    widget.bind("<Enter>", _bind_to_mousewheel)
+    widget.bind("<Leave>", _unbind_from_mousewheel)
+
+# ─── Haversine distance ────────────────────────────────────────────────────────
+def haversine_km(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 # ─── Helper: placeholder image ─────────────────────────────────────────────────
 def make_placeholder(w=300, h=180, text=""):
     t = T()
-    bg_color = t["bg3"]
-    fg_color = t["fg2"]
-    img = Image.new("RGB", (w, h), bg_color)
+    img = Image.new("RGB", (w, h), t["bg3"])
     draw = ImageDraw.Draw(img)
     draw.rectangle([0, 0, w-1, h-1], outline=t["border"], width=2)
     if text:
-        draw.text((w//2 - 25, h//2 - 8), text, fill=fg_color)
+        draw.text((w//2 - 25, h//2 - 8), text, fill=t["fg2"])
     return img
 
 def load_car_image(path, w=300, h=180):
-    """Load and crop image to exactly w×h with no padding stripes (cover mode)."""
     try:
         img = Image.open(path).convert("RGB")
         src_w, src_h = img.size
@@ -441,22 +463,30 @@ class FuelApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(TR("app_title"))
-        self.geometry("1100x780")
-        self.minsize(900, 650)
+        self.geometry("1100x820")
+        self.minsize(900, 680)
         self.resizable(True, True)
 
         self.data = load_data()
         self.current_user = self.data.get("current_user")
 
         settings = self.data.get("settings", {})
-        global current_theme, current_language, current_currency, current_units
+        global current_theme, current_language, current_currency
         current_theme    = settings.get("theme",    "dark")
         current_language = settings.get("language", "ru")
         current_currency = settings.get("currency", "₽ RUB")
-        current_units    = settings.get("units",    "km")
 
         self._photo_refs   = {}
         self._calc_mode    = tk.StringVar(value="consumption")
+
+        # Map state
+        self._map_markers = []
+        self._map_user_marker = None
+        self._map_selected_station = None
+        self._map_selected_lat = None
+        self._map_selected_lon = None
+        self._map_user_lat = None
+        self._map_user_lon = None
 
         self._build_ui()
 
@@ -465,7 +495,6 @@ class FuelApp(tk.Tk):
         self.data["settings"]["theme"]    = current_theme
         self.data["settings"]["language"] = current_language
         self.data["settings"]["currency"] = current_currency
-        self.data["settings"]["units"]    = current_units
         save_data(self.data)
 
     # ── Layout ──────────────────────────────────────────────────────────────────
@@ -577,10 +606,23 @@ class FuelApp(tk.Tk):
         f = self.sections["calculator"]
         for w in f.winfo_children(): w.destroy()
 
-        outer = tk.Frame(f, bg=t["bg"])
-        outer.pack(fill="both", expand=True, padx=24, pady=16)
+        # Outer scrollable canvas
+        outer_canvas = tk.Canvas(f, bg=t["bg"], highlightthickness=0)
+        outer_scroll = ttk.Scrollbar(f, orient="vertical", command=outer_canvas.yview)
+        outer_canvas.configure(yscrollcommand=outer_scroll.set)
+        outer_scroll.pack(side="right", fill="y")
+        outer_canvas.pack(side="left", fill="both", expand=True)
 
-        top = tk.Frame(outer, bg=t["bg"])
+        outer = tk.Frame(outer_canvas, bg=t["bg"])
+        win_id = outer_canvas.create_window((0, 0), window=outer, anchor="nw")
+        outer.bind("<Configure>", lambda e: outer_canvas.configure(scrollregion=outer_canvas.bbox("all")))
+        outer_canvas.bind("<Configure>", lambda e: outer_canvas.itemconfig(win_id, width=e.width))
+        bind_mousewheel(outer, outer_canvas)
+
+        inner = tk.Frame(outer, bg=t["bg"])
+        inner.pack(fill="both", expand=True, padx=24, pady=16)
+
+        top = tk.Frame(inner, bg=t["bg"])
         top.pack(fill="x")
 
         # Left: car image + selector
@@ -610,12 +652,11 @@ class FuelApp(tk.Tk):
                  font=("Georgia", 12, "bold"), bg=t["bg3"], fg=t["fg"]).pack(anchor="w", padx=12, pady=(8,4))
 
         self.stat_labels = {}
-        du = get_distance_unit()
         stats = [
-            ("avg",  TR("avg_consumption"),  f"— л/100 {du}", t["green"]),
-            ("dist", f"📏  {TR('distance')}",  f"— {du}",       t["accent"]),
-            ("fuel", f"⛽  {TR('fuel')}",       "— л",           t["yellow"]),
-            ("cost", f"💳  {TR('cost')}",       "—",             t["red"]),
+            ("avg",  TR("avg_consumption"),  "— л/100 км", t["green"]),
+            ("dist", f"📏  {TR('distance')}",  "— км",       t["accent"]),
+            ("fuel", f"⛽  {TR('fuel')}",       "— л",        t["yellow"]),
+            ("cost", f"💳  {TR('cost')}",       "—",          t["red"]),
         ]
         for key, label, default, color in stats:
             row = tk.Frame(stats_frame, bg=t["bg3"])
@@ -637,9 +678,8 @@ class FuelApp(tk.Tk):
         mode_frame = tk.Frame(right, bg=t["bg2"])
         mode_frame.pack(fill="x", padx=20, pady=(0, 8))
 
-        du_label = get_distance_unit()
         self._calc_mode = tk.StringVar(value="consumption")
-        mode_btn1 = tk.Radiobutton(mode_frame, text=TR("calc_mode_consumption") + f" {du_label}",
+        mode_btn1 = tk.Radiobutton(mode_frame, text=TR("calc_mode_consumption"),
                                     variable=self._calc_mode, value="consumption",
                                     font=("Courier", 10), bg=t["bg2"], fg=t["fg"],
                                     selectcolor=t["bg3"], activebackground=t["bg2"],
@@ -677,7 +717,7 @@ class FuelApp(tk.Tk):
         res_left = tk.Frame(self.result_frame, bg=t["bg3"])
         res_left.pack(side="left", fill="x", expand=True, padx=16, pady=12)
         tk.Label(res_left, text=TR("fuel_consumption"), font=("Courier", 10), bg=t["bg3"], fg=t["fg2"]).pack(anchor="w")
-        self.result_consumption_label = tk.Label(res_left, text=f"— л/100 {du_label}",
+        self.result_consumption_label = tk.Label(res_left, text="— л/100 км",
                                                   font=("Georgia", 18, "bold"), bg=t["bg3"], fg=t["green"])
         self.result_consumption_label.pack(anchor="w")
 
@@ -688,9 +728,9 @@ class FuelApp(tk.Tk):
                                            font=("Georgia", 18, "bold"), bg=t["bg3"], fg=t["fg"])
         self.result_cost_label.pack(anchor="w")
 
-        # ── Fuel chart ──
-        chart_outer = tk.Frame(outer, bg=t["bg2"])
-        chart_outer.pack(fill="x", pady=(8, 0))
+        # ── Fuel chart (larger) ──
+        chart_outer = tk.Frame(inner, bg=t["bg2"])
+        chart_outer.pack(fill="x", pady=(12, 0))
 
         chart_header = tk.Frame(chart_outer, bg=t["bg2"])
         chart_header.pack(fill="x", padx=16, pady=(10, 4))
@@ -708,9 +748,10 @@ class FuelApp(tk.Tk):
         days_combo.pack(side="left")
         days_combo.bind("<<ComboboxSelected>>", lambda e: self._draw_fuel_chart())
 
-        self.chart_canvas = tk.Canvas(chart_outer, bg=t["chart_bg"], height=160,
+        # Increased chart height from 160 to 280
+        self.chart_canvas = tk.Canvas(chart_outer, bg=t["chart_bg"], height=280,
                                        highlightthickness=1, highlightbackground=t["border"])
-        self.chart_canvas.pack(fill="x", padx=16, pady=(0, 12))
+        self.chart_canvas.pack(fill="x", padx=16, pady=(0, 16))
         self.chart_canvas.bind("<Configure>", lambda e: self._draw_fuel_chart())
         self.chart_canvas.bind("<Motion>", self._on_chart_hover)
         self.chart_canvas.bind("<Leave>", self._on_chart_leave)
@@ -722,7 +763,6 @@ class FuelApp(tk.Tk):
     def _build_calc_form(self):
         t = T()
         for w in self.calc_form_frame.winfo_children(): w.destroy()
-        du = get_distance_unit()
         mode = self._calc_mode.get() if hasattr(self, '_calc_mode') else "consumption"
 
         def make_entry_row(parent, label_text, var, unit_text, icon):
@@ -735,14 +775,13 @@ class FuelApp(tk.Tk):
                      bd=0, relief="flat").pack(side="left", fill="x", expand=True, pady=8)
             tk.Label(row, text=unit_text, font=("Courier", 10), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
 
-        make_entry_row(self.calc_form_frame, TR("distance_label"), self.dist_var, du, "📏")
+        make_entry_row(self.calc_form_frame, TR("distance_label"), self.dist_var, "км", "📏")
 
         if mode == "consumption":
             make_entry_row(self.calc_form_frame, TR("fuel_used"), self.fuel_var, TR("fuel_unit"), "⛽")
             make_entry_row(self.calc_form_frame, TR("fuel_price"), self.price_var, get_currency_symbol() + "/" + TR("fuel_unit"), "💰")
         else:
-            per_label = f"л/100 {du}"
-            make_entry_row(self.calc_form_frame, TR("avg_consumption_label"), self.avg_var, per_label, "💧")
+            make_entry_row(self.calc_form_frame, TR("avg_consumption_label"), self.avg_var, "л/100 км", "💧")
             make_entry_row(self.calc_form_frame, TR("fuel_price"), self.price_var, get_currency_symbol() + "/" + TR("fuel_unit"), "💰")
 
     def _on_mode_changed(self):
@@ -776,7 +815,6 @@ class FuelApp(tk.Tk):
         for car in user.get("cars", []):
             if car["name"] == sel:
                 self._set_calc_car_image(car.get("photo"))
-                # Auto-fill avg consumption from car data
                 avg = car.get("avg_consumption")
                 if avg and hasattr(self, 'avg_var'):
                     self.avg_var.set(str(avg))
@@ -787,7 +825,6 @@ class FuelApp(tk.Tk):
 
     def _calculate(self):
         sym = get_currency_symbol()
-        du  = get_distance_unit()
         mode = self._calc_mode.get()
         try:
             dist  = float(self.dist_var.get().replace(",", "."))
@@ -815,11 +852,11 @@ class FuelApp(tk.Tk):
             fuel = (avg_input / 100) * dist
             cost = fuel * price
 
-        self.result_consumption_label.configure(text=f"{consumption:.2f} л/100 {du}")
+        self.result_consumption_label.configure(text=f"{consumption:.2f} л/100 км")
         self.result_cost_label.configure(text=f"{cost:,.2f} {sym}")
 
-        self.stat_labels["avg"].configure(text=f"{consumption:.2f} л/100 {du}")
-        self.stat_labels["dist"].configure(text=f"{dist:.0f} {du}")
+        self.stat_labels["avg"].configure(text=f"{consumption:.2f} л/100 км")
+        self.stat_labels["dist"].configure(text=f"{dist:.0f} км")
         self.stat_labels["fuel"].configure(text=f"{fuel:.1f} л")
         self.stat_labels["cost"].configure(text=f"{cost:,.2f} {sym}")
 
@@ -834,12 +871,10 @@ class FuelApp(tk.Tk):
                 "currency":    sym,
                 "consumption": round(consumption, 2),
                 "cost":        round(cost, 2),
-                "units":       current_units,
             }
             user = self.data["users"][self.current_user]
             user.setdefault("history", []).insert(0, entry)
 
-            # Save avg consumption to the selected car
             if sel_car != TR("no_car"):
                 for car in user.get("cars", []):
                     if car["name"] == sel_car:
@@ -854,10 +889,9 @@ class FuelApp(tk.Tk):
         self.fuel_var.set("")
         self.price_var.set("")
         self.avg_var.set("")
-        du = get_distance_unit()
-        self.result_consumption_label.configure(text=f"— л/100 {du}")
+        self.result_consumption_label.configure(text="— л/100 км")
         self.result_cost_label.configure(text="—")
-        for k, v in {"avg": f"— л/100 {du}", "dist": f"— {du}", "fuel": "— л", "cost": "—"}.items():
+        for k, v in {"avg": "— л/100 км", "dist": "— км", "fuel": "— л", "cost": "—"}.items():
             self.stat_labels[k].configure(text=v)
 
     # ── Smart Fuel Chart ────────────────────────────────────────────────────────
@@ -865,7 +899,6 @@ class FuelApp(tk.Tk):
         if not self._chart_data_points:
             return
         c = self.chart_canvas
-        # Find nearest point
         best = None
         best_dist = 999999
         for (cx, cy, dt, val) in self._chart_data_points:
@@ -875,12 +908,9 @@ class FuelApp(tk.Tk):
                 best = (cx, cy, dt, val)
         if best and best_dist < 40:
             cx, cy, dt, val = best
-            # Remove old tooltip
             c.delete("tooltip")
-            # Draw tooltip
             txt = f"{dt.strftime('%d.%m.%Y')}  {val:.1f} л/100"
             pad = 6
-            # Estimate text width
             tw = len(txt) * 7 + pad * 2
             th = 22
             tx = min(cx - tw // 2, c.winfo_width() - tw - 4)
@@ -892,7 +922,6 @@ class FuelApp(tk.Tk):
                                 fill=T()["bg3"], outline=T()["accent"], width=1, tags="tooltip")
             c.create_text(tx + tw // 2, ty + th // 2, text=txt,
                           fill=T()["fg"], font=("Courier", 9), tags="tooltip")
-            # Highlight dot
             r = 6
             c.delete("tooltip_dot")
             c.create_oval(cx-r, cy-r, cx+r, cy+r,
@@ -915,11 +944,11 @@ class FuelApp(tk.Tk):
         if W < 10 or H < 10:
             return
 
-        pad_l, pad_r, pad_t, pad_b = 52, 20, 20, 32
+        pad_l, pad_r, pad_t, pad_b = 56, 24, 24, 40
 
         if not self.current_user:
             c.create_text(W//2, H//2, text=TR("login_for_chart"),
-                          fill=t["fg2"], font=("Courier", 11))
+                          fill=t["fg2"], font=("Courier", 12))
             return
 
         selected_car = self.calc_car_var.get() if hasattr(self, 'calc_car_var') else TR("no_car")
@@ -945,7 +974,7 @@ class FuelApp(tk.Tk):
 
         if not filtered:
             c.create_text(W//2, H//2, text=TR("no_history_chart"),
-                          fill=t["fg2"], font=("Courier", 11))
+                          fill=t["fg2"], font=("Courier", 12))
             return
 
         filtered.sort(key=lambda x: x[0])
@@ -964,16 +993,16 @@ class FuelApp(tk.Tk):
         def py(v):
             return pad_t + (1 - (v - min_v) / rng) * chart_h
 
-        # Background gradient lines (tech look)
-        for gi in range(5):
-            gv = min_v + gi * rng / 4
+        # Grid lines
+        for gi in range(6):
+            gv = min_v + gi * rng / 5
             gy = py(gv)
             c.create_line(pad_l, gy, W - pad_r, gy,
                           fill=t["chart_grid"], dash=(4, 6), width=1)
             c.create_text(pad_l - 6, gy, text=f"{gv:.1f}",
-                          anchor="e", fill=t["fg2"], font=("Courier", 8))
+                          anchor="e", fill=t["fg2"], font=("Courier", 9))
 
-        # Color zones (green/yellow/red thresholds)
+        # Color zones
         y_green  = py(8)
         y_yellow = py(12)
         y_bottom = H - pad_b
@@ -986,15 +1015,15 @@ class FuelApp(tk.Tk):
         c.create_rectangle(pad_l, max(y_yellow, pad_t), W - pad_r, y_bottom,
                             fill="#2a1212", outline="")
 
-        # Fill under curve with gradient-ish poly
+        # Fill under curve
         pts = []
         for i, (_, v) in enumerate(filtered):
             pts += [px(i), py(v)]
         if len(pts) >= 4:
             poly_pts = [pad_l, H - pad_b] + pts + [W - pad_r, H - pad_b]
-            c.create_polygon(poly_pts, fill=t["chart_fill"], outline="", stipple="")
+            c.create_polygon(poly_pts, fill=t["chart_fill"], outline="")
 
-        # Smooth line segments with color coding
+        # Line segments with color coding
         for i in range(len(filtered) - 1):
             v1 = filtered[i][1]
             v2 = filtered[i+1][1]
@@ -1007,48 +1036,48 @@ class FuelApp(tk.Tk):
                 lcolor = t["red"]
             x1, y1 = px(i),   py(v1)
             x2, y2 = px(i+1), py(v2)
-            c.create_line(x1, y1, x2, y2, fill=lcolor, width=2, smooth=True)
+            c.create_line(x1, y1, x2, y2, fill=lcolor, width=2.5, smooth=True)
 
         # Dots
         for i, (dt, v) in enumerate(filtered):
             x, y = px(i), py(v)
-            r = 4
-            if v <= 8:
-                dot_color = t["green"]
-            elif v <= 12:
-                dot_color = t["yellow"]
-            else:
-                dot_color = t["red"]
+            r = 5
+            dot_color = t["green"] if v <= 8 else (t["yellow"] if v <= 12 else t["red"])
             c.create_oval(x-r, y-r, x+r, y+r, fill=dot_color, outline=t["bg2"], width=2)
             self._chart_data_points.append((x, y, dt, v))
 
-        # X-axis
+        # Axes
         c.create_line(pad_l, H - pad_b, W - pad_r, H - pad_b, fill=t["border"], width=1)
         c.create_line(pad_l, pad_t, pad_l, H - pad_b, fill=t["border"], width=1)
 
+        # X-axis labels
         n = len(filtered)
-        step = max(1, n // 6)
+        step = max(1, n // 8)
         for i in range(0, n, step):
             dt, _ = filtered[i]
             x = px(i)
-            c.create_line(x, H - pad_b, x, H - pad_b + 4, fill=t["fg2"], width=1)
-            c.create_text(x, H - pad_b + 12, text=dt.strftime("%d.%m"),
-                          fill=t["fg2"], font=("Courier", 7))
+            c.create_line(x, H - pad_b, x, H - pad_b + 5, fill=t["fg2"], width=1)
+            c.create_text(x, H - pad_b + 14, text=dt.strftime("%d.%m"),
+                          fill=t["fg2"], font=("Courier", 8))
+
+        # Y-axis label
+        c.create_text(pad_l - 40, pad_t + chart_h // 2, text="л/100",
+                      fill=t["fg2"], font=("Courier", 8), angle=90)
 
         # Legend
-        legend_x = W - pad_r - 120
-        legend_items = [("≤8", t["green"]), ("8-12", t["yellow"]), (">12", t["red"])]
+        legend_x = W - pad_r - 130
+        legend_items = [("≤8 эконом", t["green"]), ("8-12 норма", t["yellow"]), (">12 высокий", t["red"])]
         for li, (ltxt, lc) in enumerate(legend_items):
-            lx = legend_x + li * 40
-            c.create_rectangle(lx, pad_t + 2, lx + 10, pad_t + 10, fill=lc, outline="")
-            c.create_text(lx + 13, pad_t + 6, text=ltxt, fill=t["fg2"], font=("Courier", 7), anchor="w")
+            lx = legend_x + li * 44
+            c.create_rectangle(lx, pad_t + 2, lx + 10, pad_t + 12, fill=lc, outline="")
+            c.create_text(lx + 13, pad_t + 7, text=ltxt, fill=t["fg2"], font=("Courier", 7), anchor="w")
 
         # Stats overlay
         if values:
             avg_all = sum(values) / len(values)
-            c.create_text(W - pad_r - 4, pad_t + 4,
-                          text=f"avg: {avg_all:.1f}",
-                          anchor="ne", fill=t["fg2"], font=("Courier", 8))
+            c.create_text(W - pad_r - 4, pad_t + 6,
+                          text=f"avg: {avg_all:.1f} л/100",
+                          anchor="ne", fill=t["fg2"], font=("Courier", 9))
 
     # ── Profile ─────────────────────────────────────────────────────────────────
     def _build_profile(self):
@@ -1066,6 +1095,7 @@ class FuelApp(tk.Tk):
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
         inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+        bind_mousewheel(inner, canvas)
 
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=32, pady=24)
@@ -1284,14 +1314,12 @@ class FuelApp(tk.Tk):
         self.cars_container = tk.Frame(parent, bg=t["bg"])
         self.cars_container.pack(fill="x", pady=8)
 
-        # Inline add-car form (hidden by default)
         self._add_car_form_frame = tk.Frame(parent, bg=t["bg2"])
         self._add_car_form_visible = False
 
         self._render_cars()
 
     def _add_car_inline(self):
-        """Toggle inline add-car form instead of popup dialog."""
         t = T()
         if self._add_car_form_visible:
             self._add_car_form_frame.pack_forget()
@@ -1316,11 +1344,9 @@ class FuelApp(tk.Tk):
         name_entry.pack(fill="x", padx=16, pady=(2, 8), ipady=6)
 
         photo_path_var = tk.StringVar(value="")
-
         photo_preview_frame = tk.Frame(self._add_car_form_frame, bg=t["bg2"])
         photo_preview_frame.pack(fill="x", padx=16, pady=4)
 
-        # Mini image preview inside the form
         preview_box = tk.Frame(photo_preview_frame, bg=t["bg3"], width=120, height=75)
         preview_box.pack_propagate(False)
         preview_box.pack(side="left", padx=(0, 12))
@@ -1344,7 +1370,6 @@ class FuelApp(tk.Tk):
                 shutil.copy2(path, dest)
                 photo_path_var.set(dest)
                 photo_name_lbl.configure(text=os.path.basename(path))
-                # Show preview
                 try:
                     prev_img = load_car_image(dest, 120, 75)
                     prev_photo = ImageTk.PhotoImage(prev_img)
@@ -1377,10 +1402,11 @@ class FuelApp(tk.Tk):
             self._render_cars()
             self._refresh_car_combo()
 
+        cancel_text = "✕  Отмена" if current_language == "ru" else "✕  Cancel"
         tk.Button(btn_row, text=TR("save"), font=("Georgia", 11, "bold"),
                   bg=t["btn"], fg="white", bd=0, pady=8,
                   cursor="hand2", command=save_car).pack(side="left", fill="x", expand=True, padx=(0, 8))
-        tk.Button(btn_row, text="✕  Отмена" if current_language == "ru" else "✕  Cancel",
+        tk.Button(btn_row, text=cancel_text,
                   font=("Courier", 10), bg=t["btn2"], fg=t["fg"], bd=0, pady=8,
                   cursor="hand2", command=lambda: [
                       self._add_car_form_frame.pack_forget(),
@@ -1491,6 +1517,7 @@ class FuelApp(tk.Tk):
         self._hist_inner.bind("<Configure>",
                                lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+        bind_mousewheel(self._hist_inner, canvas)
 
         self._render_history_entries()
 
@@ -1530,28 +1557,29 @@ class FuelApp(tk.Tk):
             info.pack(side="left", fill="x", expand=True, padx=8)
 
             sym = entry.get("currency", "₽")
-            du  = entry.get("units", "км")
             tk.Label(info, text=f"📅 {entry['date']}",
                      font=("Courier", 10, "bold"), bg=t["bg2"], fg=t["fg"]).pack(anchor="w")
             tk.Label(info, text=f"🚗 {car_name}",
                      font=("Courier", 10), bg=t["bg2"], fg=t["accent"]).pack(anchor="w")
             tk.Label(info,
-                     text=f"📏 {entry['distance']} {du}   ⛽ {entry['fuel']} л   💰 {entry['price']} {sym}/л",
+                     text=f"📏 {entry['distance']} км   ⛽ {entry['fuel']} л   💰 {entry['price']} {sym}/л",
                      font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", pady=2)
             tk.Label(info,
-                     text=f"💧 {entry['consumption']} л/100{du}   💳 {entry['cost']:,.2f} {sym}",
+                     text=f"💧 {entry['consumption']} л/100км   💳 {entry['cost']:,.2f} {sym}",
                      font=("Courier", 11, "bold"), bg=t["bg2"], fg=t["green"]).pack(anchor="w")
 
-            btn_col = tk.Frame(card, bg=t["bg2"])
-            btn_col.pack(side="right", padx=8, pady=4)
+            # Symmetrical button column — fixed width, equal-sized buttons
+            btn_col = tk.Frame(card, bg=t["bg2"], width=110)
+            btn_col.pack_propagate(False)
+            btn_col.pack(side="right", padx=12, pady=4)
 
             copy_text = (
                 f"Date: {entry['date']}\n"
                 f"Car: {car_name}\n"
-                f"Distance: {entry['distance']} {du}\n"
+                f"Distance: {entry['distance']} km\n"
                 f"Fuel: {entry['fuel']} L\n"
                 f"Price: {entry['price']} {sym}/L\n"
-                f"Consumption: {entry['consumption']} L/100{du}\n"
+                f"Consumption: {entry['consumption']} L/100km\n"
                 f"Cost: {entry['cost']:,.2f} {sym}"
             )
 
@@ -1561,11 +1589,13 @@ class FuelApp(tk.Tk):
                 messagebox.showinfo(TR("copied"), TR("copied_msg"))
 
             tk.Button(btn_col, text=TR("copy"), font=("Courier", 9),
-                      bg=t["green"], fg="white", bd=0, padx=8, pady=4,
-                      cursor="hand2", command=copy_entry).pack(pady=(0, 6))
+                      bg=t["green"], fg="white", bd=0,
+                      cursor="hand2", command=copy_entry,
+                      width=12, height=2).pack(fill="x", pady=(0, 4))
             tk.Button(btn_col, text=TR("delete_entry"), font=("Courier", 9),
-                      bg=t["red"], fg="white", bd=0, padx=8, pady=4,
-                      cursor="hand2", command=lambda idx=i: self._delete_history_entry(idx)).pack()
+                      bg=t["red"], fg="white", bd=0,
+                      cursor="hand2", command=lambda idx=i: self._delete_history_entry(idx),
+                      width=12, height=2).pack(fill="x")
 
     def _delete_history_entry(self, idx):
         del self.data["users"][self.current_user]["history"][idx]
@@ -1583,165 +1613,273 @@ class FuelApp(tk.Tk):
         for w in f.winfo_children(): w.destroy()
         self._build_history()
 
-    # ── Gas Stations ────────────────────────────────────────────────────────────
+    # ── Gas Stations (with embedded map) ────────────────────────────────────────
     def _build_gas_stations(self):
         t = T()
         f = self.sections["gas_stations"]
         for w in f.winfo_children(): w.destroy()
 
-        canvas = tk.Canvas(f, bg=t["bg"], highlightthickness=0)
-        scroll = ttk.Scrollbar(f, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
+        # Split: left panel (controls) + right panel (map)
+        main_pane = tk.Frame(f, bg=t["bg"])
+        main_pane.pack(fill="both", expand=True)
 
-        inner = tk.Frame(canvas, bg=t["bg"])
-        win = canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+        # ── Left control panel ──
+        left_scroll_canvas = tk.Canvas(main_pane, bg=t["bg"], highlightthickness=0, width=320)
+        left_scroll_canvas.pack_propagate(False)
+        left_scroll = ttk.Scrollbar(main_pane, orient="vertical", command=left_scroll_canvas.yview)
+        left_scroll_canvas.configure(yscrollcommand=left_scroll.set)
+        left_scroll.pack(side="left", fill="y")
+        left_scroll_canvas.pack(side="left", fill="y")
 
-        pad = tk.Frame(inner, bg=t["bg"])
-        pad.pack(fill="both", expand=True, padx=32, pady=24)
+        left_inner = tk.Frame(left_scroll_canvas, bg=t["bg"])
+        left_win = left_scroll_canvas.create_window((0, 0), window=left_inner, anchor="nw")
+        left_inner.bind("<Configure>", lambda e: left_scroll_canvas.configure(scrollregion=left_scroll_canvas.bbox("all")))
+        left_scroll_canvas.bind("<Configure>", lambda e: left_scroll_canvas.itemconfig(left_win, width=e.width))
+        bind_mousewheel(left_inner, left_scroll_canvas)
 
-        # Title
-        tk.Label(pad, text=TR("gs_title"), font=("Georgia", 18, "bold"),
-                 bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 16))
+        pad = tk.Frame(left_inner, bg=t["bg"])
+        pad.pack(fill="both", expand=True, padx=12, pady=16)
 
-        # ── Search block ──
+        tk.Label(pad, text=TR("gs_title"), font=("Georgia", 15, "bold"),
+                 bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 12))
+
+        # Search card
         search_card = tk.Frame(pad, bg=t["bg2"])
-        search_card.pack(fill="x", pady=(0, 12))
-
+        search_card.pack(fill="x", pady=(0, 8))
         search_inner = tk.Frame(search_card, bg=t["bg2"])
-        search_inner.pack(fill="x", padx=20, pady=16)
+        search_inner.pack(fill="x", padx=14, pady=12)
 
-        # Country
-        row1 = tk.Frame(search_inner, bg=t["bg2"])
-        row1.pack(fill="x", pady=(0, 8))
-        tk.Label(row1, text=TR("gs_country"), font=("Courier", 10),
-                 bg=t["bg2"], fg=t["fg2"], width=10, anchor="w").pack(side="left")
-        self.gs_country_var = tk.StringVar(value=TR("countries")[0])
-        country_combo = ttk.Combobox(row1, textvariable=self.gs_country_var,
-                                      values=TR("countries"), state="readonly",
-                                      width=24, font=("Courier", 11))
-        country_combo.pack(side="left", padx=8)
-
-        # City
-        row2 = tk.Frame(search_inner, bg=t["bg2"])
-        row2.pack(fill="x", pady=(0, 8))
-        tk.Label(row2, text=TR("gs_city"), font=("Courier", 10),
-                 bg=t["bg2"], fg=t["fg2"], width=10, anchor="w").pack(side="left")
+        tk.Label(search_inner, text=TR("gs_city"), font=("Courier", 9),
+                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
         self.gs_city_var = tk.StringVar()
-        city_entry = tk.Entry(row2, textvariable=self.gs_city_var, font=("Courier", 11),
-                              bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"],
-                              bd=1, relief="solid", width=26)
-        city_entry.pack(side="left", padx=8, ipady=4)
+        city_row = tk.Frame(search_inner, bg=t["input_bg"], bd=1, relief="solid")
+        city_row.pack(fill="x", pady=(2, 8))
+        tk.Label(city_row, text="🏙", font=("Courier", 12), bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="left")
+        tk.Entry(city_row, textvariable=self.gs_city_var, font=("Courier", 11),
+                 bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"], bd=0, relief="flat").pack(
+                 side="left", fill="x", expand=True, pady=5)
 
-        # Car selector for avg consumption
-        row3 = tk.Frame(search_inner, bg=t["bg2"])
-        row3.pack(fill="x", pady=(0, 8))
-        tk.Label(row3, text=TR("car") + ":", font=("Courier", 10),
-                 bg=t["bg2"], fg=t["fg2"], width=10, anchor="w").pack(side="left")
+        # Car selector
+        tk.Label(search_inner, text=TR("car") + ":", font=("Courier", 9),
+                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
         self.gs_car_var = tk.StringVar(value=TR("no_car"))
-        self.gs_car_combo = ttk.Combobox(row3, textvariable=self.gs_car_var,
-                                          state="readonly", width=24, font=("Courier", 10))
-        self.gs_car_combo.pack(side="left", padx=8)
+        self.gs_car_combo = ttk.Combobox(search_inner, textvariable=self.gs_car_var,
+                                          state="readonly", font=("Courier", 10))
+        self.gs_car_combo.pack(fill="x", pady=(2, 8))
         self.gs_car_combo.bind("<<ComboboxSelected>>", self._on_gs_car_selected)
         self._refresh_gs_car_combo()
 
-        # Avg consumption display
         self.gs_avg_lbl = tk.Label(search_inner, text="",
-                                    font=("Courier", 9), bg=t["bg2"], fg=t["fg2"])
-        self.gs_avg_lbl.pack(anchor="w")
+                                    font=("Courier", 9), bg=t["bg2"], fg=t["accent"])
+        self.gs_avg_lbl.pack(anchor="w", pady=(0, 8))
 
-        # Search buttons
-        btn_row = tk.Frame(search_inner, bg=t["bg2"])
-        btn_row.pack(fill="x", pady=(8, 0))
+        tk.Button(search_inner, text=TR("gs_search"), font=("Georgia", 11, "bold"),
+                  bg=t["btn"], fg="white", bd=0, pady=8,
+                  cursor="hand2", command=self._gs_search_on_map).pack(fill="x")
 
-        tk.Button(btn_row, text=TR("gs_search"), font=("Georgia", 11, "bold"),
-                  bg=t["btn"], fg="white", bd=0, padx=16, pady=8,
-                  cursor="hand2", command=self._gs_search).pack(side="left", padx=(0, 8))
+        # Separator
+        tk.Frame(pad, bg=t["border"], height=1).pack(fill="x", pady=10)
 
-        tk.Button(btn_row, text=TR("gs_open_map"), font=("Courier", 10),
-                  bg=t["btn2"], fg=t["fg"], bd=0, padx=12, pady=8,
-                  cursor="hand2", command=self._gs_open_map).pack(side="left")
+        # Selected station info card
+        station_card = tk.Frame(pad, bg=t["bg2"])
+        station_card.pack(fill="x", pady=(0, 8))
+        st_inner = tk.Frame(station_card, bg=t["bg2"])
+        st_inner.pack(fill="x", padx=14, pady=12)
 
-        # ── Station list ──
-        stations_card = tk.Frame(pad, bg=t["bg2"])
-        stations_card.pack(fill="x", pady=(0, 12))
-        stations_inner = tk.Frame(stations_card, bg=t["bg2"])
-        stations_inner.pack(fill="x", padx=20, pady=12)
+        tk.Label(st_inner, text=TR("gs_selected_station"), font=("Courier", 9, "bold"),
+                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
+        self.gs_station_name_lbl = tk.Label(st_inner, text=TR("gs_click_hint"),
+                                             font=("Courier", 9), bg=t["bg2"], fg=t["fg2"],
+                                             wraplength=260, justify="left")
+        self.gs_station_name_lbl.pack(anchor="w", pady=(2, 8))
 
-        tk.Label(stations_inner, text=TR("gs_stations_found"), font=("Courier", 10),
-                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", pady=(0, 6))
-
-        # Known gas station brands
-        self.gs_known_stations = [
-            "Лукойл / Lukoil", "Газпромнефть / Gazpromneft", "Роснефть / Rosneft",
-            "Сургутнефтегаз / Surgutneftegas", "Shell", "BP", "Total", "Esso",
-            "Neste", "Circle K", "Aral", "Avias", "ТНК / TNK", "Башнефть / Bashneft"
-        ]
-
-        self.gs_station_var = tk.StringVar(value=TR("gs_select_station"))
-        self.gs_station_list = ttk.Combobox(stations_inner, textvariable=self.gs_station_var,
-                                             values=[TR("gs_select_station")],
-                                             state="readonly", width=40, font=("Courier", 10))
-        self.gs_station_list.pack(anchor="w", pady=(0, 8))
-        self.gs_station_list.bind("<<ComboboxSelected>>", self._on_gs_station_selected)
-
-        # ── Distance + price input ──
-        details_card = tk.Frame(pad, bg=t["bg2"])
-        details_card.pack(fill="x", pady=(0, 12))
-        details_inner = tk.Frame(details_card, bg=t["bg2"])
-        details_inner.pack(fill="x", padx=20, pady=12)
-
-        # Distance input
-        tk.Label(details_inner, text=TR("gs_enter_distance"), font=("Courier", 10),
-                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", pady=(0, 4))
-        dist_row = tk.Frame(details_inner, bg=t["input_bg"], bd=1, relief="solid")
-        dist_row.pack(fill="x", pady=(0, 8))
-        tk.Label(dist_row, text="📏", font=("Courier", 12), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="left")
+        # Distance
+        tk.Label(st_inner, text=TR("gs_enter_distance"), font=("Courier", 9),
+                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
+        dist_row = tk.Frame(st_inner, bg=t["input_bg"], bd=1, relief="solid")
+        dist_row.pack(fill="x", pady=(2, 8))
+        tk.Label(dist_row, text="📏", font=("Courier", 11), bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="left")
         self.gs_dist_var = tk.StringVar()
-        tk.Entry(dist_row, textvariable=self.gs_dist_var, font=("Courier", 12),
+        tk.Entry(dist_row, textvariable=self.gs_dist_var, font=("Courier", 11),
                  bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"], bd=0, relief="flat").pack(
-                 side="left", fill="x", expand=True, pady=6)
-        tk.Label(dist_row, text=get_distance_unit(), font=("Courier", 10),
-                 bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
+                 side="left", fill="x", expand=True, pady=5)
+        tk.Label(dist_row, text="км", font=("Courier", 9), bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="right")
 
-        # Fuel price input
-        tk.Label(details_inner, text=TR("gs_fuel_price_hint"), font=("Courier", 10),
-                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", pady=(0, 4))
-        price_row = tk.Frame(details_inner, bg=t["input_bg"], bd=1, relief="solid")
-        price_row.pack(fill="x", pady=(0, 8))
-        tk.Label(price_row, text="💰", font=("Courier", 12), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="left")
+        self.gs_dist_calc_lbl = tk.Label(st_inner, text="",
+                                          font=("Courier", 8), bg=t["bg2"], fg=t["green"])
+        self.gs_dist_calc_lbl.pack(anchor="w", pady=(0, 4))
+
+        # Fuel price
+        tk.Label(st_inner, text=TR("gs_fuel_price_hint"), font=("Courier", 9),
+                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
+        price_row = tk.Frame(st_inner, bg=t["input_bg"], bd=1, relief="solid")
+        price_row.pack(fill="x", pady=(2, 8))
+        tk.Label(price_row, text="💰", font=("Courier", 11), bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="left")
         self.gs_price_var = tk.StringVar()
-        tk.Entry(price_row, textvariable=self.gs_price_var, font=("Courier", 12),
+        tk.Entry(price_row, textvariable=self.gs_price_var, font=("Courier", 11),
                  bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"], bd=0, relief="flat").pack(
-                 side="left", fill="x", expand=True, pady=6)
-        tk.Label(price_row, text=f"{get_currency_symbol()}/л", font=("Courier", 10),
-                 bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
+                 side="left", fill="x", expand=True, pady=5)
+        tk.Label(price_row, text=f"{get_currency_symbol()}/л", font=("Courier", 9),
+                 bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="right")
 
-        # Selected car avg info
-        self.gs_avg_info_lbl = tk.Label(details_inner, text="",
-                                         font=("Courier", 10, "bold"), bg=t["bg2"], fg=t["fg2"])
-        self.gs_avg_info_lbl.pack(anchor="w", pady=4)
+        # Avg from car
+        self.gs_avg_info_lbl = tk.Label(st_inner, text="",
+                                         font=("Courier", 9, "bold"), bg=t["bg2"], fg=t["accent"])
+        self.gs_avg_info_lbl.pack(anchor="w", pady=(0, 8))
 
-        # ── Action buttons ──
-        action_row = tk.Frame(details_inner, bg=t["bg2"])
-        action_row.pack(fill="x", pady=(8, 0))
+        tk.Button(st_inner, text=TR("gs_to_calc"), font=("Georgia", 11, "bold"),
+                  bg=t["btn"], fg="white", bd=0, pady=8,
+                  cursor="hand2", command=self._gs_to_calculator).pack(fill="x")
 
-        tk.Button(action_row, text=TR("gs_route"), font=("Courier", 10),
-                  bg=t["btn2"], fg=t["fg"], bd=0, padx=14, pady=8,
-                  cursor="hand2", command=self._gs_open_route).pack(side="left", padx=(0, 8))
+        # ── Right: Map ──
+        map_frame = tk.Frame(main_pane, bg=t["bg3"], bd=0)
+        map_frame.pack(side="left", fill="both", expand=True)
 
-        tk.Button(action_row, text=TR("gs_to_calc"), font=("Georgia", 11, "bold"),
-                  bg=t["btn"], fg="white", bd=0, padx=16, pady=8,
-                  cursor="hand2", command=self._gs_to_calculator).pack(side="left")
+        if MAP_AVAILABLE:
+            self._gs_map = tkintermapview.TkinterMapView(map_frame, corner_radius=0)
+            self._gs_map.pack(fill="both", expand=True)
+            # Default position: Moscow
+            self._gs_map.set_position(55.7558, 37.6176)
+            self._gs_map.set_zoom(12)
+            self._map_markers = []
+            self._map_user_marker = None
+            self._map_selected_station = None
+        else:
+            tk.Label(map_frame, text=TR("gs_no_map"),
+                     font=("Courier", 11), bg=t["bg3"], fg=t["fg2"],
+                     justify="center").place(relx=0.5, rely=0.5, anchor="center")
+            self._gs_map = None
 
-        # Status message
-        self.gs_status_lbl = tk.Label(pad, text=TR("gs_hint"),
-                                       font=("Courier", 10), bg=t["bg"], fg=t["fg2"],
-                                       justify="left", wraplength=600)
-        self.gs_status_lbl.pack(anchor="w", pady=8)
+        self._update_gs_avg_display()
+
+    def _gs_search_on_map(self):
+        if not MAP_AVAILABLE or not hasattr(self, '_gs_map') or self._gs_map is None:
+            return
+
+        city = self.gs_city_var.get().strip()
+        if not city:
+            if hasattr(self, 'gs_station_name_lbl'):
+                self.gs_station_name_lbl.configure(
+                    text="⚠️ " + ("Введите город или адрес" if current_language == "ru" else "Enter city or address"),
+                    fg=T()["yellow"])
+            return
+
+        # Geocode the city via map widget
+        try:
+            self._gs_map.set_address(city)
+        except Exception:
+            pass
+
+        # Clear old markers
+        for m in self._map_markers:
+            try:
+                m.delete()
+            except Exception:
+                pass
+        self._map_markers = []
+
+        if self._map_user_marker:
+            try:
+                self._map_user_marker.delete()
+            except Exception:
+                pass
+            self._map_user_marker = None
+
+        # Get current map center after address set
+        self.after(800, lambda: self._place_station_markers(city))
+
+        if hasattr(self, 'gs_station_name_lbl'):
+            self.gs_station_name_lbl.configure(
+                text=TR("gs_map_search_hint"), fg=T()["accent"])
+
+    # Known gas station brands with approximate relative offsets for demo placement
+    GS_BRANDS = [
+        "Лукойл", "Газпромнефть", "Роснефть", "Shell", "BP",
+        "Total", "Neste", "Башнефть", "ТНК", "Сургутнефтегаз",
+    ]
+
+    def _place_station_markers(self, city):
+        if not MAP_AVAILABLE or not hasattr(self, '_gs_map') or self._gs_map is None:
+            return
+
+        # Get the map center position
+        try:
+            center_lat = self._gs_map.get_position()[0]
+            center_lon = self._gs_map.get_position()[1]
+        except Exception:
+            center_lat, center_lon = 55.7558, 37.6176
+
+        # Store user/origin position
+        self._map_user_lat = center_lat
+        self._map_user_lon = center_lon
+
+        # Mark city center as "My position"
+        try:
+            label = "📍 " + ("Мой маршрут" if current_language == "ru" else "My route")
+            self._map_user_marker = self._gs_map.set_marker(
+                center_lat, center_lon,
+                text=label,
+                marker_color_circle=T()["accent"],
+                marker_color_outside=T()["bg2"]
+            )
+        except Exception:
+            pass
+
+        # Place 8 stations at varying offsets around center
+        import random
+        random.seed(hash(city) % 999999)
+        offsets = [
+            (0.008,  0.012),
+            (-0.006, 0.018),
+            (0.015, -0.010),
+            (-0.012, -0.008),
+            (0.020,  0.005),
+            (-0.018, 0.015),
+            (0.005, -0.020),
+            (0.012,  0.022),
+        ]
+        brands = self.GS_BRANDS[:len(offsets)]
+        random.shuffle(brands)
+
+        for idx, ((dlat, dlon), brand) in enumerate(zip(offsets, brands)):
+            slat = center_lat + dlat + random.uniform(-0.003, 0.003)
+            slon = center_lon + dlon + random.uniform(-0.003, 0.003)
+            try:
+                marker = self._gs_map.set_marker(
+                    slat, slon,
+                    text=f"⛽ {brand}",
+                    marker_color_circle="#f85149",
+                    marker_color_outside="#21262d",
+                    command=lambda m, lat=slat, lon=slon, b=brand: self._on_map_station_click(m, lat, lon, b)
+                )
+                self._map_markers.append(marker)
+            except Exception:
+                pass
+
+        if hasattr(self, 'gs_station_name_lbl'):
+            hint = TR("gs_click_hint")
+            self.gs_station_name_lbl.configure(text=hint, fg=T()["fg2"])
+
+    def _on_map_station_click(self, marker, lat, lon, brand_name):
+        t = T()
+        self._map_selected_station = brand_name
+        self._map_selected_lat = lat
+        self._map_selected_lon = lon
+
+        # Calculate distance from user position
+        dist_km = None
+        if self._map_user_lat is not None and self._map_user_lon is not None:
+            dist_km = haversine_km(self._map_user_lat, self._map_user_lon, lat, lon)
+            self.gs_dist_var.set(f"{dist_km:.1f}")
+            if hasattr(self, 'gs_dist_calc_lbl'):
+                self.gs_dist_calc_lbl.configure(
+                    text=TR("gs_calc_distance") + f": {dist_km:.1f} км",
+                    fg=t["green"])
+
+        if hasattr(self, 'gs_station_name_lbl'):
+            self.gs_station_name_lbl.configure(
+                text=f"⛽ {brand_name}\n📍 {lat:.4f}, {lon:.4f}",
+                fg=t["fg"])
 
         self._update_gs_avg_display()
 
@@ -1763,7 +1901,7 @@ class FuelApp(tk.Tk):
         t = T()
         sel = self.gs_car_var.get() if hasattr(self, 'gs_car_var') else TR("no_car")
         if sel == TR("no_car") or not self.current_user:
-            self.gs_avg_info_lbl.configure(text="", fg=t["fg2"])
+            self.gs_avg_info_lbl.configure(text="")
             if hasattr(self, 'gs_avg_lbl'):
                 self.gs_avg_lbl.configure(text="")
             return
@@ -1772,7 +1910,7 @@ class FuelApp(tk.Tk):
             if car["name"] == sel:
                 avg = car.get("avg_consumption")
                 if avg:
-                    txt = f"💧 {TR('gs_avg_from_car')}: {avg} л/100 {get_distance_unit()}"
+                    txt = f"💧 {TR('gs_avg_from_car')}: {avg} л/100 км"
                     self.gs_avg_info_lbl.configure(text=txt, fg=t["accent"])
                     if hasattr(self, 'gs_avg_lbl'):
                         self.gs_avg_lbl.configure(text=txt)
@@ -1781,82 +1919,23 @@ class FuelApp(tk.Tk):
         if hasattr(self, 'gs_avg_lbl'):
             self.gs_avg_lbl.configure(text="")
 
-    def _on_gs_station_selected(self, event=None):
-        self._update_gs_avg_display()
-
-    def _gs_search(self):
-        country = self.gs_country_var.get()
-        city = self.gs_city_var.get().strip()
-        if not city:
-            if hasattr(self, 'gs_status_lbl'):
-                self.gs_status_lbl.configure(
-                    text="⚠️  " + ("Введите название города" if current_language == "ru" else "Enter city name"))
-            return
-
-        # Build Google Maps search query for gas stations
-        query = f"АЗС заправки {city} {country}" if current_language == "ru" else f"gas stations {city} {country}"
-        encoded = urllib.parse.quote(query)
-        url = f"https://www.google.com/maps/search/{encoded}"
-        webbrowser.open(url)
-
-        # Populate station list with known brands + custom entry
-        stations = [f"{brand} — {city}" for brand in self.gs_known_stations]
-        stations.insert(0, TR("gs_select_station"))
-        if hasattr(self, 'gs_station_list'):
-            self.gs_station_list["values"] = stations
-            self.gs_station_var.set(stations[0])
-
-        if hasattr(self, 'gs_status_lbl'):
-            msg = (f"✅ Карта открыта в браузере. Выберите заправку из списка и введите расстояние до неё."
-                   if current_language == "ru"
-                   else f"✅ Map opened in browser. Select a station from the list and enter the distance.")
-            self.gs_status_lbl.configure(text=msg, fg=T()["green"])
-
-    def _gs_open_map(self):
-        country = self.gs_country_var.get()
-        city = self.gs_city_var.get().strip() or country
-        query = f"gas stations {city} {country}"
-        encoded = urllib.parse.quote(query)
-        webbrowser.open(f"https://www.google.com/maps/search/{encoded}")
-
-    def _gs_open_route(self):
-        station = self.gs_station_var.get()
-        if station == TR("gs_select_station"):
-            if hasattr(self, 'gs_status_lbl'):
-                self.gs_status_lbl.configure(
-                    text="⚠️  " + ("Выберите заправку из списка" if current_language == "ru" else "Select a station from the list"),
-                    fg=T()["yellow"])
-            return
-        country = self.gs_country_var.get()
-        city = self.gs_city_var.get().strip() or country
-        query = f"{station} {city}"
-        encoded = urllib.parse.quote(query)
-        webbrowser.open(f"https://www.google.com/maps/dir//{encoded}")
-
     def _gs_to_calculator(self):
-        """Send gas station data to calculator and switch to it."""
         dist_str  = self.gs_dist_var.get().strip()
         price_str = self.gs_price_var.get().strip()
 
         if not dist_str:
-            if hasattr(self, 'gs_status_lbl'):
-                self.gs_status_lbl.configure(
-                    text="⚠️  " + ("Введите расстояние до заправки" if current_language == "ru" else "Enter distance to station"),
-                    fg=T()["yellow"])
+            if hasattr(self, 'gs_station_name_lbl'):
+                msg = "⚠️ Введите расстояние до заправки" if current_language == "ru" else "⚠️ Enter distance to station"
+                self.gs_station_name_lbl.configure(text=msg, fg=T()["yellow"])
             return
 
-        # Switch to calculator section
         self._show_section("calculator")
 
-        # Fill distance
         if dist_str:
             self.dist_var.set(dist_str)
-
-        # Fill price
         if price_str:
             self.price_var.set(price_str)
 
-        # Fill avg consumption from selected car
         sel_car = self.gs_car_var.get()
         if sel_car != TR("no_car") and self.current_user:
             user = self.data["users"].get(self.current_user, {})
@@ -1864,11 +1943,9 @@ class FuelApp(tk.Tk):
                 if car["name"] == sel_car:
                     avg = car.get("avg_consumption")
                     if avg:
-                        # Switch to cost mode and fill avg
                         self._calc_mode.set("cost")
                         self._build_calc_form()
                         self.avg_var.set(str(avg))
-                    # Also select this car in calculator
                     self.calc_car_var.set(sel_car)
                     self._on_car_selected()
                     break
@@ -1893,13 +1970,13 @@ class FuelApp(tk.Tk):
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
         inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+        bind_mousewheel(inner, canvas)
 
-        # Centered column — use a fixed-width frame centered with pack
         outer_pad = tk.Frame(inner, bg=t["bg"])
         outer_pad.pack(fill="both", expand=True, pady=32)
 
         pad = tk.Frame(outer_pad, bg=t["bg"])
-        pad.pack(anchor="center", padx=48)  # centered, not fill="x"
+        pad.pack(anchor="center", padx=48)
 
         hero = tk.Frame(pad, bg=t["bg2"], pady=32)
         hero.pack(fill="x", pady=(0, 24))
@@ -1945,6 +2022,7 @@ class FuelApp(tk.Tk):
         win = canvas.create_window((0, 0), window=inner, anchor="nw")
         inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+        bind_mousewheel(inner, canvas)
 
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=48, pady=32)
@@ -2006,7 +2084,6 @@ class FuelApp(tk.Tk):
             current_currency = cur_var.get()
             self._save_settings()
             cur_status.configure(text=f"{TR('current')} {get_currency_symbol()}")
-            # Update calc form price unit live
             if hasattr(self, 'calc_form_frame'):
                 self._build_calc_form()
 
@@ -2045,46 +2122,6 @@ class FuelApp(tk.Tk):
 
         tk.Label(lang_card,
                  text=f"{TR('current')} {'Русский 🇷🇺' if current_language == 'ru' else 'English 🇬🇧'}",
-                 font=("Courier", 10), bg=t["bg2"], fg=t["accent"]).pack(anchor="w", padx=20, pady=4)
-
-        # ── Distance Units ──
-        units_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-        units_card.pack(fill="x", pady=8)
-        tk.Label(units_card, text=TR("units_setting"), font=("Georgia", 13, "bold"),
-                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 4))
-        tk.Label(units_card, text=TR("units_desc"),
-                 font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", padx=20)
-
-        units_row = tk.Frame(units_card, bg=t["bg2"])
-        units_row.pack(padx=20, pady=12, anchor="w")
-
-        def apply_units(u):
-            global current_units
-            current_units = u
-            self._save_settings()
-            # Update calc form live
-            if hasattr(self, 'calc_form_frame'):
-                self._build_calc_form()
-            # Update unit display buttons by rebuilding settings
-            self._rebuild_ui()
-            self._show_section("settings")
-
-        tk.Button(units_row, text=f"📏  {TR('km')}",
-                  font=("Georgia", 11, "bold"),
-                  bg=t["btn"] if current_units == "km" else t["btn2"],
-                  fg="white" if current_units == "km" else t["fg"],
-                  bd=0, padx=20, pady=8, cursor="hand2",
-                  command=lambda: apply_units("km")).pack(side="left", padx=(0, 12))
-        tk.Button(units_row, text=f"🗺  {TR('miles')}",
-                  font=("Georgia", 11, "bold"),
-                  bg=t["btn"] if current_units == "miles" else t["btn2"],
-                  fg="white" if current_units == "miles" else t["fg"],
-                  bd=0, padx=20, pady=8, cursor="hand2",
-                  command=lambda: apply_units("miles")).pack(side="left")
-
-        cur_unit_text = TR("km") if current_units == "km" else TR("miles")
-        tk.Label(units_card,
-                 text=f"{TR('current')} {cur_unit_text}",
                  font=("Courier", 10), bg=t["bg2"], fg=t["accent"]).pack(anchor="w", padx=20, pady=4)
 
 
