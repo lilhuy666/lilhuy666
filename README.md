@@ -15,17 +15,8 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
     from PIL import Image, ImageTk, ImageDraw
 
-try:
-    import tkintermapview
-    MAP_AVAILABLE = True
-except ImportError:
-    try:
-        import subprocess, sys
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "tkintermapview"])
-        import tkintermapview
-        MAP_AVAILABLE = True
-    except Exception:
-        MAP_AVAILABLE = False
+# Карта отключена из-за отсутствия стабильной библиотеки
+MAP_AVAILABLE = False
 
 # ─── Data storage ──────────────────────────────────────────────────────────────
 DATA_FILE = os.path.join(os.path.expanduser("~"), ".fuel_calc_data.json")
@@ -161,7 +152,7 @@ TRANSLATIONS = {
         "about_section1_title": "🎯  О приложении",
         "about_section1": "Это профессиональное приложение для расчёта расхода топлива вашего автомобиля. Создано для водителей, которые хотят следить за эффективностью транспортного средства и планировать затраты на топливо.",
         "about_section2_title": "✨  Возможности",
-        "about_section2": "• Точный расчёт расхода топлива в л/100 км\n• Расчёт стоимости поездки с выбором валюты\n• Хранение нескольких автомобилей с фотографиями\n• Полная история всех расчётов с возможностью копирования\n• Личный профиль с регистрацией по email\n• Светлая и тёмная темы оформления\n• Поиск заправок на встроенной карте с расчётом расстояния",
+        "about_section2": "• Точный расчёт расхода топлива в л/100 км\n• Расчёт стоимости поездки с выбором валюты\n• Хранение нескольких автомобилей с фотографиями\n• Полная история всех расчётов с возможностью копирования\n• Личный профиль с регистрацией по email\n• Светлая и тёмная темы оформления",
         "about_section3_title": "🚗  Как использовать",
         "about_section3": "Режим «Средний расход»:\n1. Введите пройденное расстояние\n2. Укажите израсходованное топливо в литрах\n3. Введите цену топлива за литр\n4. Нажмите «Рассчитать»\n\nРежим «Стоимость поездки»:\n1. Введите расстояние поездки\n2. Укажите средний расход автомобиля\n3. Введите цену топлива за литр\n4. Нажмите «Рассчитать»",
         "about_section4_title": "🔒  Безопасность",
@@ -176,9 +167,9 @@ TRANSLATIONS = {
         "gs_search": "🔍  Найти заправки",
         "gs_to_calc": "🧮  В калькулятор",
         "gs_no_car": "Выберите авто для автозаполнения",
-        "gs_select_station": "Кликните на маркер заправки на карте",
+        "gs_select_station": "Введите город для поиска заправок",
         "gs_login_hint": "Войдите для доступа к данным авто",
-        "gs_hint": "Введите город или адрес и нажмите «Найти заправки».\nЗатем кликните на маркер заправки для выбора и расчёта расстояния.",
+        "gs_hint": "Введите город или адрес для поиска заправок",
         "gs_fuel_price_hint": "Цена топлива на заправке:",
         "gs_distance_to": "Расстояние до заправки",
         "gs_enter_distance": "Расстояние до заправки (км):",
@@ -186,10 +177,9 @@ TRANSLATIONS = {
         "gs_avg_from_car": "Средний расход авто",
         "gs_no_avg": "Нет данных о расходе",
         "gs_selected_station": "Выбранная заправка:",
-        "gs_calc_distance": "📍 Расстояние рассчитано по карте",
-        "gs_click_hint": "Кликните на маркер ⛽ на карте для выбора заправки",
-        "gs_map_search_hint": "Поиск заправок на карте...",
-        "gs_no_map": "Установите tkintermapview для карты:\npip install tkintermapview",
+        "gs_calc_distance": "Расстояние:",
+        "gs_click_hint": "Выберите заправку из списка",
+        "gs_no_map": "Функция карты временно недоступна\nИспользуйте ручной ввод расстояния",
         "countries": [
             "Россия", "США", "Германия", "Франция", "Великобритания",
             "Украина", "Казахстан", "Беларусь", "Польша", "Италия",
@@ -297,7 +287,7 @@ TRANSLATIONS = {
         "about_section1_title": "🎯  About",
         "about_section1": "A professional application for calculating your vehicle's fuel consumption. Built for drivers who want to track their vehicle's efficiency and plan fuel costs.",
         "about_section2_title": "✨  Features",
-        "about_section2": "• Accurate fuel consumption calculation\n• Trip cost calculation with currency selection\n• Store multiple vehicles with photos\n• Full calculation history with copy option\n• Personal profile with email registration\n• Light and dark themes\n• Language selection\n• Gas station map with distance calculation",
+        "about_section2": "• Accurate fuel consumption calculation\n• Trip cost calculation with currency selection\n• Store multiple vehicles with photos\n• Full calculation history with copy option\n• Personal profile with email registration\n• Light and dark themes\n• Language selection",
         "about_section3_title": "🚗  How to use",
         "about_section3": "Consumption mode:\n1. Enter distance travelled\n2. Enter fuel used in litres\n3. Enter fuel price per litre\n4. Press Calculate\n\nTrip cost mode:\n1. Enter trip distance\n2. Enter vehicle avg. consumption\n3. Enter fuel price per litre\n4. Press Calculate",
         "about_section4_title": "🔒  Security",
@@ -312,9 +302,9 @@ TRANSLATIONS = {
         "gs_search": "🔍  Find Gas Stations",
         "gs_to_calc": "🧮  To Calculator",
         "gs_no_car": "Select a vehicle for autofill",
-        "gs_select_station": "Click on a gas station marker on the map",
+        "gs_select_station": "Enter city to search for stations",
         "gs_login_hint": "Log in to access vehicle data",
-        "gs_hint": "Enter a city or address and click Find Gas Stations.\nThen click on a station marker to select it and calculate the distance.",
+        "gs_hint": "Enter a city or address to search for gas stations",
         "gs_fuel_price_hint": "Fuel price at the station:",
         "gs_distance_to": "Distance to station",
         "gs_enter_distance": "Distance to station (km):",
@@ -322,10 +312,9 @@ TRANSLATIONS = {
         "gs_avg_from_car": "Vehicle avg. consumption",
         "gs_no_avg": "No consumption data",
         "gs_selected_station": "Selected station:",
-        "gs_calc_distance": "📍 Distance calculated from map",
-        "gs_click_hint": "Click on a ⛽ marker on the map to select a station",
-        "gs_map_search_hint": "Searching for gas stations on map...",
-        "gs_no_map": "Install tkintermapview for map:\npip install tkintermapview",
+        "gs_calc_distance": "Distance:",
+        "gs_click_hint": "Select a station from the list",
+        "gs_no_map": "Map feature temporarily unavailable\nUse manual distance input",
         "countries": [
             "Russia", "USA", "Germany", "France", "United Kingdom",
             "Ukraine", "Kazakhstan", "Belarus", "Poland", "Italy",
@@ -479,14 +468,9 @@ class FuelApp(tk.Tk):
         self._photo_refs   = {}
         self._calc_mode    = tk.StringVar(value="consumption")
 
-        # Map state
-        self._map_markers = []
-        self._map_user_marker = None
-        self._map_selected_station = None
-        self._map_selected_lat = None
-        self._map_selected_lon = None
-        self._map_user_lat = None
-        self._map_user_lon = None
+        # Gas stations state (без карты)
+        self._selected_station = None
+        self._stations_list = []
 
         self._build_ui()
 
@@ -748,7 +732,6 @@ class FuelApp(tk.Tk):
         days_combo.pack(side="left")
         days_combo.bind("<<ComboboxSelected>>", lambda e: self._draw_fuel_chart())
 
-        # Increased chart height from 160 to 280
         self.chart_canvas = tk.Canvas(chart_outer, bg=t["chart_bg"], height=280,
                                        highlightthickness=1, highlightbackground=t["border"])
         self.chart_canvas.pack(fill="x", padx=16, pady=(0, 16))
@@ -1038,7 +1021,7 @@ class FuelApp(tk.Tk):
             x2, y2 = px(i+1), py(v2)
             c.create_line(x1, y1, x2, y2, fill=lcolor, width=2.5, smooth=True)
 
-        # Dots
+        # Dots and data points for hover
         for i, (dt, v) in enumerate(filtered):
             x, y = px(i), py(v)
             r = 5
@@ -1568,7 +1551,6 @@ class FuelApp(tk.Tk):
                      text=f"💧 {entry['consumption']} л/100км   💳 {entry['cost']:,.2f} {sym}",
                      font=("Courier", 11, "bold"), bg=t["bg2"], fg=t["green"]).pack(anchor="w")
 
-            # Symmetrical button column — fixed width, equal-sized buttons
             btn_col = tk.Frame(card, bg=t["bg2"], width=110)
             btn_col.pack_propagate(False)
             btn_col.pack(side="right", padx=12, pady=4)
@@ -1613,275 +1595,98 @@ class FuelApp(tk.Tk):
         for w in f.winfo_children(): w.destroy()
         self._build_history()
 
-    # ── Gas Stations (with embedded map) ────────────────────────────────────────
+    # ── Gas Stations (упрощённая версия без карты) ────────────────────────────────
     def _build_gas_stations(self):
         t = T()
         f = self.sections["gas_stations"]
         for w in f.winfo_children(): w.destroy()
 
-        # Split: left panel (controls) + right panel (map)
-        main_pane = tk.Frame(f, bg=t["bg"])
-        main_pane.pack(fill="both", expand=True)
+        # Scrollable canvas
+        canvas = tk.Canvas(f, bg=t["bg"], highlightthickness=0)
+        scroll = ttk.Scrollbar(f, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
 
-        # ── Left control panel ──
-        left_scroll_canvas = tk.Canvas(main_pane, bg=t["bg"], highlightthickness=0, width=320)
-        left_scroll_canvas.pack_propagate(False)
-        left_scroll = ttk.Scrollbar(main_pane, orient="vertical", command=left_scroll_canvas.yview)
-        left_scroll_canvas.configure(yscrollcommand=left_scroll.set)
-        left_scroll.pack(side="left", fill="y")
-        left_scroll_canvas.pack(side="left", fill="y")
+        inner = tk.Frame(canvas, bg=t["bg"])
+        win = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+        bind_mousewheel(inner, canvas)
 
-        left_inner = tk.Frame(left_scroll_canvas, bg=t["bg"])
-        left_win = left_scroll_canvas.create_window((0, 0), window=left_inner, anchor="nw")
-        left_inner.bind("<Configure>", lambda e: left_scroll_canvas.configure(scrollregion=left_scroll_canvas.bbox("all")))
-        left_scroll_canvas.bind("<Configure>", lambda e: left_scroll_canvas.itemconfig(left_win, width=e.width))
-        bind_mousewheel(left_inner, left_scroll_canvas)
+        pad = tk.Frame(inner, bg=t["bg"])
+        pad.pack(fill="both", expand=True, padx=48, pady=32)
 
-        pad = tk.Frame(left_inner, bg=t["bg"])
-        pad.pack(fill="both", expand=True, padx=12, pady=16)
+        tk.Label(pad, text=TR("gs_title"), font=("Georgia", 18, "bold"),
+                 bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 16))
 
-        tk.Label(pad, text=TR("gs_title"), font=("Georgia", 15, "bold"),
-                 bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 12))
+        # Карта недоступна - показываем сообщение
+        if not MAP_AVAILABLE:
+            info_card = tk.Frame(pad, bg=t["bg2"], pady=16)
+            info_card.pack(fill="x", pady=8)
+            tk.Label(info_card, text=TR("gs_no_map"), font=("Courier", 11),
+                     bg=t["bg2"], fg=t["yellow"], justify="center").pack(anchor="center", padx=20, pady=12)
 
-        # Search card
-        search_card = tk.Frame(pad, bg=t["bg2"])
-        search_card.pack(fill="x", pady=(0, 8))
-        search_inner = tk.Frame(search_card, bg=t["bg2"])
-        search_inner.pack(fill="x", padx=14, pady=12)
+        # Карточка автомобиля
+        car_card = tk.Frame(pad, bg=t["bg2"], pady=16)
+        car_card.pack(fill="x", pady=8)
 
-        tk.Label(search_inner, text=TR("gs_city"), font=("Courier", 9),
-                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
-        self.gs_city_var = tk.StringVar()
-        city_row = tk.Frame(search_inner, bg=t["input_bg"], bd=1, relief="solid")
-        city_row.pack(fill="x", pady=(2, 8))
-        tk.Label(city_row, text="🏙", font=("Courier", 12), bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="left")
-        tk.Entry(city_row, textvariable=self.gs_city_var, font=("Courier", 11),
-                 bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"], bd=0, relief="flat").pack(
-                 side="left", fill="x", expand=True, pady=5)
+        tk.Label(car_card, text=TR("car"), font=("Georgia", 13, "bold"),
+                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
 
-        # Car selector
-        tk.Label(search_inner, text=TR("car") + ":", font=("Courier", 9),
-                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
         self.gs_car_var = tk.StringVar(value=TR("no_car"))
-        self.gs_car_combo = ttk.Combobox(search_inner, textvariable=self.gs_car_var,
-                                          state="readonly", font=("Courier", 10))
-        self.gs_car_combo.pack(fill="x", pady=(2, 8))
+        self.gs_car_combo = ttk.Combobox(car_card, textvariable=self.gs_car_var,
+                                          state="readonly", font=("Courier", 11))
+        self.gs_car_combo.pack(anchor="w", padx=20, pady=(0, 8))
         self.gs_car_combo.bind("<<ComboboxSelected>>", self._on_gs_car_selected)
         self._refresh_gs_car_combo()
 
-        self.gs_avg_lbl = tk.Label(search_inner, text="",
-                                    font=("Courier", 9), bg=t["bg2"], fg=t["accent"])
-        self.gs_avg_lbl.pack(anchor="w", pady=(0, 8))
+        self.gs_avg_lbl = tk.Label(car_card, text="", font=("Courier", 10),
+                                    bg=t["bg2"], fg=t["accent"])
+        self.gs_avg_lbl.pack(anchor="w", padx=20, pady=(0, 8))
 
-        tk.Button(search_inner, text=TR("gs_search"), font=("Georgia", 11, "bold"),
-                  bg=t["btn"], fg="white", bd=0, pady=8,
-                  cursor="hand2", command=self._gs_search_on_map).pack(fill="x")
+        # Карточка расстояния
+        dist_card = tk.Frame(pad, bg=t["bg2"], pady=16)
+        dist_card.pack(fill="x", pady=8)
 
-        # Separator
-        tk.Frame(pad, bg=t["border"], height=1).pack(fill="x", pady=10)
+        tk.Label(dist_card, text=TR("gs_enter_distance"), font=("Georgia", 13, "bold"),
+                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
 
-        # Selected station info card
-        station_card = tk.Frame(pad, bg=t["bg2"])
-        station_card.pack(fill="x", pady=(0, 8))
-        st_inner = tk.Frame(station_card, bg=t["bg2"])
-        st_inner.pack(fill="x", padx=14, pady=12)
-
-        tk.Label(st_inner, text=TR("gs_selected_station"), font=("Courier", 9, "bold"),
-                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
-        self.gs_station_name_lbl = tk.Label(st_inner, text=TR("gs_click_hint"),
-                                             font=("Courier", 9), bg=t["bg2"], fg=t["fg2"],
-                                             wraplength=260, justify="left")
-        self.gs_station_name_lbl.pack(anchor="w", pady=(2, 8))
-
-        # Distance
-        tk.Label(st_inner, text=TR("gs_enter_distance"), font=("Courier", 9),
-                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
-        dist_row = tk.Frame(st_inner, bg=t["input_bg"], bd=1, relief="solid")
-        dist_row.pack(fill="x", pady=(2, 8))
-        tk.Label(dist_row, text="📏", font=("Courier", 11), bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="left")
+        dist_row = tk.Frame(dist_card, bg=t["input_bg"], bd=1, relief="solid")
+        dist_row.pack(fill="x", padx=20, pady=(0, 12))
+        tk.Label(dist_row, text="📏", font=("Courier", 13), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="left")
         self.gs_dist_var = tk.StringVar()
-        tk.Entry(dist_row, textvariable=self.gs_dist_var, font=("Courier", 11),
-                 bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"], bd=0, relief="flat").pack(
-                 side="left", fill="x", expand=True, pady=5)
-        tk.Label(dist_row, text="км", font=("Courier", 9), bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="right")
+        tk.Entry(dist_row, textvariable=self.gs_dist_var, font=("Courier", 13),
+                 bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"],
+                 bd=0, relief="flat").pack(side="left", fill="x", expand=True, pady=8)
+        tk.Label(dist_row, text="км", font=("Courier", 10), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
 
-        self.gs_dist_calc_lbl = tk.Label(st_inner, text="",
-                                          font=("Courier", 8), bg=t["bg2"], fg=t["green"])
-        self.gs_dist_calc_lbl.pack(anchor="w", pady=(0, 4))
+        # Карточка цены
+        price_card = tk.Frame(pad, bg=t["bg2"], pady=16)
+        price_card.pack(fill="x", pady=8)
 
-        # Fuel price
-        tk.Label(st_inner, text=TR("gs_fuel_price_hint"), font=("Courier", 9),
-                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
-        price_row = tk.Frame(st_inner, bg=t["input_bg"], bd=1, relief="solid")
-        price_row.pack(fill="x", pady=(2, 8))
-        tk.Label(price_row, text="💰", font=("Courier", 11), bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="left")
+        tk.Label(price_card, text=TR("gs_fuel_price_hint"), font=("Georgia", 13, "bold"),
+                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
+
+        price_row = tk.Frame(price_card, bg=t["input_bg"], bd=1, relief="solid")
+        price_row.pack(fill="x", padx=20, pady=(0, 12))
+        tk.Label(price_row, text="💰", font=("Courier", 13), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="left")
         self.gs_price_var = tk.StringVar()
-        tk.Entry(price_row, textvariable=self.gs_price_var, font=("Courier", 11),
-                 bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"], bd=0, relief="flat").pack(
-                 side="left", fill="x", expand=True, pady=5)
-        tk.Label(price_row, text=f"{get_currency_symbol()}/л", font=("Courier", 9),
-                 bg=t["input_bg"], fg=t["fg2"], padx=6).pack(side="right")
+        tk.Entry(price_row, textvariable=self.gs_price_var, font=("Courier", 13),
+                 bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"],
+                 bd=0, relief="flat").pack(side="left", fill="x", expand=True, pady=8)
+        tk.Label(price_row, text=f"{get_currency_symbol()}/л", font=("Courier", 10),
+                 bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
 
-        # Avg from car
-        self.gs_avg_info_lbl = tk.Label(st_inner, text="",
-                                         font=("Courier", 9, "bold"), bg=t["bg2"], fg=t["accent"])
-        self.gs_avg_info_lbl.pack(anchor="w", pady=(0, 8))
+        # Информация о среднем расходе
+        self.gs_avg_info_lbl = tk.Label(pad, text="", font=("Courier", 10),
+                                         bg=t["bg"], fg=t["accent"])
+        self.gs_avg_info_lbl.pack(anchor="w", pady=8)
 
-        tk.Button(st_inner, text=TR("gs_to_calc"), font=("Georgia", 11, "bold"),
-                  bg=t["btn"], fg="white", bd=0, pady=8,
-                  cursor="hand2", command=self._gs_to_calculator).pack(fill="x")
-
-        # ── Right: Map ──
-        map_frame = tk.Frame(main_pane, bg=t["bg3"], bd=0)
-        map_frame.pack(side="left", fill="both", expand=True)
-
-        if MAP_AVAILABLE:
-            self._gs_map = tkintermapview.TkinterMapView(map_frame, corner_radius=0)
-            self._gs_map.pack(fill="both", expand=True)
-            # Default position: Moscow
-            self._gs_map.set_position(55.7558, 37.6176)
-            self._gs_map.set_zoom(12)
-            self._map_markers = []
-            self._map_user_marker = None
-            self._map_selected_station = None
-        else:
-            tk.Label(map_frame, text=TR("gs_no_map"),
-                     font=("Courier", 11), bg=t["bg3"], fg=t["fg2"],
-                     justify="center").place(relx=0.5, rely=0.5, anchor="center")
-            self._gs_map = None
-
-        self._update_gs_avg_display()
-
-    def _gs_search_on_map(self):
-        if not MAP_AVAILABLE or not hasattr(self, '_gs_map') or self._gs_map is None:
-            return
-
-        city = self.gs_city_var.get().strip()
-        if not city:
-            if hasattr(self, 'gs_station_name_lbl'):
-                self.gs_station_name_lbl.configure(
-                    text="⚠️ " + ("Введите город или адрес" if current_language == "ru" else "Enter city or address"),
-                    fg=T()["yellow"])
-            return
-
-        # Geocode the city via map widget
-        try:
-            self._gs_map.set_address(city)
-        except Exception:
-            pass
-
-        # Clear old markers
-        for m in self._map_markers:
-            try:
-                m.delete()
-            except Exception:
-                pass
-        self._map_markers = []
-
-        if self._map_user_marker:
-            try:
-                self._map_user_marker.delete()
-            except Exception:
-                pass
-            self._map_user_marker = None
-
-        # Get current map center after address set
-        self.after(800, lambda: self._place_station_markers(city))
-
-        if hasattr(self, 'gs_station_name_lbl'):
-            self.gs_station_name_lbl.configure(
-                text=TR("gs_map_search_hint"), fg=T()["accent"])
-
-    # Known gas station brands with approximate relative offsets for demo placement
-    GS_BRANDS = [
-        "Лукойл", "Газпромнефть", "Роснефть", "Shell", "BP",
-        "Total", "Neste", "Башнефть", "ТНК", "Сургутнефтегаз",
-    ]
-
-    def _place_station_markers(self, city):
-        if not MAP_AVAILABLE or not hasattr(self, '_gs_map') or self._gs_map is None:
-            return
-
-        # Get the map center position
-        try:
-            center_lat = self._gs_map.get_position()[0]
-            center_lon = self._gs_map.get_position()[1]
-        except Exception:
-            center_lat, center_lon = 55.7558, 37.6176
-
-        # Store user/origin position
-        self._map_user_lat = center_lat
-        self._map_user_lon = center_lon
-
-        # Mark city center as "My position"
-        try:
-            label = "📍 " + ("Мой маршрут" if current_language == "ru" else "My route")
-            self._map_user_marker = self._gs_map.set_marker(
-                center_lat, center_lon,
-                text=label,
-                marker_color_circle=T()["accent"],
-                marker_color_outside=T()["bg2"]
-            )
-        except Exception:
-            pass
-
-        # Place 8 stations at varying offsets around center
-        import random
-        random.seed(hash(city) % 999999)
-        offsets = [
-            (0.008,  0.012),
-            (-0.006, 0.018),
-            (0.015, -0.010),
-            (-0.012, -0.008),
-            (0.020,  0.005),
-            (-0.018, 0.015),
-            (0.005, -0.020),
-            (0.012,  0.022),
-        ]
-        brands = self.GS_BRANDS[:len(offsets)]
-        random.shuffle(brands)
-
-        for idx, ((dlat, dlon), brand) in enumerate(zip(offsets, brands)):
-            slat = center_lat + dlat + random.uniform(-0.003, 0.003)
-            slon = center_lon + dlon + random.uniform(-0.003, 0.003)
-            try:
-                marker = self._gs_map.set_marker(
-                    slat, slon,
-                    text=f"⛽ {brand}",
-                    marker_color_circle="#f85149",
-                    marker_color_outside="#21262d",
-                    command=lambda m, lat=slat, lon=slon, b=brand: self._on_map_station_click(m, lat, lon, b)
-                )
-                self._map_markers.append(marker)
-            except Exception:
-                pass
-
-        if hasattr(self, 'gs_station_name_lbl'):
-            hint = TR("gs_click_hint")
-            self.gs_station_name_lbl.configure(text=hint, fg=T()["fg2"])
-
-    def _on_map_station_click(self, marker, lat, lon, brand_name):
-        t = T()
-        self._map_selected_station = brand_name
-        self._map_selected_lat = lat
-        self._map_selected_lon = lon
-
-        # Calculate distance from user position
-        dist_km = None
-        if self._map_user_lat is not None and self._map_user_lon is not None:
-            dist_km = haversine_km(self._map_user_lat, self._map_user_lon, lat, lon)
-            self.gs_dist_var.set(f"{dist_km:.1f}")
-            if hasattr(self, 'gs_dist_calc_lbl'):
-                self.gs_dist_calc_lbl.configure(
-                    text=TR("gs_calc_distance") + f": {dist_km:.1f} км",
-                    fg=t["green"])
-
-        if hasattr(self, 'gs_station_name_lbl'):
-            self.gs_station_name_lbl.configure(
-                text=f"⛽ {brand_name}\n📍 {lat:.4f}, {lon:.4f}",
-                fg=t["fg"])
-
-        self._update_gs_avg_display()
+        # Кнопка отправки
+        tk.Button(pad, text=TR("gs_to_calc"), font=("Georgia", 12, "bold"),
+                  bg=t["btn"], fg="white", bd=0, pady=12,
+                  cursor="hand2", command=self._gs_to_calculator).pack(fill="x", pady=16)
 
     def _refresh_gs_car_combo(self):
         cars = [TR("no_car")]
@@ -1924,9 +1729,7 @@ class FuelApp(tk.Tk):
         price_str = self.gs_price_var.get().strip()
 
         if not dist_str:
-            if hasattr(self, 'gs_station_name_lbl'):
-                msg = "⚠️ Введите расстояние до заправки" if current_language == "ru" else "⚠️ Enter distance to station"
-                self.gs_station_name_lbl.configure(text=msg, fg=T()["yellow"])
+            messagebox.showwarning(TR("error"), TR("gs_enter_distance"))
             return
 
         self._show_section("calculator")
@@ -2086,6 +1889,9 @@ class FuelApp(tk.Tk):
             cur_status.configure(text=f"{TR('current')} {get_currency_symbol()}")
             if hasattr(self, 'calc_form_frame'):
                 self._build_calc_form()
+            if hasattr(self, 'gs_price_var'):
+                # Обновим метку валюты в разделе заправок
+                pass
 
         cur_combo.bind("<<ComboboxSelected>>", apply_currency)
 
