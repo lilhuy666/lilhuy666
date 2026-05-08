@@ -15,9 +15,6 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
     from PIL import Image, ImageTk, ImageDraw
 
-# Карта отключена из-за отсутствия стабильной библиотеки
-MAP_AVAILABLE = False
-
 # ─── Data storage ──────────────────────────────────────────────────────────────
 DATA_FILE = os.path.join(os.path.expanduser("~"), ".fuel_calc_data.json")
 PHOTO_DIR = os.path.join(os.path.expanduser("~"), ".fuel_calc_photos")
@@ -43,13 +40,23 @@ def is_valid_email(email):
 CURRENCIES = {
     "₽ RUB": "₽",
     "$ USD": "$",
-    "€ EUR": "€",
-    "£ GBP": "£",
-    "₴ UAH": "₴",
-    "₸ KZT": "₸",
-    "¥ JPY": "¥",
-    "₩ KRW": "₩",
 }
+
+# ─── Map data (имитация заправок в России) ─────────────────────────────────────
+GAS_STATIONS_RUSSIA = [
+    {"name": "Лукойл", "city": "Москва", "address": "Ленинградское шоссе, 1", "lat": 55.7558, "lon": 37.6173, "brand": "lukoil", "price": 52.50},
+    {"name": "Газпромнефть", "city": "Москва", "address": "Проспект Мира, 100", "lat": 55.7512, "lon": 37.6184, "brand": "gazprom", "price": 53.20},
+    {"name": "Роснефть", "city": "Москва", "address": "Варшавское шоссе, 25", "lat": 55.7600, "lon": 37.6200, "brand": "rosneft", "price": 51.80},
+    {"name": "Лукойл", "city": "Санкт-Петербург", "address": "Невский проспект, 50", "lat": 59.9343, "lon": 30.3351, "brand": "lukoil", "price": 53.00},
+    {"name": "Газпромнефть", "city": "Санкт-Петербург", "address": "Московский проспект, 150", "lat": 59.9290, "lon": 30.3200, "brand": "gazprom", "price": 54.00},
+    {"name": "Роснефть", "city": "Казань", "address": "Проспект Победы, 100", "lat": 55.7961, "lon": 49.1064, "brand": "rosneft", "price": 50.50},
+    {"name": "Лукойл", "city": "Екатеринбург", "address": "Улица Ленина, 50", "lat": 56.8389, "lon": 60.6057, "brand": "lukoil", "price": 51.00},
+    {"name": "Газпромнефть", "city": "Новосибирск", "address": "Красный проспект, 100", "lat": 55.0302, "lon": 82.9204, "brand": "gazprom", "price": 50.00},
+    {"name": "Роснефть", "city": "Сочи", "address": "Курортный проспект, 50", "lat": 43.5855, "lon": 39.7231, "brand": "rosneft", "price": 55.00},
+    {"name": "Лукойл", "city": "Краснодар", "address": "Улица Красная, 100", "lat": 45.0355, "lon": 38.9753, "brand": "lukoil", "price": 52.00},
+    {"name": "Газпромнефть", "city": "Владивосток", "address": "Океанский проспект, 50", "lat": 43.1155, "lon": 131.8855, "brand": "gazprom", "price": 54.50},
+    {"name": "Роснефть", "city": "Нижний Новгород", "address": "Улица Большая Покровская, 50", "lat": 56.3268, "lon": 44.0065, "brand": "rosneft", "price": 51.50},
+]
 
 # ─── Translations ──────────────────────────────────────────────────────────────
 TRANSLATIONS = {
@@ -148,11 +155,11 @@ TRANSLATIONS = {
         "per_100": "л/100",
         "distance_unit": "км",
         "about_title": "О приложении",
-        "version": "Версия 2.3  •  2024",
+        "version": "Версия 2.4  •  2024",
         "about_section1_title": "🎯  О приложении",
         "about_section1": "Это профессиональное приложение для расчёта расхода топлива вашего автомобиля. Создано для водителей, которые хотят следить за эффективностью транспортного средства и планировать затраты на топливо.",
         "about_section2_title": "✨  Возможности",
-        "about_section2": "• Точный расчёт расхода топлива в л/100 км\n• Расчёт стоимости поездки с выбором валюты\n• Хранение нескольких автомобилей с фотографиями\n• Полная история всех расчётов с возможностью копирования\n• Личный профиль с регистрацией по email\n• Светлая и тёмная темы оформления",
+        "about_section2": "• Точный расчёт расхода топлива в л/100 км\n• Расчёт стоимости поездки с выбором валюты\n• Хранение нескольких автомобилей с фотографиями\n• Полная история всех расчётов с возможностью копирования\n• Личный профиль с регистрацией по email\n• Светлая и тёмная темы оформления\n• Карта заправок России с ценами",
         "about_section3_title": "🚗  Как использовать",
         "about_section3": "Режим «Средний расход»:\n1. Введите пройденное расстояние\n2. Укажите израсходованное топливо в литрах\n3. Введите цену топлива за литр\n4. Нажмите «Рассчитать»\n\nРежим «Стоимость поездки»:\n1. Введите расстояние поездки\n2. Укажите средний расход автомобиля\n3. Введите цену топлива за литр\n4. Нажмите «Рассчитать»",
         "about_section4_title": "🔒  Безопасность",
@@ -162,31 +169,30 @@ TRANSLATIONS = {
         "footer": "© 2024 Калькулятор расхода топлива. Все права защищены.",
         "fuel_unit": "л",
         "price_unit": "за л",
-        "gs_title": "⛽  Заправки",
-        "gs_city": "Город / адрес:",
+        "gs_title": "⛽  Карта заправок России",
+        "gs_city": "Город:",
         "gs_search": "🔍  Найти заправки",
         "gs_to_calc": "🧮  В калькулятор",
         "gs_no_car": "Выберите авто для автозаполнения",
-        "gs_select_station": "Введите город для поиска заправок",
+        "gs_select_station": "Выберите город и нажмите «Найти заправки»",
         "gs_login_hint": "Войдите для доступа к данным авто",
-        "gs_hint": "Введите город или адрес для поиска заправок",
+        "gs_hint": "Выберите город для поиска заправок",
         "gs_fuel_price_hint": "Цена топлива на заправке:",
         "gs_distance_to": "Расстояние до заправки",
-        "gs_enter_distance": "Расстояние до заправки (км):",
+        "gs_enter_distance": "Ваше расстояние до заправки (км):",
         "gs_send_to_calc": "Отправить в калькулятор",
         "gs_avg_from_car": "Средний расход авто",
         "gs_no_avg": "Нет данных о расходе",
         "gs_selected_station": "Выбранная заправка:",
         "gs_calc_distance": "Расстояние:",
-        "gs_click_hint": "Выберите заправку из списка",
-        "gs_no_map": "Функция карты временно недоступна\nИспользуйте ручной ввод расстояния",
-        "countries": [
-            "Россия", "США", "Германия", "Франция", "Великобритания",
-            "Украина", "Казахстан", "Беларусь", "Польша", "Италия",
-            "Испания", "Нидерланды", "Швеция", "Финляндия", "Норвегия",
-            "Австрия", "Швейцария", "Чехия", "Венгрия", "Румыния",
-            "Турция", "ОАЭ", "Китай", "Япония", "Австралия", "Канада"
-        ],
+        "gs_click_hint": "Нажмите на метку заправки на карте",
+        "gs_distance_note": "💡 Введите ваше примерное расстояние до заправки",
+        "gs_all_cities": "Все города",
+        "brands": {
+            "lukoil": "Лукойл",
+            "gazprom": "Газпромнефть",
+            "rosneft": "Роснефть"
+        }
     },
     "en": {
         "app_title": "Fuel Consumption Calculator",
@@ -283,11 +289,11 @@ TRANSLATIONS = {
         "per_100": "L/100",
         "distance_unit": "km",
         "about_title": "About",
-        "version": "Version 2.3  •  2024",
+        "version": "Version 2.4  •  2024",
         "about_section1_title": "🎯  About",
         "about_section1": "A professional application for calculating your vehicle's fuel consumption. Built for drivers who want to track their vehicle's efficiency and plan fuel costs.",
         "about_section2_title": "✨  Features",
-        "about_section2": "• Accurate fuel consumption calculation\n• Trip cost calculation with currency selection\n• Store multiple vehicles with photos\n• Full calculation history with copy option\n• Personal profile with email registration\n• Light and dark themes\n• Language selection",
+        "about_section2": "• Accurate fuel consumption calculation\n• Trip cost calculation with currency selection\n• Store multiple vehicles with photos\n• Full calculation history with copy option\n• Personal profile with email registration\n• Light and dark themes\n• Language selection\n• Russian gas stations map with prices",
         "about_section3_title": "🚗  How to use",
         "about_section3": "Consumption mode:\n1. Enter distance travelled\n2. Enter fuel used in litres\n3. Enter fuel price per litre\n4. Press Calculate\n\nTrip cost mode:\n1. Enter trip distance\n2. Enter vehicle avg. consumption\n3. Enter fuel price per litre\n4. Press Calculate",
         "about_section4_title": "🔒  Security",
@@ -297,31 +303,30 @@ TRANSLATIONS = {
         "footer": "© 2024 Fuel Consumption Calculator. All rights reserved.",
         "fuel_unit": "L",
         "price_unit": "per L",
-        "gs_title": "⛽  Gas Stations",
-        "gs_city": "City / address:",
+        "gs_title": "⛽  Russian Gas Stations Map",
+        "gs_city": "City:",
         "gs_search": "🔍  Find Gas Stations",
         "gs_to_calc": "🧮  To Calculator",
         "gs_no_car": "Select a vehicle for autofill",
-        "gs_select_station": "Enter city to search for stations",
+        "gs_select_station": "Select city and click «Find Gas Stations»",
         "gs_login_hint": "Log in to access vehicle data",
-        "gs_hint": "Enter a city or address to search for gas stations",
+        "gs_hint": "Select city to search for gas stations",
         "gs_fuel_price_hint": "Fuel price at the station:",
         "gs_distance_to": "Distance to station",
-        "gs_enter_distance": "Distance to station (km):",
+        "gs_enter_distance": "Your distance to station (km):",
         "gs_send_to_calc": "Send to Calculator",
         "gs_avg_from_car": "Vehicle avg. consumption",
         "gs_no_avg": "No consumption data",
         "gs_selected_station": "Selected station:",
         "gs_calc_distance": "Distance:",
-        "gs_click_hint": "Select a station from the list",
-        "gs_no_map": "Map feature temporarily unavailable\nUse manual distance input",
-        "countries": [
-            "Russia", "USA", "Germany", "France", "United Kingdom",
-            "Ukraine", "Kazakhstan", "Belarus", "Poland", "Italy",
-            "Spain", "Netherlands", "Sweden", "Finland", "Norway",
-            "Austria", "Switzerland", "Czech Republic", "Hungary", "Romania",
-            "Turkey", "UAE", "China", "Japan", "Australia", "Canada"
-        ],
+        "gs_click_hint": "Click on station marker on the map",
+        "gs_distance_note": "💡 Enter your approximate distance to station",
+        "gs_all_cities": "All cities",
+        "brands": {
+            "lukoil": "Lukoil",
+            "gazprom": "Gazpromneft",
+            "rosneft": "Rosneft"
+        }
     }
 }
 
@@ -347,6 +352,12 @@ THEMES = {
         "chart_line":"#58a6ff",
         "chart_fill":"#1c2d3f",
         "chart_grid":"#21262d",
+        "map_bg":    "#1a2a3a",
+        "map_land":  "#2a4a2a",
+        "map_water": "#1a3a5a",
+        "map_road":  "#3a3a3a",
+        "map_marker": "#ff4444",
+        "map_marker_selected": "#ffaa00",
     },
     "light": {
         "bg":        "#f0f4f8",
@@ -368,6 +379,12 @@ THEMES = {
         "chart_line":"#3182ce",
         "chart_fill":"#ebf4ff",
         "chart_grid":"#e2e8f0",
+        "map_bg":    "#e8f0e8",
+        "map_land":  "#c8e6c9",
+        "map_water": "#bbdefb",
+        "map_road":  "#cfd8dc",
+        "map_marker": "#e53935",
+        "map_marker_selected": "#ff8f00",
     }
 }
 
@@ -395,19 +412,22 @@ def bind_mousewheel(widget, canvas):
             canvas.yview_scroll(1, "units")
         else:
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
+    
     def _bind_to_mousewheel(e):
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
         canvas.bind_all("<Button-4>", _on_mousewheel)
         canvas.bind_all("<Button-5>", _on_mousewheel)
-
+    
     def _unbind_from_mousewheel(e):
         canvas.unbind_all("<MouseWheel>")
         canvas.unbind_all("<Button-4>")
         canvas.unbind_all("<Button-5>")
-
+    
     widget.bind("<Enter>", _bind_to_mousewheel)
     widget.bind("<Leave>", _unbind_from_mousewheel)
+    # Also bind to canvas itself
+    canvas.bind("<Enter>", _bind_to_mousewheel)
+    canvas.bind("<Leave>", _unbind_from_mousewheel)
 
 # ─── Haversine distance ────────────────────────────────────────────────────────
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -468,9 +488,11 @@ class FuelApp(tk.Tk):
         self._photo_refs   = {}
         self._calc_mode    = tk.StringVar(value="consumption")
 
-        # Gas stations state (без карты)
+        # Gas stations state
         self._selected_station = None
         self._stations_list = []
+        self._map_city_filter = tk.StringVar(value="")
+        self._map_markers = []  # Store map marker references
 
         self._build_ui()
 
@@ -534,6 +556,7 @@ class FuelApp(tk.Tk):
         self.header.destroy()
         self.body.destroy()
         self._photo_refs.clear()
+        self._map_markers.clear()
         self._build_ui()
 
     def _build_sidebar(self):
@@ -712,7 +735,7 @@ class FuelApp(tk.Tk):
                                            font=("Georgia", 18, "bold"), bg=t["bg3"], fg=t["fg"])
         self.result_cost_label.pack(anchor="w")
 
-        # ── Fuel chart (larger) ──
+        # Fuel chart
         chart_outer = tk.Frame(inner, bg=t["bg2"])
         chart_outer.pack(fill="x", pady=(12, 0))
 
@@ -747,6 +770,7 @@ class FuelApp(tk.Tk):
         t = T()
         for w in self.calc_form_frame.winfo_children(): w.destroy()
         mode = self._calc_mode.get() if hasattr(self, '_calc_mode') else "consumption"
+        sym = get_currency_symbol()
 
         def make_entry_row(parent, label_text, var, unit_text, icon):
             tk.Label(parent, text=label_text, font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", pady=(8,2))
@@ -762,10 +786,10 @@ class FuelApp(tk.Tk):
 
         if mode == "consumption":
             make_entry_row(self.calc_form_frame, TR("fuel_used"), self.fuel_var, TR("fuel_unit"), "⛽")
-            make_entry_row(self.calc_form_frame, TR("fuel_price"), self.price_var, get_currency_symbol() + "/" + TR("fuel_unit"), "💰")
+            make_entry_row(self.calc_form_frame, TR("fuel_price"), self.price_var, sym + "/" + TR("fuel_unit"), "💰")
         else:
             make_entry_row(self.calc_form_frame, TR("avg_consumption_label"), self.avg_var, "л/100 км", "💧")
-            make_entry_row(self.calc_form_frame, TR("fuel_price"), self.price_var, get_currency_symbol() + "/" + TR("fuel_unit"), "💰")
+            make_entry_row(self.calc_form_frame, TR("fuel_price"), self.price_var, sym + "/" + TR("fuel_unit"), "💰")
 
     def _on_mode_changed(self):
         self._build_calc_form()
@@ -1595,13 +1619,12 @@ class FuelApp(tk.Tk):
         for w in f.winfo_children(): w.destroy()
         self._build_history()
 
-    # ── Gas Stations (упрощённая версия без карты) ────────────────────────────────
+    # ── Gas Stations (Карта России с заправками) ────────────────────────────────
     def _build_gas_stations(self):
         t = T()
         f = self.sections["gas_stations"]
         for w in f.winfo_children(): w.destroy()
 
-        # Scrollable canvas
         canvas = tk.Canvas(f, bg=t["bg"], highlightthickness=0)
         scroll = ttk.Scrollbar(f, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=scroll.set)
@@ -1617,15 +1640,54 @@ class FuelApp(tk.Tk):
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=48, pady=32)
 
+        # Заголовок
         tk.Label(pad, text=TR("gs_title"), font=("Georgia", 18, "bold"),
-                 bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 16))
+                 bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 8))
 
-        # Карта недоступна - показываем сообщение
-        if not MAP_AVAILABLE:
-            info_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-            info_card.pack(fill="x", pady=8)
-            tk.Label(info_card, text=TR("gs_no_map"), font=("Courier", 11),
-                     bg=t["bg2"], fg=t["yellow"], justify="center").pack(anchor="center", padx=20, pady=12)
+        # Карточка поиска
+        search_card = tk.Frame(pad, bg=t["bg2"], pady=16)
+        search_card.pack(fill="x", pady=8)
+
+        tk.Label(search_card, text=TR("gs_city"), font=("Georgia", 13, "bold"),
+                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
+
+        search_row = tk.Frame(search_card, bg=t["bg2"])
+        search_row.pack(fill="x", padx=20)
+
+        # Получаем список городов
+        cities = sorted(list(set([s["city"] for s in GAS_STATIONS_RUSSIA])))
+        city_values = [TR("gs_all_cities")] + cities
+        
+        self._map_city_filter = tk.StringVar(value=city_values[0])
+        city_combo = ttk.Combobox(search_row, textvariable=self._map_city_filter,
+                                   values=city_values, state="readonly",
+                                   font=("Courier", 11), width=20)
+        city_combo.pack(side="left", padx=(0, 12))
+
+        tk.Button(search_row, text=TR("gs_search"), font=("Courier", 11),
+                  bg=t["btn"], fg="white", bd=0, padx=16, pady=8,
+                  cursor="hand2", command=self._draw_map).pack(side="left")
+
+        # Карта
+        self.map_frame = tk.Frame(pad, bg=t["bg2"])
+        self.map_frame.pack(fill="x", pady=8)
+
+        self.map_canvas = tk.Canvas(self.map_frame, bg=t["map_bg"], height=450,
+                                     highlightthickness=1, highlightbackground=t["border"])
+        self.map_canvas.pack(fill="x", padx=8, pady=8)
+        self.map_canvas.bind("<Button-1>", self._on_map_click)
+        self.map_canvas.bind("<Motion>", self._on_map_hover)
+        self.map_canvas.bind("<Leave>", self._on_map_leave)
+
+        # Информация о выбранной заправке
+        self.station_info_card = tk.Frame(pad, bg=t["bg2"], pady=16)
+        self.station_info_card.pack(fill="x", pady=8)
+
+        self.station_info_text = tk.Label(self.station_info_card,
+                                           text=TR("gs_click_hint"),
+                                           font=("Courier", 11), bg=t["bg2"], fg=t["fg2"],
+                                           justify="left")
+        self.station_info_text.pack(anchor="w", padx=20, pady=8)
 
         # Карточка автомобиля
         car_card = tk.Frame(pad, bg=t["bg2"], pady=16)
@@ -1652,6 +1714,9 @@ class FuelApp(tk.Tk):
         tk.Label(dist_card, text=TR("gs_enter_distance"), font=("Georgia", 13, "bold"),
                  bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
 
+        tk.Label(dist_card, text=TR("gs_distance_note"),
+                 font=("Courier", 9), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", padx=20, pady=(0, 4))
+
         dist_row = tk.Frame(dist_card, bg=t["input_bg"], bd=1, relief="solid")
         dist_row.pack(fill="x", padx=20, pady=(0, 12))
         tk.Label(dist_row, text="📏", font=("Courier", 13), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="left")
@@ -1661,32 +1726,232 @@ class FuelApp(tk.Tk):
                  bd=0, relief="flat").pack(side="left", fill="x", expand=True, pady=8)
         tk.Label(dist_row, text="км", font=("Courier", 10), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
 
-        # Карточка цены
-        price_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-        price_card.pack(fill="x", pady=8)
-
-        tk.Label(price_card, text=TR("gs_fuel_price_hint"), font=("Georgia", 13, "bold"),
-                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
-
-        price_row = tk.Frame(price_card, bg=t["input_bg"], bd=1, relief="solid")
-        price_row.pack(fill="x", padx=20, pady=(0, 12))
-        tk.Label(price_row, text="💰", font=("Courier", 13), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="left")
-        self.gs_price_var = tk.StringVar()
-        tk.Entry(price_row, textvariable=self.gs_price_var, font=("Courier", 13),
-                 bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"],
-                 bd=0, relief="flat").pack(side="left", fill="x", expand=True, pady=8)
-        tk.Label(price_row, text=f"{get_currency_symbol()}/л", font=("Courier", 10),
-                 bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
-
-        # Информация о среднем расходе
-        self.gs_avg_info_lbl = tk.Label(pad, text="", font=("Courier", 10),
-                                         bg=t["bg"], fg=t["accent"])
-        self.gs_avg_info_lbl.pack(anchor="w", pady=8)
-
-        # Кнопка отправки
+        # Кнопка отправки в калькулятор
         tk.Button(pad, text=TR("gs_to_calc"), font=("Georgia", 12, "bold"),
                   bg=t["btn"], fg="white", bd=0, pady=12,
                   cursor="hand2", command=self._gs_to_calculator).pack(fill="x", pady=16)
+
+        # Отрисовка карты
+        self.after(200, self._draw_map)
+
+    def _get_filtered_stations(self):
+        """Возвращает отфильтрованные заправки по городу"""
+        city = self._map_city_filter.get()
+        if city == TR("gs_all_cities") or city == "Все города" or city == "All cities":
+            return GAS_STATIONS_RUSSIA
+        return [s for s in GAS_STATIONS_RUSSIA if s["city"] == city]
+
+    def _lat_lon_to_xy(self, lat, lon, w, h):
+        """Конвертация географических координат в координаты canvas"""
+        # Границы России примерно
+        lat_min, lat_max = 41.0, 82.0
+        lon_min, lon_max = 19.0, 170.0
+        
+        # Масштабирование
+        x = ((lon - lon_min) / (lon_max - lon_min)) * (w - 60) + 30
+        y = ((lat_max - lat) / (lat_max - lat_min)) * (h - 60) + 30
+        return x, y
+
+    def _draw_map(self):
+        """Отрисовка схематичной карты России с заправками"""
+        c = self.map_canvas
+        t = T()
+        c.delete("all")
+        self._map_markers = []
+        
+        W = c.winfo_width()
+        H = c.winfo_height()
+        
+        if W < 10 or H < 10:
+            W, H = 800, 450
+
+        # Фон
+        c.create_rectangle(0, 0, W, H, fill=t["map_bg"], outline="")
+
+        # Упрощённый контур России
+        russia_outline = [
+            (41.0, 43.0), (41.0, 45.0), (37.0, 46.0), (36.0, 47.0),
+            (32.0, 46.0), (28.0, 44.0), (22.0, 44.0), (20.0, 55.0),
+            (19.0, 60.0), (20.0, 65.0), (28.0, 69.0), (32.0, 70.0),
+            (40.0, 69.0), (45.0, 68.0), (50.0, 72.0), (60.0, 75.0),
+            (70.0, 76.0), (80.0, 74.0), (90.0, 73.0), (100.0, 74.0),
+            (110.0, 74.0), (120.0, 72.0), (130.0, 70.0), (140.0, 68.0),
+            (150.0, 65.0), (160.0, 62.0), (170.0, 60.0), (170.0, 55.0),
+            (160.0, 50.0), (150.0, 48.0), (140.0, 45.0), (135.0, 43.0),
+            (130.0, 42.0), (120.0, 40.0), (110.0, 42.0), (100.0, 45.0),
+            (90.0, 50.0), (80.0, 55.0), (70.0, 55.0), (60.0, 50.0),
+            (50.0, 45.0), (45.0, 42.0), (41.0, 43.0)
+        ]
+        
+        points = []
+        for lat, lon in russia_outline:
+            x, y = self._lat_lon_to_xy(lat, lon, W, H)
+            points.extend([x, y])
+        
+        if len(points) >= 4:
+            c.create_polygon(points, fill=t["map_land"], outline=t["border"], width=1.5)
+
+        # Города-метки
+        stations = self._get_filtered_stations()
+        
+        city_groups = {}
+        for st in stations:
+            city = st["city"]
+            if city not in city_groups:
+                city_groups[city] = {"lat": st["lat"], "lon": st["lon"], "stations": [], "count": 0}
+            city_groups[city]["count"] += 1
+            city_groups[city]["stations"].append(st)
+
+        for city, data in city_groups.items():
+            x, y = self._lat_lon_to_xy(data["lat"], data["lon"], W, H)
+            
+            # Размер круга зависит от количества заправок
+            radius = max(8, min(20, 6 + data["count"] * 3))
+            
+            # Круг города
+            city_id = c.create_oval(x - radius, y - radius, x + radius, y + radius,
+                                     fill=t["accent"], outline=t["bg2"], width=2,
+                                     tags=("city", city))
+            
+            # Название города
+            c.create_text(x, y - radius - 10, text=city, fill=t["fg"],
+                          font=("Courier", 8, "bold"), tags=("label", city))
+            
+            # Количество заправок
+            c.create_text(x, y, text=str(data["count"]), fill="white",
+                          font=("Courier", 8, "bold"), tags=("count", city))
+            
+            self._map_markers.append({
+                "city": city,
+                "x": x,
+                "y": y,
+                "radius": radius,
+                "stations": data["stations"],
+                "canvas_id": city_id
+            })
+
+        # Если выбрана заправка - подсветить
+        if self._selected_station:
+            self._highlight_selected_station()
+
+        # Легенда
+        legend_y = 50
+        c.create_rectangle(W - 180, legend_y - 10, W - 10, legend_y + 60,
+                           fill=t["bg2"], outline=t["border"], width=1)
+        c.create_text(W - 95, legend_y + 5, text="🏭 Бренды:", fill=t["fg"],
+                      font=("Courier", 9, "bold"), anchor="n")
+
+        brands = [
+            ("Лукойл", t["red"]),
+            ("Газпромнефть", t["accent"]),
+            ("Роснефть", t["yellow"]),
+        ]
+        for i, (name, color) in enumerate(brands):
+            ly = legend_y + 20 + i * 14
+            c.create_rectangle(W - 170, ly, W - 160, ly + 8, fill=color, outline="")
+            c.create_text(W - 155, ly + 4, text=name, fill=t["fg"],
+                          font=("Courier", 8), anchor="w")
+
+    def _on_map_click(self, event):
+        """Обработка клика по карте"""
+        c = self.map_canvas
+        
+        # Найти ближайший маркер
+        closest = None
+        closest_dist = 9999
+        click_x, click_y = event.x, event.y
+        
+        for marker in self._map_markers:
+            dx = click_x - marker["x"]
+            dy = click_y - marker["y"]
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist < marker["radius"] + 5 and dist < closest_dist:
+                closest = marker
+                closest_dist = dist
+        
+        if closest:
+            self._select_marker(closest)
+        else:
+            self._selected_station = None
+            self._draw_map()
+            self.station_info_text.configure(text=TR("gs_click_hint"))
+
+    def _on_map_hover(self, event):
+        """Подсветка при наведении"""
+        c = self.map_canvas
+        t = T()
+        
+        for marker in self._map_markers:
+            dx = event.x - marker["x"]
+            dy = event.y - marker["y"]
+            dist = math.sqrt(dx*dx + dy*dy)
+            
+            if dist < marker["radius"] + 3:
+                c.config(cursor="hand2")
+                return
+        
+        c.config(cursor="")
+
+    def _on_map_leave(self, event):
+        self.map_canvas.config(cursor="")
+
+    def _select_marker(self, marker):
+        """Выбор маркера заправки"""
+        self._selected_station = marker
+        
+        stations = marker["stations"]
+        city = marker["city"]
+        
+        info_text = f"🏙 {TR('gs_selected_station')} {city}\n\n"
+        
+        for i, st in enumerate(stations[:5]):  # Показываем до 5 заправок
+            brand = TR("brands").get(st["brand"], st["brand"])
+            info_text += f"⛽ {brand} — {st['address']}\n"
+            info_text += f"   💰 {st['price']} {get_currency_symbol()}/{TR('fuel_unit')}\n\n"
+        
+        if len(stations) > 5:
+            info_text += f"... и ещё {len(stations) - 5} заправок\n"
+        
+        info_text += f"\n💡 {TR('gs_distance_note')}"
+        
+        self.station_info_text.configure(text=info_text, fg=T()["fg"])
+        
+        # Автозаполнение цены первой заправки
+        if stations:
+            self.gs_price_var.set(str(stations[0]["price"]))
+        
+        self._draw_map()
+        self._highlight_selected_station()
+
+    def _highlight_selected_station(self):
+        """Подсветка выбранной заправки на карте"""
+        if not self._selected_station:
+            return
+        
+        c = self.map_canvas
+        t = T()
+        marker = self._selected_station
+        
+        x, y, r = marker["x"], marker["y"], marker["radius"]
+        
+        # Подсветка
+        c.create_oval(x - r - 4, y - r - 4, x + r + 4, y + r + 4,
+                      outline=t["map_marker_selected"], width=3, tags="selection")
+        c.create_oval(x - r - 2, y - r - 2, x + r + 2, y + r + 2,
+                      outline="white", width=1, dash=(3, 3), tags="selection")
+        
+        # Текст информации
+        stations = marker["stations"]
+        if stations:
+            info_y = y + r + 30
+            c.create_text(x, info_y,
+                          text=f"{marker['city']} — {len(stations)} заправок",
+                          fill=t["fg"], font=("Courier", 9),
+                          bg=t["bg2"], tags="selection")
+            c.create_text(x, info_y + 15,
+                          text=f"от {stations[0]['price']} {get_currency_symbol()}/л",
+                          fill=t["accent"], font=("Courier", 8),
+                          bg=t["bg2"], tags="selection")
 
     def _refresh_gs_car_combo(self):
         cars = [TR("no_car")]
@@ -1701,14 +1966,12 @@ class FuelApp(tk.Tk):
         self._update_gs_avg_display()
 
     def _update_gs_avg_display(self):
-        if not hasattr(self, 'gs_avg_info_lbl'):
+        if not hasattr(self, 'gs_avg_lbl'):
             return
         t = T()
         sel = self.gs_car_var.get() if hasattr(self, 'gs_car_var') else TR("no_car")
         if sel == TR("no_car") or not self.current_user:
-            self.gs_avg_info_lbl.configure(text="")
-            if hasattr(self, 'gs_avg_lbl'):
-                self.gs_avg_lbl.configure(text="")
+            self.gs_avg_lbl.configure(text="")
             return
         user = self.data["users"].get(self.current_user, {})
         for car in user.get("cars", []):
@@ -1716,13 +1979,9 @@ class FuelApp(tk.Tk):
                 avg = car.get("avg_consumption")
                 if avg:
                     txt = f"💧 {TR('gs_avg_from_car')}: {avg} л/100 км"
-                    self.gs_avg_info_lbl.configure(text=txt, fg=t["accent"])
-                    if hasattr(self, 'gs_avg_lbl'):
-                        self.gs_avg_lbl.configure(text=txt)
+                    self.gs_avg_lbl.configure(text=txt, fg=t["accent"])
                     return
-        self.gs_avg_info_lbl.configure(text=TR("gs_no_avg"), fg=t["fg2"])
-        if hasattr(self, 'gs_avg_lbl'):
-            self.gs_avg_lbl.configure(text="")
+        self.gs_avg_lbl.configure(text=TR("gs_no_avg"), fg=t["fg2"])
 
     def _gs_to_calculator(self):
         dist_str  = self.gs_dist_var.get().strip()
@@ -1756,6 +2015,8 @@ class FuelApp(tk.Tk):
     def _refresh_gas_stations(self):
         self._refresh_gs_car_combo()
         self._update_gs_avg_display()
+        if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
+            self._draw_map()
 
     # ── About ───────────────────────────────────────────────────────────────────
     def _build_about(self):
@@ -1887,11 +2148,9 @@ class FuelApp(tk.Tk):
             current_currency = cur_var.get()
             self._save_settings()
             cur_status.configure(text=f"{TR('current')} {get_currency_symbol()}")
+            # Обновить форму калькулятора
             if hasattr(self, 'calc_form_frame'):
                 self._build_calc_form()
-            if hasattr(self, 'gs_price_var'):
-                # Обновим метку валюты в разделе заправок
-                pass
 
         cur_combo.bind("<<ComboboxSelected>>", apply_currency)
 
