@@ -9,14 +9,13 @@ from datetime import datetime, timedelta
 import math
 import random
 import string
-import webbrowser
 
 try:
-    from PIL import Image, ImageTk, ImageDraw, UnidentifiedImageError
+    from PIL import Image, ImageTk, ImageDraw, UnidentifiedImageError, ImageFont
 except ImportError:
     import subprocess, sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
-    from PIL import Image, ImageTk, ImageDraw, UnidentifiedImageError
+    from PIL import Image, ImageTk, ImageDraw, UnidentifiedImageError, ImageFont
 
 # ─── Data storage ──────────────────────────────────────────────────────────────
 DATA_FILE = os.path.join(os.path.expanduser("~"), ".fuel_calc_data.json")
@@ -29,8 +28,8 @@ def load_data():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
-            return {"users": {}, "current_user": None, "settings": {}, "verification_codes": {}}
-    return {"users": {}, "current_user": None, "settings": {}, "verification_codes": {}}
+            return {"users": {}, "current_user": None, "settings": {}}
+    return {"users": {}, "current_user": None, "settings": {}}
 
 def save_data(data):
     try:
@@ -45,36 +44,47 @@ def hash_pw(pw):
 def is_valid_email(email):
     return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) is not None
 
-def generate_verification_code():
-    return ''.join(random.choices(string.digits, k=6))
-
 # ─── Currencies ────────────────────────────────────────────────────────────────
 CURRENCIES = {
     "₽ RUB": "₽",
     "$ USD": "$",
 }
 
-# ─── Gas stations data ─────────────────────────────────────────────────────────
+# ─── Gas stations data (расширенные данные с координатами) ─────────────────────
 GAS_STATIONS_RUSSIA = [
+    # Москва
     {"name": "Лукойл", "city": "Москва", "address": "Ленинградское шоссе, 1", "lat": 55.7558, "lon": 37.6173, "brand": "lukoil", "price": 52.50},
     {"name": "Газпромнефть", "city": "Москва", "address": "Проспект Мира, 100", "lat": 55.7512, "lon": 37.6184, "brand": "gazprom", "price": 53.20},
     {"name": "Роснефть", "city": "Москва", "address": "Варшавское шоссе, 25", "lat": 55.7600, "lon": 37.6200, "brand": "rosneft", "price": 51.80},
     {"name": "Лукойл", "city": "Москва", "address": "Кутузовский проспект, 30", "lat": 55.7400, "lon": 37.5500, "brand": "lukoil", "price": 52.80},
+    # Санкт-Петербург
     {"name": "Лукойл", "city": "Санкт-Петербург", "address": "Невский проспект, 50", "lat": 59.9343, "lon": 30.3351, "brand": "lukoil", "price": 53.00},
     {"name": "Газпромнефть", "city": "Санкт-Петербург", "address": "Московский проспект, 150", "lat": 59.9290, "lon": 30.3200, "brand": "gazprom", "price": 54.00},
     {"name": "Роснефть", "city": "Санкт-Петербург", "address": "Лиговский проспект, 100", "lat": 59.9200, "lon": 30.3500, "brand": "rosneft", "price": 52.50},
+    # Казань
     {"name": "Роснефть", "city": "Казань", "address": "Проспект Победы, 100", "lat": 55.7961, "lon": 49.1064, "brand": "rosneft", "price": 50.50},
     {"name": "Газпромнефть", "city": "Казань", "address": "Улица Декабристов, 50", "lat": 55.8000, "lon": 49.1200, "brand": "gazprom", "price": 51.20},
+    # Екатеринбург
     {"name": "Лукойл", "city": "Екатеринбург", "address": "Улица Ленина, 50", "lat": 56.8389, "lon": 60.6057, "brand": "lukoil", "price": 51.00},
+    # Новосибирск
     {"name": "Газпромнефть", "city": "Новосибирск", "address": "Красный проспект, 100", "lat": 55.0302, "lon": 82.9204, "brand": "gazprom", "price": 50.00},
+    # Сочи
     {"name": "Роснефть", "city": "Сочи", "address": "Курортный проспект, 50", "lat": 43.5855, "lon": 39.7231, "brand": "rosneft", "price": 55.00},
+    # Краснодар
     {"name": "Лукойл", "city": "Краснодар", "address": "Улица Красная, 100", "lat": 45.0355, "lon": 38.9753, "brand": "lukoil", "price": 52.00},
+    # Владивосток
     {"name": "Газпромнефть", "city": "Владивосток", "address": "Океанский проспект, 50", "lat": 43.1155, "lon": 131.8855, "brand": "gazprom", "price": 54.50},
+    # Нижний Новгород
     {"name": "Роснефть", "city": "Нижний Новгород", "address": "Улица Большая Покровская, 50", "lat": 56.3268, "lon": 44.0065, "brand": "rosneft", "price": 51.50},
+    # Самара
     {"name": "Лукойл", "city": "Самара", "address": "Московское шоссе, 50", "lat": 53.1959, "lon": 50.1002, "brand": "lukoil", "price": 50.00},
+    # Омск
     {"name": "Газпромнефть", "city": "Омск", "address": "Проспект Маркса, 50", "lat": 54.9893, "lon": 73.3682, "brand": "gazprom", "price": 49.50},
+    # Челябинск
     {"name": "Роснефть", "city": "Челябинск", "address": "Проспект Ленина, 50", "lat": 55.1644, "lon": 61.4368, "brand": "rosneft", "price": 50.80},
+    # Ростов-на-Дону
     {"name": "Лукойл", "city": "Ростов-на-Дону", "address": "Улица Большая Садовая, 50", "lat": 47.2357, "lon": 39.7015, "brand": "lukoil", "price": 51.50},
+    # Уфа
     {"name": "Газпромнефть", "city": "Уфа", "address": "Проспект Октября, 50", "lat": 54.7348, "lon": 55.9578, "brand": "gazprom", "price": 50.50},
 ]
 
@@ -189,13 +199,13 @@ TRANSLATIONS = {
         "price_unit": "за л",
         "gs_title": "Карта заправок России",
         "gs_city": "Город:",
-        "gs_search": "Найти заправки",
+        "gs_search": "Показать на карте",
         "gs_to_calc": "В калькулятор",
         "gs_enter_distance": "Ваше расстояние до заправки (км):",
         "gs_avg_from_car": "Средний расход авто",
         "gs_no_avg": "Нет данных о расходе",
         "gs_selected_station": "Выбранная заправка:",
-        "gs_click_hint": "Нажмите на метку города на карте, чтобы увидеть заправки",
+        "gs_click_hint": "Нажмите на маркер города на карте, чтобы увидеть заправки",
         "gs_distance_note": "💡 Введите примерное расстояние до заправки",
         "gs_all_cities": "Все города",
         "gs_fuel_price_hint": "Цена топлива:",
@@ -214,7 +224,6 @@ TRANSLATIONS = {
         "about_section5": "До 8 л/100 км — экономично\n8-12 л/100 км — средне\nБолее 12 л/100 км — высокий расход",
         "footer": "© 2024 Калькулятор расхода топлива",
         "no_cars_limit": "Максимум 5 автомобилей",
-        "online_map_hint": "Для онлайн-карты нужен API-ключ.\nНажмите на город для просмотра заправок.",
     },
     "en": {
         "app_title": "Fuel Calculator",
@@ -325,7 +334,7 @@ TRANSLATIONS = {
         "price_unit": "per L",
         "gs_title": "Russian Gas Stations Map",
         "gs_city": "City:",
-        "gs_search": "Find stations",
+        "gs_search": "Show on map",
         "gs_to_calc": "To Calculator",
         "gs_enter_distance": "Your distance to station (km):",
         "gs_avg_from_car": "Vehicle avg. consumption",
@@ -350,7 +359,6 @@ TRANSLATIONS = {
         "about_section5": "Up to 8 L/100 km — economical\n8-12 L/100 km — average\nOver 12 L/100 km — high",
         "footer": "© 2024 Fuel Consumption Calculator",
         "no_cars_limit": "Maximum 5 vehicles",
-        "online_map_hint": "API key required for online map.\nClick on city to view stations.",
     }
 }
 
@@ -429,7 +437,6 @@ def make_scrollable(parent, bg=None):
         canvas.unbind_all("<Button-4>")
         canvas.unbind_all("<Button-5>")
 
-    # Биндим на все виджеты внутри
     def bind_recursive(widget):
         widget.bind("<Enter>", _bind_mw)
         widget.bind("<Leave>", _unbind_mw)
@@ -520,10 +527,6 @@ class FuelApp(tk.Tk):
         self._selected_station = None
         self._map_markers = []
         self._map_city_filter = tk.StringVar(value="")
-
-        # Для верификации
-        self._verification_pending = None  # (email, code, purpose)
-        self._reset_pending = None  # (email, code)
 
         self._build_ui()
 
@@ -626,38 +629,6 @@ class FuelApp(tk.Tk):
         if name == "gas_stations":
             self._refresh_gas_stations()
 
-    # ── SIMULATED EMAIL (демонстрация) ──────────────────────────────────────────
-    def _send_verification_code(self, email):
-        """Имитация отправки кода на почту"""
-        code = generate_verification_code()
-        self.data.setdefault("verification_codes", {})[email] = {
-            "code": code,
-            "timestamp": datetime.now().isoformat()
-        }
-        save_data(self.data)
-        print(f"\n{'='*50}")
-        print(f"SIMULATED EMAIL to: {email}")
-        print(f"Verification code: {code}")
-        print(f"{'='*50}\n")
-        return code
-
-    def _verify_code(self, email, code):
-        """Проверка кода"""
-        codes = self.data.get("verification_codes", {})
-        if email in codes:
-            stored = codes[email]
-            if stored["code"] == code:
-                # Проверка времени (код действителен 10 минут)
-                try:
-                    sent_time = datetime.fromisoformat(stored["timestamp"])
-                    if datetime.now() - sent_time < timedelta(minutes=10):
-                        del self.data["verification_codes"][email]
-                        save_data(self.data)
-                        return True
-                except Exception:
-                    pass
-        return False
-
     # ── Calculator ─────────────────────────────────────────────────────────────
     def _build_calculator(self):
         t = T()
@@ -752,14 +723,12 @@ class FuelApp(tk.Tk):
                   bd=0, pady=10, cursor="hand2",
                   command=self._clear_calc).pack(side="left", fill="x", expand=True)
 
-        # Result frame — показываем только нужное в зависимости от режима
+        # Result frame
         self.result_frame = tk.Frame(right, bg=t["bg3"])
         self.result_frame.pack(fill="x", padx=20, pady=(4, 8))
 
         self.result_container = tk.Frame(self.result_frame, bg=t["bg3"])
         self.result_container.pack(fill="x", padx=16, pady=12)
-
-        # По умолчанию режим consumption
         self._update_result_widgets("consumption")
 
         # Chart
@@ -1152,6 +1121,7 @@ class FuelApp(tk.Tk):
                                        font=("Courier", 9, "underline"), bg=t["bg2"], fg=t["accent"],
                                        bd=0, cursor="hand2")
                 forgot_btn.pack(anchor="e", pady=(2, 0))
+                # Восстановление пароля теперь просто запрашивает новый пароль без кода
                 forgot_btn.configure(command=lambda: self._show_forgot_password_dialog())
 
             pw2_entry = None
@@ -1189,17 +1159,26 @@ class FuelApp(tk.Tk):
                     if email in self.data.get("users", {}):
                         status.configure(text=TR("user_exists"))
                         return
-                    # Отправляем код подтверждения
-                    self._send_verification_code(email)
-                    self._show_verification_dialog(email, "register", pw)
+                    # Регистрация без кода
+                    self.data.setdefault("users", {})[email] = {
+                        "password": hash_pw(pw), "cars": [], "history": []
+                    }
+                    self.current_user = email
+                    self.data["current_user"] = email
+                    save_data(self.data)
+                    self._refresh_car_combo()
+                    self._refresh_profile()
                 else:
+                    # Логин без кода
                     users = self.data.get("users", {})
                     if email not in users or users[email]["password"] != hash_pw(pw):
                         status.configure(text=TR("wrong_credentials"))
                         return
-                    # Отправляем код для входа
-                    self._send_verification_code(email)
-                    self._show_verification_dialog(email, "login")
+                    self.current_user = email
+                    self.data["current_user"] = email
+                    save_data(self.data)
+                    self._refresh_car_combo()
+                    self._refresh_profile()
 
             btn_text = TR("login") if mode == "login" else TR("register")
             tk.Button(self._auth_form_frame, text=btn_text,
@@ -1209,7 +1188,7 @@ class FuelApp(tk.Tk):
         build()
 
     def _show_forgot_password_dialog(self):
-        """Диалог восстановления пароля"""
+        """Диалог восстановления пароля (упрощённый, без кода)"""
         dialog = tk.Toplevel(self)
         dialog.title(TR("forgot_password_title"))
         dialog.geometry("400x300")
@@ -1224,120 +1203,36 @@ class FuelApp(tk.Tk):
         email_entry = tk.Entry(dialog, font=("Courier", 12), bg=T()["input_bg"],
                                fg=T()["fg"], bd=1, relief="solid")
         email_entry.pack(fill="x", padx=20, pady=4, ipady=6)
+        
+        tk.Label(dialog, text=TR("new_password"),
+                 font=("Courier", 10), bg=T()["bg2"], fg=T()["fg2"]).pack(anchor="w", padx=20, pady=(8, 0))
+        pw_entry = tk.Entry(dialog, font=("Courier", 12), show="•", bg=T()["input_bg"],
+                            fg=T()["fg"], bd=1, relief="solid")
+        pw_entry.pack(fill="x", padx=20, pady=4, ipady=6)
+        
         status = tk.Label(dialog, text="", font=("Courier", 10), bg=T()["bg2"], fg=T()["red"])
         status.pack(pady=4)
 
-        def send_code():
+        def reset_pw():
             email = email_entry.get().strip().lower()
+            pw = pw_entry.get().strip()
             if not is_valid_email(email):
                 status.configure(text=TR("invalid_email"))
                 return
             if email not in self.data.get("users", {}):
                 status.configure(text="Email не найден")
                 return
-            self._send_verification_code(email)
-            dialog.destroy()
-            self._show_reset_password_dialog(email)
-
-        tk.Button(dialog, text=TR("send_code_btn"),
-                  font=("Georgia", 11, "bold"), bg=T()["btn"], fg="white",
-                  bd=0, pady=8, command=send_code).pack(fill="x", padx=20, pady=12)
-
-    def _show_reset_password_dialog(self, email):
-        """Диалог установки нового пароля"""
-        dialog = tk.Toplevel(self)
-        dialog.title(TR("forgot_password_title"))
-        dialog.geometry("400x400")
-        dialog.configure(bg=T()["bg2"])
-        dialog.transient(self)
-        dialog.grab_set()
-
-        tk.Label(dialog, text=TR("forgot_password_msg"),
-                 font=("Courier", 10), bg=T()["bg2"], fg=T()["fg"], justify="center").pack(pady=16)
-
-        tk.Label(dialog, text=TR("enter_code"),
-                 font=("Courier", 10), bg=T()["bg2"], fg=T()["fg2"]).pack(anchor="w", padx=20)
-        code_entry = tk.Entry(dialog, font=("Courier", 14), bg=T()["input_bg"],
-                              fg=T()["fg"], bd=1, relief="solid", justify="center", width=10)
-        code_entry.pack(pady=4)
-
-        tk.Label(dialog, text=TR("new_password"),
-                 font=("Courier", 10), bg=T()["bg2"], fg=T()["fg2"]).pack(anchor="w", padx=20, pady=(8, 0))
-        pw_entry = tk.Entry(dialog, font=("Courier", 12), show="•", bg=T()["input_bg"],
-                            fg=T()["fg"], bd=1, relief="solid")
-        pw_entry.pack(fill="x", padx=20, pady=4, ipady=6)
-
-        status = tk.Label(dialog, text="", font=("Courier", 10), bg=T()["bg2"], fg=T()["red"])
-        status.pack(pady=4)
-
-        def verify_and_reset():
-            code = code_entry.get().strip()
-            pw = pw_entry.get().strip()
             if len(pw) < 6:
                 status.configure(text=TR("password_short"))
                 return
-            if self._verify_code(email, code):
-                self.data["users"][email]["password"] = hash_pw(pw)
-                save_data(self.data)
-                messagebox.showinfo(TR("password_changed"), TR("new_password_set"))
-                dialog.destroy()
-            else:
-                status.configure(text=TR("invalid_code"))
+            self.data["users"][email]["password"] = hash_pw(pw)
+            save_data(self.data)
+            messagebox.showinfo(TR("password_changed"), TR("new_password_set"))
+            dialog.destroy()
 
         tk.Button(dialog, text=TR("change_password_btn"),
                   font=("Georgia", 11, "bold"), bg=T()["btn"], fg="white",
-                  bd=0, pady=8, command=verify_and_reset).pack(fill="x", padx=20, pady=12)
-
-    def _show_verification_dialog(self, email, purpose, password=None):
-        """Показывает диалог ввода кода подтверждения"""
-        dialog = tk.Toplevel(self)
-        dialog.title(TR("verification_register") if purpose == "register" else "Подтверждение входа")
-        dialog.geometry("400x280")
-        dialog.configure(bg=T()["bg2"])
-        dialog.transient(self)
-        dialog.grab_set()
-
-        tk.Label(dialog, text="📧", font=("Courier", 32), bg=T()["bg2"], fg=T()["accent"]).pack(pady=8)
-        tk.Label(dialog, text=f"Код отправлен на\n{email}",
-                 font=("Courier", 10), bg=T()["bg2"], fg=T()["fg"], justify="center").pack()
-        tk.Label(dialog, text=TR("enter_code"),
-                 font=("Courier", 10), bg=T()["bg2"], fg=T()["fg2"]).pack(pady=(12, 0))
-        code_entry = tk.Entry(dialog, font=("Courier", 18), bg=T()["input_bg"],
-                              fg=T()["fg"], bd=1, relief="solid", justify="center", width=8)
-        code_entry.pack(pady=6)
-        code_entry.focus()
-
-        status = tk.Label(dialog, text="", font=("Courier", 10), bg=T()["bg2"], fg=T()["red"])
-        status.pack()
-
-        def verify():
-            code = code_entry.get().strip()
-            if self._verify_code(email, code):
-                dialog.destroy()
-                if purpose == "register":
-                    pw = password
-                    self.data.setdefault("users", {})[email] = {
-                        "password": hash_pw(pw), "cars": [], "history": []
-                    }
-                    self.current_user = email
-                    self.data["current_user"] = email
-                    save_data(self.data)
-                else:
-                    self.current_user = email
-                    self.data["current_user"] = email
-                    save_data(self.data)
-                self._refresh_car_combo()
-                self._refresh_profile()
-            else:
-                status.configure(text=TR("invalid_code"))
-
-        verify_btn = tk.Button(dialog, text=TR("verify_code"),
-                               font=("Georgia", 11, "bold"), bg=T()["btn"], fg="white",
-                               bd=0, pady=8, command=verify)
-        verify_btn.pack(fill="x", padx=20, pady=8)
-
-        # Привязка Enter
-        dialog.bind("<Return>", lambda e: verify())
+                  bd=0, pady=8, command=reset_pw).pack(fill="x", padx=20, pady=12)
 
     def _build_logged_in_profile(self, parent):
         t = T()
@@ -1513,7 +1408,7 @@ class FuelApp(tk.Tk):
                      font=("Courier", 11), bg=t["bg"], fg=t["fg2"]).pack(pady=16)
             return
 
-        # Отображаем машины в сетке по 5 в ряд (5 на 5 не нужно, просто все)
+        # Отображаем машины в сетке по 5 в ряд
         row = tk.Frame(self.cars_container, bg=t["bg"])
         row.pack(fill="x")
         for i, car in enumerate(cars):
@@ -1556,6 +1451,7 @@ class FuelApp(tk.Tk):
         save_data(self.data)
         self._refresh_car_combo()
         self._refresh_profile()
+        self._refresh_history()
 
     def _delete_account(self):
         if messagebox.askyesno(TR("delete_account_confirm"), TR("delete_account_msg")):
@@ -1571,6 +1467,7 @@ class FuelApp(tk.Tk):
             save_data(self.data)
             self._refresh_car_combo()
             self._refresh_profile()
+            self._refresh_history()
 
     def _refresh_profile(self):
         f = self.sections["profile"]
@@ -1702,7 +1599,7 @@ class FuelApp(tk.Tk):
             w.destroy()
         self._build_history()
 
-    # ── Gas Stations ───────────────────────────────────────────────────────────
+    # ── Gas Stations (переработанная карта на Pillow) ──────────────────────────
     def _build_gas_stations(self):
         t = T()
         f = self.sections["gas_stations"]
@@ -1716,14 +1613,7 @@ class FuelApp(tk.Tk):
         tk.Label(pad, text=TR("gs_title"), font=("Georgia", 18, "bold"),
                  bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 8))
 
-        # Онлайн-карта hint
-        hint_card = tk.Frame(pad, bg=t["bg2"], pady=12)
-        hint_card.pack(fill="x", pady=8)
-        tk.Label(hint_card, text="🌐 " + TR("online_map_hint"),
-                 font=("Courier", 10), bg=t["bg2"], fg=t["yellow"],
-                 justify="center").pack(padx=20, pady=8)
-
-        # Search
+        # Выбор города
         search_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         search_card.pack(fill="x", pady=8)
         tk.Label(search_card, text=TR("gs_city"), font=("Georgia", 13, "bold"),
@@ -1738,20 +1628,22 @@ class FuelApp(tk.Tk):
                                    values=city_values, state="readonly",
                                    font=("Courier", 11), width=20)
         city_combo.pack(side="left", padx=(0, 12))
-        city_combo.bind("<<ComboboxSelected>>", lambda e: self._draw_map())
-        tk.Button(search_row, text=TR("gs_search"), font=("Courier", 11),
-                  bg=t["btn"], fg="white", bd=0, padx=16, pady=8,
-                  command=self._draw_map).pack(side="left")
+        tk.Label(search_row, text=TR("gs_search"),
+                 font=("Courier", 11), bg=t["bg2"], fg=t["fg"]).pack(side="left", padx=(0, 12))
+        tk.Button(search_row, text="🔍",
+                  bg=t["btn"], fg="white", bd=0, padx=12, pady=6,
+                  command=self._redraw_map).pack(side="left")
 
-        # Map canvas
+        # Контейнер для карты
         self.map_frame = tk.Frame(pad, bg=t["bg2"])
         self.map_frame.pack(fill="x", pady=8)
-        self.map_canvas = tk.Canvas(self.map_frame, bg=t["map_bg"], height=450,
-                                     highlightthickness=1, highlightbackground=t["border"])
-        self.map_canvas.pack(fill="x", padx=8, pady=8)
-        self.map_canvas.bind("<Button-1>", self._on_map_click)
 
-        # Station info
+        # Будем использовать Label для отображения PIL Image
+        self.map_label = tk.Label(self.map_frame, bg=t["map_bg"])
+        self.map_label.pack(fill="x", padx=8, pady=8)
+        self.map_label.bind("<Button-1>", self._on_map_click)
+
+        # Станция info
         self.station_info_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         self.station_info_card.pack(fill="x", pady=8)
         self.station_info_text = tk.Label(self.station_info_card,
@@ -1760,7 +1652,7 @@ class FuelApp(tk.Tk):
                                            justify="left")
         self.station_info_text.pack(anchor="w", padx=20, pady=8)
 
-        # Car selector
+        # Выбор авто
         car_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         car_card.pack(fill="x", pady=8)
         tk.Label(car_card, text=TR("car"), font=("Georgia", 13, "bold"),
@@ -1776,7 +1668,7 @@ class FuelApp(tk.Tk):
                                     bg=t["bg2"], fg=t["accent"])
         self.gs_avg_lbl.pack(anchor="w", padx=20, pady=(0, 8))
 
-        # Distance
+        # Расстояние
         dist_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         dist_card.pack(fill="x", pady=8)
         tk.Label(dist_card, text=TR("gs_enter_distance"), font=("Georgia", 13, "bold"),
@@ -1791,7 +1683,7 @@ class FuelApp(tk.Tk):
                  bg=t["input_bg"], fg=t["fg"], bd=0).pack(side="left", fill="x", expand=True, pady=8)
         tk.Label(dist_row, text="км", font=("Courier", 10), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
 
-        # Price
+        # Цена
         price_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         price_card.pack(fill="x", pady=8)
         tk.Label(price_card, text=TR("gs_fuel_price_hint"), font=("Georgia", 13, "bold"),
@@ -1805,12 +1697,12 @@ class FuelApp(tk.Tk):
         tk.Label(price_row, text=f"{get_currency_symbol()}/л", font=("Courier", 10),
                  bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
 
-        # Button
+        # Кнопка "В калькулятор"
         tk.Button(pad, text=TR("gs_to_calc"), font=("Georgia", 12, "bold"),
                   bg=t["btn"], fg="white", bd=0, pady=12,
                   command=self._gs_to_calculator).pack(fill="x", pady=16)
 
-        self.after(200, self._draw_map)
+        self.after(200, self._redraw_map)
 
     def _get_filtered_stations(self):
         city = self._map_city_filter.get()
@@ -1818,26 +1710,29 @@ class FuelApp(tk.Tk):
             return GAS_STATIONS_RUSSIA
         return [s for s in GAS_STATIONS_RUSSIA if s["city"] == city]
 
-    def _lat_lon_to_xy(self, lat, lon, w, h):
+    def _lat_lon_to_xy(self, lat, lon, img_w, img_h):
+        """Преобразует географические координаты в пиксельные на изображении карты"""
+        # Крайние точки России для проекции
         lat_min, lat_max = 41.0, 82.0
         lon_min, lon_max = 19.0, 170.0
-        x = ((lon - lon_min) / (lon_max - lon_min)) * (w - 60) + 30
-        y = ((lat_max - lat) / (lat_max - lat_min)) * (h - 60) + 30
+        
+        # Отступы внутри изображения
+        margin = 20
+        w = img_w - 2 * margin
+        h = img_h - 2 * margin
+        
+        x = margin + (lon - lon_min) / (lon_max - lon_min) * w
+        y = margin + (lat_max - lat) / (lat_max - lat_min) * h
         return x, y
 
-    def _draw_map(self):
-        c = self.map_canvas
+    def _draw_map_on_pil(self, width=800, height=500):
+        """Рисует карту России с помощью Pillow"""
         t = T()
-        c.delete("all")
-        self._map_markers = []
-        W, H = c.winfo_width(), c.winfo_height()
-        if W < 10 or H < 10:
-            W, H = 800, 450
+        img = Image.new("RGB", (width, height), t["map_bg"])
+        draw = ImageDraw.Draw(img)
 
-        c.create_rectangle(0, 0, W, H, fill=t["map_bg"], outline="")
-
-        # Контур России
-        outline = [
+        # Упрощенный контур России (многоугольник)
+        outline_coords = [
             (41, 43), (41, 45), (37, 46), (36, 47), (32, 46), (28, 44), (22, 44),
             (20, 55), (19, 60), (20, 65), (28, 69), (32, 70), (40, 69), (45, 68),
             (50, 72), (60, 75), (70, 76), (80, 74), (90, 73), (100, 74), (110, 74),
@@ -1846,14 +1741,10 @@ class FuelApp(tk.Tk):
             (120, 40), (110, 42), (100, 45), (90, 50), (80, 55), (70, 55),
             (60, 50), (50, 45), (45, 42), (41, 43)
         ]
-        pts = []
-        for lat, lon in outline:
-            x, y = self._lat_lon_to_xy(lat, lon, W, H)
-            pts.extend([x, y])
-        if pts:
-            c.create_polygon(pts, fill=t["map_land"], outline=t["border"], width=1.5)
+        pts = [self._lat_lon_to_xy(lat, lon, width, height) for lat, lon in outline_coords]
+        draw.polygon(pts, fill=t["map_land"], outline=t["border"])
 
-        # Города
+        # Группировка заправок по городам
         stations = self._get_filtered_stations()
         city_groups = {}
         for st in stations:
@@ -1863,52 +1754,80 @@ class FuelApp(tk.Tk):
             city_groups[city]["count"] += 1
             city_groups[city]["stations"].append(st)
 
+        self._map_markers = []
         for city, data in city_groups.items():
-            x, y = self._lat_lon_to_xy(data["lat"], data["lon"], W, H)
+            x, y = self._lat_lon_to_xy(data["lat"], data["lon"], width, height)
             radius = max(8, min(20, 6 + data["count"] * 3))
-            city_id = c.create_oval(x - radius, y - radius, x + radius, y + radius,
-                                     fill=t["accent"], outline=t["bg2"], width=2,
-                                     tags=("city", city))
-            c.create_text(x, y - radius - 12, text=city, fill=t["fg"],
-                          font=("Courier", 8, "bold"), tags=("label", city))
-            c.create_text(x, y, text=str(data["count"]), fill="white",
-                          font=("Courier", 9, "bold"), tags=("count", city))
+
+            # Если город выбран, подсвечиваем его
+            is_selected = (self._selected_station and self._selected_station["city"] == city)
+            color = t["map_marker_selected"] if is_selected else t["accent"]
+            outline_color = "white" if is_selected else t["bg2"]
+            
+            draw.ellipse([x - radius, y - radius, x + radius, y + radius], fill=color, outline=outline_color, width=2)
+            # Название города
+            try:
+                font = ImageFont.truetype("arial.ttf", 12)
+            except IOError:
+                font = ImageFont.load_default()
+            draw.text((x - len(city)*3, y - radius - 18), city, fill=t["fg"], font=font)
+            # Количество заправок
+            draw.text((x - len(str(data["count"]))*3, y - 6), str(data["count"]), fill="white", font=font)
+
             self._map_markers.append({
                 "city": city, "x": x, "y": y, "radius": radius,
-                "stations": data["stations"], "canvas_id": city_id
+                "stations": data["stations"]
             })
 
-        if self._selected_station:
-            self._highlight_selected_station()
-
         # Легенда
-        ly = 50
-        c.create_rectangle(W - 180, ly - 10, W - 10, ly + 65,
-                           fill=t["bg2"], outline=t["border"])
-        c.create_text(W - 95, ly + 5, text="🏭 Бренды:", fill=t["fg"],
-                      font=("Courier", 9, "bold"), anchor="n")
-        for i, (name, color) in enumerate([("Лукойл", t["red"]), ("Газпромнефть", t["accent"]), ("Роснефть", t["yellow"])]):
-            yb = ly + 20 + i * 14
-            c.create_rectangle(W - 170, yb, W - 160, yb + 8, fill=color, outline="")
-            c.create_text(W - 155, yb + 4, text=name, fill=t["fg"], font=("Courier", 8), anchor="w")
+        legend_x = width - 150
+        legend_y = 20
+        draw.rectangle([legend_x - 5, legend_y - 5, width - 10, legend_y + 70], fill=t["bg2"], outline=t["border"])
+        draw.text((legend_x, legend_y), "Бренды:", fill=t["fg"], font=font)
+        brands = [("Лукойл", "#ff4444"), ("Газпромнефть", "#58a6ff"), ("Роснефть", "#f0a000")]
+        for i, (name, color_hex) in enumerate(brands):
+            yb = legend_y + 20 + i * 18
+            draw.rectangle([legend_x, yb, legend_x + 10, yb + 10], fill=color_hex)
+            draw.text((legend_x + 15, yb), name, fill=t["fg"], font=font)
+
+        return img
+
+    def _redraw_map(self):
+        """Перерисовывает карту в GUI"""
+        if not hasattr(self, 'map_label'):
+            return
+        # Определяем размеры
+        w = self.map_label.winfo_width()
+        h = self.map_label.winfo_height()
+        if w < 100 or h < 100:
+            w, h = 800, 450
+        img = self._draw_map_on_pil(w, h)
+        photo = ImageTk.PhotoImage(img)
+        self._photo_refs["map"] = photo
+        self.map_label.configure(image=photo, width=w, height=h)
 
     def _on_map_click(self, event):
+        """Обработка клика по карте"""
+        if not self._map_markers:
+            return
+        # Ищем ближайший маркер
         closest = None
         closest_d = 9999
         for m in self._map_markers:
             d = math.sqrt((event.x - m["x"])**2 + (event.y - m["y"])**2)
-            if d < m["radius"] + 5 and d < closest_d:
+            if d < m["radius"] + 10 and d < closest_d:
                 closest = m
                 closest_d = d
         if closest:
-            self._select_marker(closest)
+            self._selected_station = closest
+            self._show_station_info(closest)
         else:
             self._selected_station = None
-            self._draw_map()
             self.station_info_text.configure(text=TR("gs_click_hint"))
+        self._redraw_map()
 
-    def _select_marker(self, marker):
-        self._selected_station = marker
+    def _show_station_info(self, marker):
+        """Отображает информацию о заправках города"""
         stations = marker["stations"]
         city = marker["city"]
         info_text = f"🏙 {TR('gs_selected_station')} {city}\n\n"
@@ -1921,17 +1840,6 @@ class FuelApp(tk.Tk):
         self.station_info_text.configure(text=info_text, fg=T()["fg"])
         if stations:
             self.gs_price_var.set(str(stations[0]["price"]))
-        self._draw_map()
-
-    def _highlight_selected_station(self):
-        if not self._selected_station:
-            return
-        c = self.map_canvas
-        t = T()
-        m = self._selected_station
-        x, y, r = m["x"], m["y"], m["radius"]
-        c.create_oval(x - r - 4, y - r - 4, x + r + 4, y + r + 4,
-                      outline=t["map_marker_selected"], width=3, tags="selection")
 
     def _refresh_gs_car_combo(self):
         cars = [TR("no_car")]
@@ -1988,8 +1896,8 @@ class FuelApp(tk.Tk):
     def _refresh_gas_stations(self):
         self._refresh_gs_car_combo()
         self._update_gs_avg_display()
-        if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
-            self._draw_map()
+        if hasattr(self, 'map_label') and self.map_label.winfo_exists():
+            self.after(100, self._redraw_map)
 
     # ── About ──────────────────────────────────────────────────────────────────
     def _build_about(self):
