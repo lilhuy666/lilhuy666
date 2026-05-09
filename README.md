@@ -7,8 +7,6 @@ import hashlib
 import shutil
 from datetime import datetime, timedelta
 import math
-import threading
-from queue import Queue
 
 try:
     from PIL import Image, ImageTk, ImageDraw, ImageFont
@@ -21,57 +19,60 @@ except ImportError:
 try:
     import psycopg2
     from psycopg2 import sql
-    from psycopg2 import pool
     PSYCOPG2_AVAILABLE = True
 except ImportError:
-    print("Устанавливаем psycopg2-binary...")
     import subprocess, sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "psycopg2-binary"])
     import psycopg2
     from psycopg2 import sql
-    from psycopg2 import pool
     PSYCOPG2_AVAILABLE = True
 
 # ─── Database configuration ────────────────────────────────────────────────────
 DB_CONFIG = {
     'dbname': 'fuel_calc',
     'user': 'postgres',
-    'password': '12345',  # ваш пароль
+    'password': '12345',
     'host': 'localhost',
     'port': 5432
 }
 
-# Connection pool
-connection_pool = None
+# Global database connection
+db_conn = None
 
-def init_db_pool():
-    global connection_pool
+def get_db_connection():
+    global db_conn
+    if db_conn is None or db_conn.closed:
+        db_conn = psycopg2.connect(**DB_CONFIG)
+    return db_conn
+
+def close_db_connection():
+    global db_conn
+    if db_conn is not None and not db_conn.closed:
+        db_conn.close()
+        db_conn = None
+
+# ─── Database initialization ───────────────────────────────────────────────────
+def init_database():
+    """Initialize database and create tables"""
     try:
-        connection_pool = pool.SimpleConnectionPool(
-            1, 10,
-            dbname=DB_CONFIG['dbname'],
+        # First connect to postgres database to create fuel_calc if needed
+        conn = psycopg2.connect(
+            dbname='postgres',
             user=DB_CONFIG['user'],
             password=DB_CONFIG['password'],
             host=DB_CONFIG['host'],
             port=DB_CONFIG['port']
         )
-        return True
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        return False
-
-def get_db_connection():
-    return connection_pool.getconn()
-
-def put_db_connection(conn):
-    connection_pool.putconn(conn)
-
-# ─── Database initialization ───────────────────────────────────────────────────
-def create_tables():
-    """Create all necessary tables if they don't exist"""
-    conn = None
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn.autocommit = True
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM pg_database WHERE datname = 'fuel_calc'")
+        if not cursor.fetchone():
+            cursor.execute("CREATE DATABASE fuel_calc")
+        cursor.close()
+        conn.close()
+        
+        # Now connect to fuel_calc and create tables
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         # Users table
@@ -124,275 +125,216 @@ def create_tables():
         
         conn.commit()
         cursor.close()
-        conn.close()
         return True
     except Exception as e:
-        print(f"Error creating tables: {e}")
+        print(f"Database initialization error: {e}")
         return False
 
 # ─── Database operations ───────────────────────────────────────────────────────
 def db_create_user(email, password_hash):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO users (email, password) VALUES (%s, %s)",
-            (email, password_hash)
-        )
-        cursor.execute(
-            "INSERT INTO settings (email, theme, language, currency) VALUES (%s, %s, %s, %s)",
-            (email, 'dark', 'ru', '₽ RUB')
-        )
-        conn.commit()
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO users (email, password) VALUES (%s, %s)",
+        (email, password_hash)
+    )
+    cursor.execute(
+        "INSERT INTO settings (email, theme, language, currency) VALUES (%s, %s, %s, %s)",
+        (email, 'dark', 'ru', '₽ RUB')
+    )
+    conn.commit()
+    cursor.close()
 
 def db_get_user(email):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT password FROM users WHERE email = %s", (email,))
-        result = cursor.fetchone()
-        return result[0] if result else None
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute("SELECT password FROM users WHERE email = %s", (email,))
+    result = cursor.fetchone()
+    cursor.close()
+    return result[0] if result else None
 
 def db_user_exists(email):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM users WHERE email = %s", (email,))
-        return cursor.fetchone() is not None
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM users WHERE email = %s", (email,))
+    result = cursor.fetchone() is not None
+    cursor.close()
+    return result
 
 def db_update_password(email, new_password_hash):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE users SET password = %s WHERE email = %s",
-            (new_password_hash, email)
-        )
-        conn.commit()
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET password = %s WHERE email = %s",
+        (new_password_hash, email)
+    )
+    conn.commit()
+    cursor.close()
 
 def db_delete_user(email):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        # Delete photos from filesystem
-        cursor.execute("SELECT photo_path FROM cars WHERE email = %s", (email,))
-        for row in cursor.fetchall():
-            if row[0] and os.path.exists(row[0]):
-                try:
-                    os.remove(row[0])
-                except:
-                    pass
-        cursor.execute("DELETE FROM users WHERE email = %s", (email,))
-        conn.commit()
-    finally:
-        put_db_connection(conn)
-
-def db_get_cars(email):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name, photo_path, avg_consumption FROM cars WHERE email = %s ORDER BY id",
-            (email,)
-        )
-        return [{"name": r[0], "photo": r[1], "avg_consumption": r[2]} for r in cursor.fetchall()]
-    finally:
-        put_db_connection(conn)
-
-def db_add_car(email, name, photo_path=None):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO cars (email, name, photo_path) VALUES (%s, %s, %s)",
-            (email, name, photo_path)
-        )
-        conn.commit()
-    finally:
-        put_db_connection(conn)
-
-def db_delete_car(email, name):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT photo_path FROM cars WHERE email = %s AND name = %s", (email, name))
-        row = cursor.fetchone()
-        if row and row[0] and os.path.exists(row[0]):
+    cursor = conn.cursor()
+    # Delete photos from filesystem
+    cursor.execute("SELECT photo_path FROM cars WHERE email = %s", (email,))
+    for row in cursor.fetchall():
+        if row[0] and os.path.exists(row[0]):
             try:
                 os.remove(row[0])
             except:
                 pass
-        cursor.execute("DELETE FROM cars WHERE email = %s AND name = %s", (email, name))
-        conn.commit()
-    finally:
-        put_db_connection(conn)
+    cursor.execute("DELETE FROM users WHERE email = %s", (email,))
+    conn.commit()
+    cursor.close()
+
+def db_get_cars(email):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT name, photo_path, avg_consumption FROM cars WHERE email = %s ORDER BY id",
+        (email,)
+    )
+    result = [{"name": r[0], "photo": r[1], "avg_consumption": r[2]} for r in cursor.fetchall()]
+    cursor.close()
+    return result
+
+def db_add_car(email, name, photo_path=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO cars (email, name, photo_path) VALUES (%s, %s, %s)",
+        (email, name, photo_path)
+    )
+    conn.commit()
+    cursor.close()
+
+def db_delete_car(email, name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT photo_path FROM cars WHERE email = %s AND name = %s", (email, name))
+    row = cursor.fetchone()
+    if row and row[0] and os.path.exists(row[0]):
+        try:
+            os.remove(row[0])
+        except:
+            pass
+    cursor.execute("DELETE FROM cars WHERE email = %s AND name = %s", (email, name))
+    conn.commit()
+    cursor.close()
 
 def db_update_car_consumption(email, car_name, consumption):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE cars SET avg_consumption = %s WHERE email = %s AND name = %s",
-            (consumption, email, car_name)
-        )
-        conn.commit()
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE cars SET avg_consumption = %s WHERE email = %s AND name = %s",
+        (consumption, email, car_name)
+    )
+    conn.commit()
+    cursor.close()
 
 def db_add_history(email, entry):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO history (email, car_name, distance, fuel, price, currency, consumption, cost, date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            email, entry.get('car'), entry['distance'], entry['fuel'],
-            entry['price'], entry.get('currency'), entry['consumption'],
-            entry['cost'], datetime.strptime(entry['date'], "%d.%m.%Y %H:%M")
-        ))
-        conn.commit()
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO history (email, car_name, distance, fuel, price, currency, consumption, cost, date)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        email, entry.get('car'), entry['distance'], entry['fuel'],
+        entry['price'], entry.get('currency'), entry['consumption'],
+        entry['cost'], datetime.strptime(entry['date'], "%d.%m.%Y %H:%M")
+    ))
+    conn.commit()
+    cursor.close()
 
-def db_get_history(email, car_name=None, days=None):
+def db_get_history(email):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        query = """
-            SELECT car_name, distance, fuel, price, currency, consumption, cost, 
-                   TO_CHAR(date, 'DD.MM.YYYY HH24:MI') as date_str,
-                   date as raw_date
-            FROM history 
-            WHERE email = %s
-        """
-        params = [email]
-        
-        if car_name and car_name != "— Без авто —" and car_name != "— No car —":
-            query += " AND car_name = %s"
-            params.append(car_name)
-        
-        if days:
-            query += " AND date >= CURRENT_DATE - INTERVAL '%s days'"
-            params.append(days)
-        
-        query += " ORDER BY date DESC"
-        
-        cursor.execute(query, params)
-        results = []
-        for r in cursor.fetchall():
-            results.append({
-                'car': r[0], 'distance': r[1], 'fuel': r[2], 'price': r[3],
-                'currency': r[4], 'consumption': r[5], 'cost': r[6],
-                'date': r[7], 'raw_date': r[8]
-            })
-        return results
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT car_name, distance, fuel, price, currency, consumption, cost, 
+               TO_CHAR(date, 'DD.MM.YYYY HH24:MI') as date_str
+        FROM history 
+        WHERE email = %s
+        ORDER BY date DESC
+    """, (email,))
+    results = []
+    for r in cursor.fetchall():
+        results.append({
+            'car': r[0], 'distance': r[1], 'fuel': r[2], 'price': r[3],
+            'currency': r[4], 'consumption': r[5], 'cost': r[6],
+            'date': r[7]
+        })
+    cursor.close()
+    return results
 
 def db_clear_history(email):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM history WHERE email = %s", (email,))
-        conn.commit()
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM history WHERE email = %s", (email,))
+    conn.commit()
+    cursor.close()
 
 def db_get_settings(email):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT theme, language, currency FROM settings WHERE email = %s",
-            (email,)
-        )
-        result = cursor.fetchone()
-        if result:
-            return {'theme': result[0], 'language': result[1], 'currency': result[2]}
-        return {'theme': 'dark', 'language': 'ru', 'currency': '₽ RUB'}
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT theme, language, currency FROM settings WHERE email = %s",
+        (email,)
+    )
+    result = cursor.fetchone()
+    cursor.close()
+    if result:
+        return {'theme': result[0], 'language': result[1], 'currency': result[2]}
+    return {'theme': 'dark', 'language': 'ru', 'currency': '₽ RUB'}
 
 def db_update_settings(email, theme, language, currency):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE settings 
-            SET theme = %s, language = %s, currency = %s 
-            WHERE email = %s
-        """, (theme, language, currency, email))
-        conn.commit()
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE settings 
+        SET theme = %s, language = %s, currency = %s 
+        WHERE email = %s
+    """, (theme, language, currency, email))
+    conn.commit()
+    cursor.close()
 
 def db_count_cars(email):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM cars WHERE email = %s", (email,))
-        return cursor.fetchone()[0]
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM cars WHERE email = %s", (email,))
+    result = cursor.fetchone()[0]
+    cursor.close()
+    return result
 
 def db_get_history_for_chart(email, car_name, days):
     conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        query = """
-            SELECT DATE(date) as day, AVG(consumption) as avg_consumption
-            FROM history 
-            WHERE email = %s 
-              AND date >= CURRENT_DATE - INTERVAL '%s days'
-        """
-        params = [email, days]
-        
-        if car_name and car_name != "— Без авто —" and car_name != "— No car —":
-            query += " AND car_name = %s"
-            params.append(car_name)
-        
-        query += " GROUP BY DATE(date) ORDER BY day"
-        
-        cursor.execute(query, params)
-        return [(r[0], r[1]) for r in cursor.fetchall()]
-    finally:
-        put_db_connection(conn)
+    cursor = conn.cursor()
+    query = """
+        SELECT DATE(date) as day, AVG(consumption) as avg_consumption
+        FROM history 
+        WHERE email = %s 
+          AND date >= CURRENT_DATE - %s::INTERVAL
+    """
+    params = [email, f'{days} days']
+    
+    if car_name and car_name != "— Без авто —" and car_name != "— No car —":
+        query += " AND car_name = %s"
+        params.append(car_name)
+    
+    query += " GROUP BY DATE(date) ORDER BY day"
+    
+    cursor.execute(query, params)
+    results = [(r[0], r[1]) for r in cursor.fetchall()]
+    cursor.close()
+    return results
 
-# ─── Data storage (fallback if PostgreSQL fails) ──────────────────────────────
+# ─── Data storage (fallback) ──────────────────────────────────────────────────
 DATA_FILE = os.path.join(os.path.expanduser("~"), ".fuel_calc_data.json")
 PHOTO_DIR = os.path.join(os.path.expanduser("~"), ".fuel_calc_photos")
 os.makedirs(PHOTO_DIR, exist_ok=True)
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return {"users": {}, "current_user": None, "settings": {}}
-    return {"users": {}, "current_user": None, "settings": {}}
-
-def save_data(data):
-    try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except IOError:
-        pass
 
 # ─── Translations ──────────────────────────────────────────────────────────────
 TRANSLATIONS = {
     "ru": {
         "app_title": "Калькулятор расхода топлива",
-        "app_subtitle": "Расчёт расхода топлива",
         "calculator": "Калькулятор",
         "profile": "Профиль",
         "history": "История",
@@ -424,7 +366,7 @@ TRANSLATIONS = {
         "repeat_password": "Повторите пароль",
         "fill_all": "Заполните все поля",
         "invalid_email": "Введите корректный email",
-        "password_short": "Пароль (мин. 6 символов)",
+        "password_short": "Пароль должен быть не менее 6 символов",
         "passwords_mismatch": "Пароли не совпадают",
         "user_exists": "Пользователь уже существует",
         "wrong_credentials": "Неверный email или пароль",
@@ -438,7 +380,7 @@ TRANSLATIONS = {
         "change_password": "Сменить пароль",
         "repeat_new_password": "Повторите новый пароль",
         "change_password_btn": "Сменить пароль",
-        "my_cars": "Мои автомобили (макс. 25)",
+        "my_cars": "Мои автомобили",
         "add_car": "+ Добавить авто",
         "no_cars": "Автомобили не добавлены",
         "delete": "Удалить",
@@ -450,13 +392,12 @@ TRANSLATIONS = {
         "enter_name": "Введите название",
         "add_car_title": "Добавить автомобиль",
         "history_title": "История расчётов",
-        "login_for_history": "Войдите в аккаунт для просмотра истории.",
+        "login_for_history": "Войдите в аккаунт для просмотра истории",
         "clear_all": "Очистить всё",
         "history_empty": "История пуста",
         "copy": "Копировать",
         "copied": "Скопировано",
-        "copied_msg": "Расчёт скопирован!",
-        "delete_entry": "Удалить",
+        "copied_msg": "Расчёт скопирован в буфер обмена",
         "delete_confirm": "Удалить?",
         "delete_car_confirm": "Удалить этот автомобиль?",
         "clear_history_confirm": "Очистить?",
@@ -468,10 +409,9 @@ TRANSLATIONS = {
         "theme_desc": "Выберите цветовую схему",
         "dark_theme": "Тёмная",
         "light_theme": "Светлая",
-        "current_theme": "Текущая тема:",
         "currency_setting": "Валюта",
         "currency_desc": "Выберите валюту",
-        "language_setting": "Язык / Language",
+        "language_setting": "Язык",
         "language_desc": "Выберите язык интерфейса",
         "current": "Текущее:",
         "error": "Ошибка",
@@ -483,13 +423,12 @@ TRANSLATIONS = {
         "no_history_chart": "Нет данных для графика",
         "login_for_chart": "Войдите для просмотра графика",
         "fuel_unit": "л",
-        "price_unit": "за л",
         "about_title": "О приложении",
         "version": "Версия 5.0  •  2024",
         "about_section1_title": "О приложении",
-        "about_section1": "Профессиональное приложение для расчёта расхода топлива.",
+        "about_section1": "Приложение для расчёта расхода топлива с PostgreSQL базой данных.",
         "about_section2_title": "Возможности",
-        "about_section2": "• Точный расчёт расхода\n• Расчёт стоимости поездки\n• Хранение до 25 автомобилей\n• История расчётов\n• PostgreSQL база данных",
+        "about_section2": "• Расчёт расхода топлива\n• Расчёт стоимости поездки\n• Хранение автомобилей\n• История расчётов\n• PostgreSQL база данных",
         "about_section3_title": "Как использовать",
         "about_section3": "1. Зарегистрируйтесь\n2. Добавьте автомобиль\n3. Выберите режим расчёта\n4. Введите данные\n5. Нажмите «Рассчитать»",
         "about_section4_title": "Безопасность",
@@ -499,11 +438,10 @@ TRANSLATIONS = {
         "footer": "© 2024 Калькулятор расхода топлива",
         "no_cars_limit": "Максимум 25 автомобилей",
         "database_error": "Ошибка подключения к базе данных",
-        "database_retry": "Попробуйте позже или проверьте настройки PostgreSQL",
+        "database_retry": "Проверьте что PostgreSQL запущен",
     },
     "en": {
         "app_title": "Fuel Calculator",
-        "app_subtitle": "Fuel consumption calculation",
         "calculator": "Calculator",
         "profile": "Profile",
         "history": "History",
@@ -535,7 +473,7 @@ TRANSLATIONS = {
         "repeat_password": "Repeat password",
         "fill_all": "Fill in all fields",
         "invalid_email": "Enter a valid email",
-        "password_short": "Password (min. 6 chars)",
+        "password_short": "Password must be at least 6 characters",
         "passwords_mismatch": "Passwords do not match",
         "user_exists": "User already exists",
         "wrong_credentials": "Invalid email or password",
@@ -549,7 +487,7 @@ TRANSLATIONS = {
         "change_password": "Change password",
         "repeat_new_password": "Repeat new password",
         "change_password_btn": "Change password",
-        "my_cars": "My vehicles (max. 25)",
+        "my_cars": "My vehicles",
         "add_car": "+ Add vehicle",
         "no_cars": "No vehicles added",
         "delete": "Delete",
@@ -561,13 +499,12 @@ TRANSLATIONS = {
         "enter_name": "Enter name",
         "add_car_title": "Add vehicle",
         "history_title": "Calculation history",
-        "login_for_history": "Log in to view history.",
+        "login_for_history": "Log in to view history",
         "clear_all": "Clear all",
         "history_empty": "History is empty",
         "copy": "Copy",
         "copied": "Copied",
-        "copied_msg": "Calculation copied!",
-        "delete_entry": "Delete",
+        "copied_msg": "Calculation copied to clipboard",
         "delete_confirm": "Delete?",
         "delete_car_confirm": "Delete this vehicle?",
         "clear_history_confirm": "Clear?",
@@ -579,28 +516,26 @@ TRANSLATIONS = {
         "theme_desc": "Choose color scheme",
         "dark_theme": "Dark",
         "light_theme": "Light",
-        "current_theme": "Current theme:",
         "currency_setting": "Currency",
         "currency_desc": "Choose currency",
-        "language_setting": "Language / Язык",
+        "language_setting": "Language",
         "language_desc": "Choose language",
         "current": "Current:",
         "error": "Error",
         "enter_numbers": "Enter valid numbers!",
         "distance_positive": "Distance must be greater than 0!",
-        "distance_positive2": "Distance and Avg must be greater than 0!",
+        "distance_positive2": "Distance and consumption must be greater than 0!",
         "fuel_chart_title": "Fuel consumption chart",
         "chart_days": "Days:",
         "no_history_chart": "No data for chart",
         "login_for_chart": "Log in to view chart",
         "fuel_unit": "L",
-        "price_unit": "per L",
         "about_title": "About",
         "version": "Version 5.0  •  2024",
         "about_section1_title": "About",
-        "about_section1": "Professional fuel calculator with PostgreSQL database.",
+        "about_section1": "Fuel consumption calculator with PostgreSQL database.",
         "about_section2_title": "Features",
-        "about_section2": "• Accurate consumption calculation\n• Trip cost calculation\n• Up to 25 vehicles\n• Calculation history\n• PostgreSQL database storage",
+        "about_section2": "• Fuel consumption calculation\n• Trip cost calculation\n• Vehicle storage\n• Calculation history\n• PostgreSQL database",
         "about_section3_title": "How to use",
         "about_section3": "1. Register\n2. Add a vehicle\n3. Select calculation mode\n4. Enter data\n5. Press Calculate",
         "about_section4_title": "Security",
@@ -610,7 +545,7 @@ TRANSLATIONS = {
         "footer": "© 2024 Fuel Consumption Calculator",
         "no_cars_limit": "Maximum 25 vehicles",
         "database_error": "Database connection error",
-        "database_retry": "Please try again later or check PostgreSQL settings",
+        "database_retry": "Make sure PostgreSQL is running",
     }
 }
 
@@ -626,21 +561,19 @@ THEMES = {
         "bg": "#0d1117", "bg2": "#161b22", "bg3": "#21262d",
         "fg": "#e6edf3", "fg2": "#8b949e", "accent": "#58a6ff",
         "green": "#3fb950", "yellow": "#d29922", "red": "#f85149",
-        "border": "#30363d", "btn": "#238636", "btn_hover": "#2ea043",
-        "btn2": "#21262d", "btn2_hover": "#30363d", "input_bg": "#0d1117",
-        "chart_bg": "#161b22", "chart_line": "#58a6ff",
-        "chart_fill": "#1c2d3f", "chart_grid": "#21262d",
-        "chart_bar1": "#3fb950", "chart_bar2": "#d29922", "chart_bar3": "#f85149",
+        "border": "#30363d", "btn": "#238636", "btn2": "#21262d",
+        "input_bg": "#0d1117", "chart_bg": "#161b22",
+        "chart_grid": "#21262d", "chart_bar1": "#3fb950",
+        "chart_bar2": "#d29922", "chart_bar3": "#f85149",
     },
     "light": {
         "bg": "#f0f4f8", "bg2": "#ffffff", "bg3": "#e2e8f0",
         "fg": "#1a202c", "fg2": "#718096", "accent": "#3182ce",
         "green": "#38a169", "yellow": "#d69e2e", "red": "#e53e3e",
-        "border": "#cbd5e0", "btn": "#3182ce", "btn_hover": "#2b6cb0",
-        "btn2": "#e2e8f0", "btn2_hover": "#cbd5e0", "input_bg": "#ffffff",
-        "chart_bg": "#ffffff", "chart_line": "#3182ce",
-        "chart_fill": "#ebf4ff", "chart_grid": "#e2e8f0",
-        "chart_bar1": "#38a169", "chart_bar2": "#d69e2e", "chart_bar3": "#e53e3e",
+        "border": "#cbd5e0", "btn": "#3182ce", "btn2": "#e2e8f0",
+        "input_bg": "#ffffff", "chart_bg": "#ffffff",
+        "chart_grid": "#e2e8f0", "chart_bar1": "#38a169",
+        "chart_bar2": "#d69e2e", "chart_bar3": "#e53e3e",
     }
 }
 
@@ -648,26 +581,20 @@ current_theme = "dark"
 current_language = "ru"
 current_currency = "₽ RUB"
 
-
 def T():
     return THEMES[current_theme]
-
 
 def TR(key):
     return TRANSLATIONS.get(current_language, TRANSLATIONS["ru"]).get(key, key)
 
-
 def get_currency_symbol():
     return CURRENCIES.get(current_currency, "₽")
-
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
-
 def is_valid_email(email):
     return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) is not None
-
 
 # ─── Scroll helper ─────────────────────────────────────────────────────────────
 def make_scrollable(parent, bg=None):
@@ -681,7 +608,7 @@ def make_scrollable(parent, bg=None):
     canvas.pack(side="left", fill="both", expand=True)
 
     inner = tk.Frame(canvas, bg=bg)
-    win = canvas.create_window((0, 0), window=inner, anchor="nw")
+    canvas.create_window((0, 0), window=inner, anchor="nw")
 
     def configure_inner(event):
         canvas.configure(scrollregion=canvas.bbox("all"))
@@ -689,97 +616,44 @@ def make_scrollable(parent, bg=None):
     inner.bind("<Configure>", configure_inner)
 
     def configure_canvas(event):
-        canvas.itemconfig(win, width=event.width)
+        canvas.itemconfig("window", width=event.width)
 
     canvas.bind("<Configure>", configure_canvas)
 
-    def _on_mousewheel(event):
-        if event.num == 4:
-            canvas.yview_scroll(-1, "units")
-        elif event.num == 5:
-            canvas.yview_scroll(1, "units")
-        else:
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    def _bind_mw(e):
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
-        canvas.bind_all("<Button-4>", _on_mousewheel)
-        canvas.bind_all("<Button-5>", _on_mousewheel)
-
-    def _unbind_mw(e):
-        canvas.unbind_all("<MouseWheel>")
-        canvas.unbind_all("<Button-4>")
-        canvas.unbind_all("<Button-5>")
-
-    def bind_recursive(widget):
-        widget.bind("<Enter>", _bind_mw)
-        widget.bind("<Leave>", _unbind_mw)
-        for child in widget.winfo_children():
-            bind_recursive(child)
-
-    bind_recursive(inner)
-    canvas.bind("<Enter>", _bind_mw)
-    canvas.bind("<Leave>", _unbind_mw)
+    canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", on_mousewheel))
+    canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
     return outer, inner
-
 
 # ─── Image helpers ─────────────────────────────────────────────────────────────
 def make_placeholder(w=300, h=180, text=""):
     t = T()
-    try:
-        img = Image.new("RGB", (w, h), t["bg3"])
-        draw = ImageDraw.Draw(img)
-        draw.rectangle([0, 0, w - 1, h - 1], outline=t["border"], width=2)
-        if text:
-            draw.text((w // 2 - 30, h // 2 - 8), text, fill=t["fg2"])
-        return img
-    except Exception:
-        return Image.new("RGB", (w, h), "#333333")
-
+    img = Image.new("RGB", (w, h), t["bg3"])
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([0, 0, w-1, h-1], outline=t["border"], width=2)
+    if text:
+        bbox = draw.textbbox((0, 0), text)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        draw.text(((w-tw)//2, (h-th)//2), text, fill=t["fg2"])
+    return img
 
 def load_car_image(path, w=300, h=180):
-    if not path or not isinstance(path, str) or not os.path.exists(path):
+    if not path or not os.path.exists(path):
         return make_placeholder(w, h)
     try:
-        file_size = os.path.getsize(path)
-        if file_size < 100:
-            return make_placeholder(w, h)
-    except OSError:
-        return make_placeholder(w, h)
-
-    try:
         img = Image.open(path)
-        img.verify()
-        img = Image.open(path)
-        if img.mode not in ('RGB', 'RGBA'):
-            img = img.convert('RGB')
-        elif img.mode == 'RGBA':
+        if img.mode == 'RGBA':
             bg = Image.new('RGB', img.size, (0, 0, 0))
             bg.paste(img, mask=img.split()[3])
             img = bg
-
-        src_w, src_h = img.size
-        if src_w <= 0 or src_h <= 0:
-            return make_placeholder(w, h)
-        src_r = src_w / src_h
-        dst_r = w / h
-        if src_r > dst_r:
-            new_h = h
-            new_w = int(src_w * h / src_h)
-        else:
-            new_w = w
-            new_h = int(src_h * w / src_w)
-        new_w = max(1, min(new_w, 5000))
-        new_h = max(1, min(new_h, 5000))
-        img = img.resize((new_w, new_h), Image.LANCZOS)
-        left = (new_w - w) // 2
-        top = (new_h - h) // 2
-        img = img.crop((left, top, left + w, top + h))
+        img = img.resize((w, h), Image.LANCZOS)
         return img
     except Exception:
         return make_placeholder(w, h)
-
 
 # ─── Main Application ──────────────────────────────────────────────────────────
 class FuelApp(tk.Tk):
@@ -788,8 +662,7 @@ class FuelApp(tk.Tk):
         self.title(TR("app_title"))
         self.geometry("1200x850")
         self.minsize(1000, 700)
-        self.resizable(True, True)
-
+        
         self.current_user = None
         self._photo_refs = {}
         self._calc_mode = tk.StringVar(value="consumption")
@@ -798,61 +671,22 @@ class FuelApp(tk.Tk):
         # Initialize database
         self._init_database()
         
-        if self._db_connected:
-            self._load_user_settings()
-        
         self._build_ui()
 
     def _init_database(self):
-        """Initialize database connection and tables"""
-        global connection_pool
+        """Initialize database connection"""
         try:
-            # First, try to create database if it doesn't exist
-            conn = psycopg2.connect(
-                dbname='postgres',
-                user=DB_CONFIG['user'],
-                password=DB_CONFIG['password'],
-                host=DB_CONFIG['host'],
-                port=DB_CONFIG['port']
-            )
-            conn.autocommit = True
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM pg_database WHERE datname = 'fuel_calc'")
-            if not cursor.fetchone():
-                cursor.execute("CREATE DATABASE fuel_calc")
-            cursor.close()
-            conn.close()
-            
-            # Now connect to the fuel_calc database
-            if init_db_pool():
-                if create_tables():
-                    self._db_connected = True
-                    print("Database initialized successfully")
-                else:
-                    print("Failed to create tables")
-                    self._db_connected = False
+            if init_database():
+                self._db_connected = True
+                print("Database connected successfully")
             else:
-                print("Failed to initialize connection pool")
                 self._db_connected = False
+                print("Database connection failed")
         except Exception as e:
-            print(f"Database initialization error: {e}")
-            print("Using local file storage instead...")
+            print(f"Database error: {e}")
             self._db_connected = False
 
-    def _load_user_settings(self):
-        """Load settings for the current user if logged in"""
-        if self.current_user and self._db_connected:
-            try:
-                settings = db_get_settings(self.current_user)
-                global current_theme, current_language, current_currency
-                current_theme = settings.get('theme', 'dark')
-                current_language = settings.get('language', 'ru')
-                current_currency = settings.get('currency', '₽ RUB')
-            except Exception as e:
-                print(f"Error loading settings: {e}")
-
     def _save_settings(self):
-        """Save settings to database"""
         if self.current_user and self._db_connected:
             try:
                 db_update_settings(self.current_user, current_theme, current_language, current_currency)
@@ -860,40 +694,51 @@ class FuelApp(tk.Tk):
                 print(f"Error saving settings: {e}")
 
     def _rebuild_ui(self):
-        self.header.destroy()
-        self.body.destroy()
+        for widget in self.winfo_children():
+            widget.destroy()
         self._photo_refs.clear()
         self._build_ui()
 
-    # ── Layout ──────────────────────────────────────────────────────────────────
     def _build_ui(self):
         t = T()
         self.configure(bg=t["bg"])
 
+        # Header
         self.header = tk.Frame(self, bg=t["bg2"], pady=12)
         self.header.pack(fill="x", side="top")
 
-        self.menu_btn = tk.Button(self.header, text="☰", font=("Courier", 16, "bold"),
-                                  bg=t["bg3"], fg=t["fg"], bd=0, padx=10, pady=4,
-                                  cursor="hand2", command=self._toggle_sidebar)
-        self.menu_btn.pack(side="left", padx=16)
-
-        tk.Label(self.header, text=TR("app_title"),
-                 font=("Georgia", 18, "bold"), bg=t["bg2"], fg=t["fg"]).pack(side="left", padx=8)
+        tk.Label(self.header, text=TR("app_title"), font=("Georgia", 18, "bold"),
+                 bg=t["bg2"], fg=t["fg"]).pack(side="left", padx=16)
 
         self.settings_btn = tk.Button(self.header, text="⚙", font=("Courier", 16),
-                                      bg=t["bg3"], fg=t["fg"], bd=0, padx=10, pady=4,
+                                      bg=t["bg3"], fg=t["fg"], bd=0, padx=10,
                                       cursor="hand2", command=lambda: self._show_section("settings"))
         self.settings_btn.pack(side="right", padx=16)
 
+        # Body
         self.body = tk.Frame(self, bg=t["bg"])
         self.body.pack(fill="both", expand=True)
 
+        # Sidebar
         self.sidebar = tk.Frame(self.body, bg=t["bg2"], width=200)
-        self.sidebar.pack_propagate(False)
-        self._sidebar_visible = False
-        self._build_sidebar()
+        self.sidebar.pack(side="left", fill="y")
+        
+        # Sidebar buttons
+        items = [
+            ("🧮 " + TR("calculator"), "calculator"),
+            ("👤 " + TR("profile"), "profile"),
+            ("📋 " + TR("history"), "history"),
+            ("ℹ️ " + TR("about"), "about"),
+        ]
+        for label, key in items:
+            btn = tk.Button(self.sidebar, text=label, font=("Courier", 12),
+                           bg=t["bg2"], fg=t["fg"], bd=0, padx=20, pady=12,
+                           anchor="w", cursor="hand2",
+                           activebackground=t["bg3"],
+                           command=lambda k=key: self._show_section(k))
+            btn.pack(fill="x")
 
+        # Content
         self.content = tk.Frame(self.body, bg=t["bg"])
         self.content.pack(side="left", fill="both", expand=True)
 
@@ -909,32 +754,6 @@ class FuelApp(tk.Tk):
 
         self._show_section("calculator")
 
-    def _build_sidebar(self):
-        t = T()
-        for w in self.sidebar.winfo_children():
-            w.destroy()
-        items = [
-            ("🧮  " + TR("calculator"), "calculator"),
-            ("👤  " + TR("profile"), "profile"),
-            ("📋  " + TR("history"), "history"),
-            ("ℹ️  " + TR("about"), "about"),
-        ]
-        tk.Frame(self.sidebar, bg=t["bg2"], height=20).pack()
-        for label, key in items:
-            btn = tk.Button(self.sidebar, text=label, font=("Courier", 12),
-                            bg=t["bg2"], fg=t["fg"], bd=0, padx=20, pady=12,
-                            anchor="w", cursor="hand2",
-                            activebackground=t["bg3"], activeforeground=t["fg"],
-                            command=lambda k=key: self._show_section(k))
-            btn.pack(fill="x")
-
-    def _toggle_sidebar(self):
-        if self._sidebar_visible:
-            self.sidebar.pack_forget()
-        else:
-            self.sidebar.pack(side="left", fill="y", before=self.content)
-        self._sidebar_visible = not self._sidebar_visible
-
     def _show_section(self, name):
         for f in self.sections.values():
             f.pack_forget()
@@ -944,7 +763,7 @@ class FuelApp(tk.Tk):
         if name == "profile":
             self._refresh_profile()
 
-    # ── Calculator ─────────────────────────────────────────────────
+    # ─── Calculator ────────────────────────────────────────────────────────────────
     def _build_calculator(self):
         t = T()
         f = self.sections["calculator"]
@@ -959,6 +778,7 @@ class FuelApp(tk.Tk):
         top = tk.Frame(pad, bg=t["bg"])
         top.pack(fill="x")
 
+        # Left panel
         left = tk.Frame(top, bg=t["bg2"])
         left.pack(side="left", fill="y", padx=(0, 16))
 
@@ -977,10 +797,12 @@ class FuelApp(tk.Tk):
         self.calc_car_combo.bind("<<ComboboxSelected>>", self._on_car_selected)
         self._refresh_car_combo()
 
+        # Quick stats
         sf = tk.Frame(left, bg=t["bg3"])
         sf.pack(fill="x", padx=8, pady=8, ipady=8)
         tk.Label(sf, text=TR("quick_stats"), font=("Georgia", 12, "bold"),
                  bg=t["bg3"], fg=t["fg"]).pack(anchor="w", padx=12, pady=(8, 4))
+        
         self.stat_labels = {}
         for key, label, default, color in [
             ("avg", TR("avg_consumption"), "— л/100 км", t["green"]),
@@ -996,25 +818,24 @@ class FuelApp(tk.Tk):
             lbl.pack(side="right")
             self.stat_labels[key] = lbl
 
+        # Right panel
         right = tk.Frame(top, bg=t["bg2"])
         right.pack(side="left", fill="both", expand=True)
 
         tk.Label(right, text=TR("calculator"), font=("Georgia", 15, "bold"),
                  bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(16, 4))
 
+        # Mode selection
         mode_frame = tk.Frame(right, bg=t["bg2"])
         mode_frame.pack(fill="x", padx=20, pady=(0, 8))
-        self._calc_mode = tk.StringVar(value="consumption")
         tk.Radiobutton(mode_frame, text=TR("calc_mode_consumption"),
                        variable=self._calc_mode, value="consumption",
                        font=("Courier", 10), bg=t["bg2"], fg=t["fg"],
-                       selectcolor=t["bg3"], activebackground=t["bg2"],
-                       cursor="hand2", command=self._on_mode_changed).pack(side="left", padx=(0, 16))
+                       selectcolor=t["bg3"], command=self._on_mode_changed).pack(side="left", padx=(0, 16))
         tk.Radiobutton(mode_frame, text=TR("calc_mode_cost"),
                        variable=self._calc_mode, value="cost",
                        font=("Courier", 10), bg=t["bg2"], fg=t["fg"],
-                       selectcolor=t["bg3"], activebackground=t["bg2"],
-                       cursor="hand2", command=self._on_mode_changed).pack(side="left")
+                       selectcolor=t["bg3"], command=self._on_mode_changed).pack(side="left")
 
         self.calc_form_frame = tk.Frame(right, bg=t["bg2"])
         self.calc_form_frame.pack(fill="x", padx=20)
@@ -1024,23 +845,24 @@ class FuelApp(tk.Tk):
         self.avg_var = tk.StringVar()
         self._build_calc_form()
 
+        # Buttons
         btn_row = tk.Frame(right, bg=t["bg2"])
         btn_row.pack(fill="x", padx=20, pady=8)
-        tk.Button(btn_row, text=TR("calculate"),
-                  font=("Georgia", 12, "bold"), bg=t["btn"], fg="white",
-                  bd=0, pady=10, cursor="hand2",
+        tk.Button(btn_row, text=TR("calculate"), font=("Georgia", 12, "bold"),
+                  bg=t["btn"], fg="white", bd=0, pady=10, cursor="hand2",
                   command=self._calculate).pack(side="left", fill="x", expand=True, padx=(0, 8))
-        tk.Button(btn_row, text=TR("clear"),
-                  font=("Courier", 11), bg=t["btn2"], fg=t["fg"],
-                  bd=0, pady=10, cursor="hand2",
+        tk.Button(btn_row, text=TR("clear"), font=("Courier", 11),
+                  bg=t["btn2"], fg=t["fg"], bd=0, pady=10, cursor="hand2",
                   command=self._clear_calc).pack(side="left", fill="x", expand=True)
 
+        # Result
         self.result_frame = tk.Frame(right, bg=t["bg3"])
         self.result_frame.pack(fill="x", padx=20, pady=(4, 8))
         self.result_container = tk.Frame(self.result_frame, bg=t["bg3"])
         self.result_container.pack(fill="x", padx=16, pady=12)
         self._update_result_widgets("consumption")
 
+        # Chart
         co = tk.Frame(pad, bg=t["bg2"])
         co.pack(fill="x", pady=(12, 0))
         ch = tk.Frame(co, bg=t["bg2"])
@@ -1062,8 +884,6 @@ class FuelApp(tk.Tk):
                                       highlightthickness=1, highlightbackground=t["border"])
         self.chart_canvas.pack(fill="x", padx=16, pady=(0, 16))
         self.chart_canvas.bind("<Configure>", lambda e: self._draw_fuel_chart())
-        self.chart_canvas.bind("<Motion>", self._on_chart_hover)
-        self.chart_canvas.bind("<Leave>", self._on_chart_leave)
         self._chart_data_points = []
         self.after(100, self._draw_fuel_chart)
 
@@ -1077,14 +897,12 @@ class FuelApp(tk.Tk):
             self.result_consumption_label = tk.Label(self.result_container, text="— л/100 км",
                                                      font=("Georgia", 20, "bold"), bg=t["bg3"], fg=t["green"])
             self.result_consumption_label.pack(anchor="w")
-            self.result_cost_label = None
         else:
             tk.Label(self.result_container, text=TR("trip_cost"),
                      font=("Courier", 10), bg=t["bg3"], fg=t["fg2"]).pack(anchor="w")
             self.result_cost_label = tk.Label(self.result_container, text="—",
                                               font=("Georgia", 20, "bold"), bg=t["bg3"], fg=t["fg"])
             self.result_cost_label.pack(anchor="w")
-            self.result_consumption_label = None
 
     def _build_calc_form(self):
         t = T()
@@ -1101,25 +919,20 @@ class FuelApp(tk.Tk):
             tk.Label(row, text=icon, font=("Courier", 13), bg=t["input_bg"],
                      fg=t["fg2"], padx=8).pack(side="left")
             tk.Entry(row, textvariable=var, font=("Courier", 13),
-                     bg=t["input_bg"], fg=t["fg"], insertbackground=t["fg"],
-                     bd=0, relief="flat").pack(side="left", fill="x", expand=True, pady=8)
+                     bg=t["input_bg"], fg=t["fg"], bd=0).pack(side="left", fill="x", expand=True, pady=8)
             tk.Label(row, text=unit, font=("Courier", 10), bg=t["input_bg"],
                      fg=t["fg2"], padx=8).pack(side="right")
 
         make_row(self.calc_form_frame, TR("distance_label"), self.dist_var, "км", "📏")
         if mode == "consumption":
             make_row(self.calc_form_frame, TR("fuel_used"), self.fuel_var, TR("fuel_unit"), "⛽")
-            make_row(self.calc_form_frame, TR("fuel_price"), self.price_var,
-                     sym + "/" + TR("fuel_unit"), "💰")
+            make_row(self.calc_form_frame, TR("fuel_price"), self.price_var, sym + "/л", "💰")
         else:
             make_row(self.calc_form_frame, TR("avg_consumption_label"), self.avg_var, "л/100 км", "💧")
-            make_row(self.calc_form_frame, TR("fuel_price"), self.price_var,
-                     sym + "/" + TR("fuel_unit"), "💰")
+            make_row(self.calc_form_frame, TR("fuel_price"), self.price_var, sym + "/л", "💰")
 
     def _on_mode_changed(self):
         self._build_calc_form()
-        mode = self._calc_mode.get()
-        self._update_result_widgets(mode)
         self._clear_calc()
 
     def _set_calc_car_image(self, photo_path):
@@ -1137,7 +950,8 @@ class FuelApp(tk.Tk):
             except Exception as e:
                 print(f"Error loading cars: {e}")
         self.calc_car_combo["values"] = cars
-        self.calc_car_var.set(cars[0])
+        if cars:
+            self.calc_car_var.set(cars[0])
 
     def _on_car_selected(self, event=None):
         sel = self.calc_car_var.get()
@@ -1150,14 +964,13 @@ class FuelApp(tk.Tk):
                 if car["name"] == sel:
                     self._set_calc_car_image(car.get("photo"))
                     avg = car.get("avg_consumption")
-                    if avg and hasattr(self, 'avg_var'):
+                    if avg:
                         self.avg_var.set(str(avg))
                     self._draw_fuel_chart()
                     return
         except Exception:
             pass
         self._set_calc_car_image(None)
-        self._draw_fuel_chart()
 
     def _calculate(self):
         sym = get_currency_symbol()
@@ -1172,6 +985,7 @@ class FuelApp(tk.Tk):
         except ValueError:
             messagebox.showerror(TR("error"), TR("enter_numbers"))
             return
+        
         if dist <= 0:
             messagebox.showerror(TR("error"), TR("distance_positive"))
             return
@@ -1208,13 +1022,13 @@ class FuelApp(tk.Tk):
                 }
                 db_add_history(self.current_user, entry)
                 
-                # Update car's average consumption
                 if self.calc_car_var.get() != TR("no_car"):
                     db_update_car_consumption(self.current_user, self.calc_car_var.get(), round(consumption, 2))
                 
                 self._draw_fuel_chart()
+                self._refresh_history()
             except Exception as e:
-                print(f"Error saving to database: {e}")
+                print(f"Error saving: {e}")
                 messagebox.showerror(TR("error"), TR("database_error"))
 
     def _clear_calc(self):
@@ -1222,48 +1036,14 @@ class FuelApp(tk.Tk):
         self.fuel_var.set("")
         self.price_var.set("")
         self.avg_var.set("")
-        if self.result_consumption_label:
+        if hasattr(self, 'result_consumption_label'):
             self.result_consumption_label.configure(text="— л/100 км")
-        if self.result_cost_label:
+        if hasattr(self, 'result_cost_label'):
             self.result_cost_label.configure(text="—")
         for k, v in {"avg": "— л/100 км", "dist": "— км", "fuel": "— л", "cost": "—"}.items():
             self.stat_labels[k].configure(text=v)
 
-    # ── Chart ──────────────────────────────────────────────────────────────────
-    def _on_chart_hover(self, event):
-        if not self._chart_data_points:
-            return
-        c = self.chart_canvas
-        best = None
-        best_d = 9999
-        for (cx, cy, dt, val) in self._chart_data_points:
-            d = math.sqrt((event.x - cx) ** 2 + (event.y - cy) ** 2)
-            if d < best_d:
-                best_d = d
-                best = (cx, cy, dt, val)
-        if best and best_d < 30:
-            cx, cy, dt, val = best
-            c.delete("tooltip")
-            txt = f"{dt.strftime('%d.%m.%Y')}: {val:.1f} л/100"
-            pad = 6
-            tw = len(txt) * 7 + pad * 2
-            th = 22
-            tx = min(cx - tw // 2, c.winfo_width() - tw - 4)
-            tx = max(tx, 4)
-            ty = cy - th - 8
-            if ty < 4:
-                ty = cy + 12
-            c.create_rectangle(tx, ty, tx + tw, ty + th,
-                               fill=T()["bg3"], outline=T()["accent"], tags="tooltip")
-            c.create_text(tx + tw // 2, ty + th // 2, text=txt,
-                          fill=T()["fg"], font=("Courier", 9), tags="tooltip")
-            c.create_oval(cx - 5, cy - 5, cx + 5, cy + 5,
-                          fill=T()["accent"], outline=T()["bg2"], width=2, tags="tooltip")
-
-    def _on_chart_leave(self, event):
-        if hasattr(self, 'chart_canvas'):
-            self.chart_canvas.delete("tooltip")
-
+    # ─── Chart ──────────────────────────────────────────────────────────────────
     def _draw_fuel_chart(self):
         if not hasattr(self, 'chart_canvas') or not self._db_connected:
             return
@@ -1272,10 +1052,9 @@ class FuelApp(tk.Tk):
         c.delete("all")
         self._chart_data_points = []
         W, H = c.winfo_width(), c.winfo_height()
-        if W < 10 or H < 10:
+        if W < 50 or H < 50:
             return
 
-        pl, pr, pt, pb = 80, 30, 40, 80
         if not self.current_user:
             c.create_text(W // 2, H // 2, text=TR("login_for_chart"),
                           fill=t["fg2"], font=("Courier", 12))
@@ -1291,16 +1070,17 @@ class FuelApp(tk.Tk):
         try:
             daily_avg = db_get_history_for_chart(self.current_user, sel, days_limit)
         except Exception as e:
-            print(f"Error getting chart data: {e}")
-            c.create_text(W // 2, H // 2, text=TR("database_error"),
-                          fill=t["red"], font=("Courier", 12))
+            print(f"Chart error: {e}")
+            c.create_text(W // 2, H // 2, text=TR("database_error"), fill=t["red"])
             return
 
         if not daily_avg:
-            c.create_text(W // 2, H // 2, text=TR("no_history_chart"),
-                          fill=t["fg2"], font=("Courier", 12))
+            c.create_text(W // 2, H // 2, text=TR("no_history_chart"), fill=t["fg2"])
             return
 
+        # Chart drawing logic
+        pl, pr, pt, pb = 80, 30, 40, 80
+        
         values = [v for _, v in daily_avg]
         min_v = max(0, min(values) - 2)
         max_v = max(values) + 2
@@ -1310,12 +1090,14 @@ class FuelApp(tk.Tk):
         c.create_line(pl, H - pb, W - pr, H - pb, fill=t["fg2"], width=2)
         c.create_line(pl, pt, pl, H - pb, fill=t["fg2"], width=2)
 
+        # Y-axis labels
         for gi in range(6):
             gv = min_v + gi * rng / 5
             gy = pt + (1 - (gv - min_v) / rng) * ch
             c.create_line(pl, gy, W - pr, gy, fill=t["chart_grid"], dash=(4, 6))
-            c.create_text(pl - 10, gy, text=f"{gv:.1f}", anchor="e", fill=t["fg2"], font=("Courier", 9))
+            c.create_text(pl - 10, gy, text=f"{gv:.1f}", anchor="e", fill=t["fg2"], font=("Courier", 8))
 
+        # Colors for different consumption levels
         yg = pt + (1 - (8 - min_v) / rng) * ch if 8 > min_v and 8 < max_v else None
         yy = pt + (1 - (12 - min_v) / rng) * ch if 12 > min_v and 12 < max_v else None
 
@@ -1326,6 +1108,7 @@ class FuelApp(tk.Tk):
         if yy:
             c.create_rectangle(pl, max(yy, pt), W - pr, H - pb, fill="#2a1212", outline="")
 
+        # Bars
         bar_width = max(10, min(40, cw / len(daily_avg) - 5))
         for i, (dt, val) in enumerate(daily_avg):
             x = pl + (i + 0.5) * cw / len(daily_avg)
@@ -1338,21 +1121,18 @@ class FuelApp(tk.Tk):
             else:
                 color = t["chart_bar3"]
 
-            bar_height = H - pb - y
             c.create_rectangle(x - bar_width / 2, y, x + bar_width / 2, H - pb,
-                               fill=color, outline=t["bg2"], width=1)
-            c.create_text(x, y - 10, text=f"{val:.1f}",
-                          fill=t["fg"], font=("Courier", 8, "bold"))
+                               fill=color, width=1)
             self._chart_data_points.append((x, y, dt, val))
 
+        # X-axis labels
         step = max(1, len(daily_avg) // 10)
         for i in range(0, len(daily_avg), step):
             dt, _ = daily_avg[i]
             x = pl + (i + 0.5) * cw / len(daily_avg)
-            c.create_text(x, H - pb + 15, text=dt.strftime("%d.%m"),
-                          fill=t["fg2"], font=("Courier", 8), angle=45)
+            c.create_text(x, H - pb + 15, text=dt.strftime("%d.%m"), fill=t["fg2"], font=("Courier", 8))
 
-    # ── Profile ────────────────────────────────────────────────────────────────
+    # ─── Profile ────────────────────────────────────────────────────────────────
     def _build_profile(self):
         t = T()
         f = self.sections["profile"]
@@ -1398,46 +1178,33 @@ class FuelApp(tk.Tk):
                      text=TR("create_account") if mode == "register" else TR("login_account"),
                      font=("Georgia", 15, "bold"), bg=t["bg2"], fg=t["fg"]).pack(pady=(0, 16))
 
+            # Email
             tk.Label(self._auth_form_frame, text=TR("email"),
                      font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
             email_entry = tk.Entry(self._auth_form_frame, font=("Courier", 12),
-                                   bg=t["input_bg"], fg=t["fg"], bd=1, relief="solid")
+                                   bg=t["input_bg"], fg=t["fg"])
             email_entry.pack(fill="x", pady=4, ipady=6)
 
+            # Password
             tk.Label(self._auth_form_frame, text=TR("password"),
                      font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
-            pw_row = tk.Frame(self._auth_form_frame, bg=t["input_bg"], bd=1, relief="solid")
-            pw_row.pack(fill="x", pady=4)
-            pw_entry = tk.Entry(pw_row, font=("Courier", 12), show="•",
-                                bg=t["input_bg"], fg=t["fg"], bd=0)
-            pw_entry.pack(side="left", fill="x", expand=True, ipady=6, padx=4)
-            pw_vis = [False]
+            pw_entry = tk.Entry(self._auth_form_frame, font=("Courier", 12), show="•",
+                                bg=t["input_bg"], fg=t["fg"])
+            pw_entry.pack(fill="x", pady=4, ipady=6)
 
-            def toggle_pw():
-                pw_vis[0] = not pw_vis[0]
-                pw_entry.configure(show="" if pw_vis[0] else "•")
-                eye.configure(text="🙈" if pw_vis[0] else "👁")
-
-            eye = tk.Button(pw_row, text="👁", font=("Courier", 11), bg=t["input_bg"],
-                            fg=t["fg2"], bd=0, cursor="hand2", command=toggle_pw)
-            eye.pack(side="right", padx=2)
-
-            if mode == "login":
+            if mode == "register":
+                tk.Label(self._auth_form_frame, text=TR("repeat_password"),
+                         font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
+                pw2_entry = tk.Entry(self._auth_form_frame, font=("Courier", 12), show="•",
+                                     bg=t["input_bg"], fg=t["fg"])
+                pw2_entry.pack(fill="x", pady=4, ipady=6)
+            else:
+                pw2_entry = None
                 forgot_btn = tk.Button(self._auth_form_frame, text=TR("forgot_password"),
                                        font=("Courier", 9, "underline"), bg=t["bg2"], fg=t["accent"],
                                        bd=0, cursor="hand2",
                                        command=self._show_forgot_password_dialog)
                 forgot_btn.pack(anchor="e", pady=(2, 0))
-
-            pw2_entry = None
-            if mode == "register":
-                tk.Label(self._auth_form_frame, text=TR("repeat_password"),
-                         font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
-                pw2_row = tk.Frame(self._auth_form_frame, bg=t["input_bg"], bd=1, relief="solid")
-                pw2_row.pack(fill="x", pady=4)
-                pw2_entry = tk.Entry(pw2_row, font=("Courier", 12), show="•",
-                                     bg=t["input_bg"], fg=t["fg"], bd=0)
-                pw2_entry.pack(side="left", fill="x", expand=True, ipady=6, padx=4)
 
             status = tk.Label(self._auth_form_frame, text="", font=("Courier", 10),
                               bg=t["bg2"], fg=t["red"])
@@ -1470,6 +1237,7 @@ class FuelApp(tk.Tk):
                         self._save_settings()
                         self._refresh_car_combo()
                         self._refresh_profile()
+                        self._refresh_history()
                     except Exception as e:
                         print(f"Registration error: {e}")
                         status.configure(text=TR("database_error"))
@@ -1480,17 +1248,17 @@ class FuelApp(tk.Tk):
                             status.configure(text=TR("wrong_credentials"))
                             return
                         self.current_user = email
-                        self._load_user_settings()
                         self._refresh_car_combo()
                         self._refresh_profile()
+                        self._refresh_history()
                     except Exception as e:
                         print(f"Login error: {e}")
                         status.configure(text=TR("database_error"))
 
             btn_text = TR("login") if mode == "login" else TR("register")
-            tk.Button(self._auth_form_frame, text=btn_text,
-                      font=("Georgia", 12, "bold"), bg=t["btn"], fg="white",
-                      bd=0, pady=8, cursor="hand2", command=submit).pack(fill="x", pady=8)
+            tk.Button(self._auth_form_frame, text=btn_text, font=("Georgia", 12, "bold"),
+                      bg=t["btn"], fg="white", bd=0, pady=8, cursor="hand2",
+                      command=submit).pack(fill="x", pady=8)
 
         build()
 
@@ -1504,16 +1272,14 @@ class FuelApp(tk.Tk):
 
         tk.Label(dialog, text=TR("forgot_password_title"),
                  font=("Georgia", 14, "bold"), bg=T()["bg2"], fg=T()["fg"]).pack(pady=16)
-        tk.Label(dialog, text=TR("email"),
-                 font=("Courier", 10), bg=T()["bg2"], fg=T()["fg2"]).pack(anchor="w", padx=20)
-        email_entry = tk.Entry(dialog, font=("Courier", 12), bg=T()["input_bg"],
-                               fg=T()["fg"], bd=1, relief="solid")
+        tk.Label(dialog, text=TR("email"), font=("Courier", 10),
+                 bg=T()["bg2"], fg=T()["fg2"]).pack(anchor="w", padx=20)
+        email_entry = tk.Entry(dialog, font=("Courier", 12), bg=T()["input_bg"], fg=T()["fg"])
         email_entry.pack(fill="x", padx=20, pady=4, ipady=6)
 
-        tk.Label(dialog, text=TR("new_password"),
-                 font=("Courier", 10), bg=T()["bg2"], fg=T()["fg2"]).pack(anchor="w", padx=20, pady=(8, 0))
-        pw_entry = tk.Entry(dialog, font=("Courier", 12), show="•", bg=T()["input_bg"],
-                            fg=T()["fg"], bd=1, relief="solid")
+        tk.Label(dialog, text=TR("new_password"), font=("Courier", 10),
+                 bg=T()["bg2"], fg=T()["fg2"]).pack(anchor="w", padx=20, pady=(8, 0))
+        pw_entry = tk.Entry(dialog, font=("Courier", 12), show="•", bg=T()["input_bg"], fg=T()["fg"])
         pw_entry.pack(fill="x", padx=20, pady=4, ipady=6)
 
         status = tk.Label(dialog, text="", font=("Courier", 10), bg=T()["bg2"], fg=T()["red"])
@@ -1536,18 +1302,17 @@ class FuelApp(tk.Tk):
                 messagebox.showinfo(TR("password_changed"), TR("new_password_set"))
                 dialog.destroy()
             except Exception as e:
-                print(f"Password reset error: {e}")
+                print(f"Reset error: {e}")
                 status.configure(text=TR("database_error"))
 
-        tk.Button(dialog, text=TR("change_password_btn"),
-                  font=("Georgia", 11, "bold"), bg=T()["btn"], fg="white",
-                  bd=0, pady=8, command=reset_pw).pack(fill="x", padx=20, pady=12)
+        tk.Button(dialog, text=TR("change_password_btn"), font=("Georgia", 11, "bold"),
+                  bg=T()["btn"], fg="white", bd=0, pady=8, command=reset_pw).pack(fill="x", padx=20, pady=12)
 
     def _build_logged_in_profile(self, parent):
         t = T()
         hrow = tk.Frame(parent, bg=t["bg"])
         hrow.pack(fill="x", pady=(0, 16))
-        tk.Label(hrow, text=f"👤  {self.current_user}", font=("Georgia", 14, "bold"),
+        tk.Label(hrow, text=f"👤 {self.current_user}", font=("Georgia", 14, "bold"),
                  bg=t["bg"], fg=t["fg"]).pack(side="left")
 
         btn_frame = tk.Frame(hrow, bg=t["bg"])
@@ -1559,20 +1324,23 @@ class FuelApp(tk.Tk):
                   bg=t["red"], fg="white", bd=0, padx=12, pady=4,
                   command=self._delete_account).pack(side="left")
 
+        # Change password section
         pw_frame = tk.Frame(parent, bg=t["bg2"])
         pw_frame.pack(fill="x", pady=8, ipady=4)
         tk.Label(pw_frame, text=TR("change_password"), font=("Georgia", 13, "bold"),
                  bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=16, pady=(12, 4))
 
-        for label_text, var_name in [(TR("new_password"), "new_pw"), (TR("repeat_new_password"), "new_pw2")]:
-            tk.Label(pw_frame, text=label_text, font=("Courier", 9), bg=t["bg2"],
-                     fg=t["fg2"]).pack(anchor="w", padx=16)
-            row = tk.Frame(pw_frame, bg=t["input_bg"], bd=1, relief="solid")
-            row.pack(fill="x", padx=16, pady=(2, 4))
-            entry = tk.Entry(row, font=("Courier", 11), show="•", bg=t["input_bg"],
-                             fg=t["fg"], bd=0, relief="flat")
-            entry.pack(side="left", fill="x", expand=True, ipady=5, padx=4)
-            setattr(self, f"_{var_name}_entry", entry)
+        tk.Label(pw_frame, text=TR("new_password"), font=("Courier", 9),
+                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", padx=16)
+        self._new_pw_entry = tk.Entry(pw_frame, font=("Courier", 11), show="•",
+                                      bg=t["input_bg"], fg=t["fg"])
+        self._new_pw_entry.pack(fill="x", padx=16, pady=(2, 4), ipady=5)
+
+        tk.Label(pw_frame, text=TR("repeat_new_password"), font=("Courier", 9),
+                 bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", padx=16)
+        self._new_pw2_entry = tk.Entry(pw_frame, font=("Courier", 11), show="•",
+                                       bg=t["input_bg"], fg=t["fg"])
+        self._new_pw2_entry.pack(fill="x", padx=16, pady=(2, 4), ipady=5)
 
         pw_status = tk.Label(pw_frame, text="", font=("Courier", 9), bg=t["bg2"], fg=t["green"])
         pw_status.pack(anchor="w", padx=16)
@@ -1592,7 +1360,6 @@ class FuelApp(tk.Tk):
                 self._new_pw_entry.delete(0, "end")
                 self._new_pw2_entry.delete(0, "end")
             except Exception as e:
-                print(f"Password change error: {e}")
                 pw_status.configure(text=TR("database_error"), fg=t["red"])
 
         tk.Button(pw_frame, text=TR("change_password_btn"), font=("Courier", 10),
@@ -1600,6 +1367,7 @@ class FuelApp(tk.Tk):
                   command=change_pw).pack(anchor="w", padx=16, pady=(0, 12))
         tk.Frame(parent, bg=t["border"], height=1).pack(fill="x", pady=16)
 
+        # Cars section
         cars_header = tk.Frame(parent, bg=t["bg"])
         cars_header.pack(fill="x")
         tk.Label(cars_header, text=TR("my_cars"), font=("Georgia", 14, "bold"),
@@ -1616,14 +1384,6 @@ class FuelApp(tk.Tk):
 
     def _add_car_inline(self):
         t = T()
-        try:
-            car_count = db_count_cars(self.current_user)
-            if car_count >= 25:
-                messagebox.showwarning(TR("error"), TR("no_cars_limit"))
-                return
-        except Exception as e:
-            print(f"Error checking car count: {e}")
-
         if self._add_car_form_visible:
             self._add_car_form_frame.pack_forget()
             self._add_car_form_visible = False
@@ -1641,8 +1401,7 @@ class FuelApp(tk.Tk):
                  font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", padx=16)
         name_var = tk.StringVar()
         tk.Entry(self._add_car_form_frame, textvariable=name_var,
-                 font=("Courier", 12), bg=t["input_bg"], fg=t["fg"],
-                 bd=1, relief="solid").pack(fill="x", padx=16, pady=(2, 8), ipady=6)
+                 font=("Courier", 12), bg=t["input_bg"], fg=t["fg"]).pack(fill="x", padx=16, pady=(2, 8), ipady=6)
 
         photo_path_var = tk.StringVar()
         photo_preview_frame = tk.Frame(self._add_car_form_frame, bg=t["bg2"])
@@ -1698,14 +1457,12 @@ class FuelApp(tk.Tk):
                 self._render_cars()
                 self._refresh_car_combo()
             except Exception as e:
-                print(f"Error adding car: {e}")
                 status.configure(text=TR("database_error"))
 
-        cancel_text = "✕ Отмена" if current_language == "ru" else "✕ Cancel"
         tk.Button(btn_row, text=TR("save"), font=("Georgia", 11, "bold"),
                   bg=t["btn"], fg="white", bd=0, pady=8,
                   command=save_car).pack(side="left", fill="x", expand=True, padx=(0, 8))
-        tk.Button(btn_row, text=cancel_text, font=("Courier", 10),
+        tk.Button(btn_row, text="✕ " + TR("clear"), font=("Courier", 10),
                   bg=t["btn2"], fg=t["fg"], bd=0, pady=8,
                   command=lambda: [self._add_car_form_frame.pack_forget(),
                                    setattr(self, '_add_car_form_visible', False)]).pack(side="left")
@@ -1720,7 +1477,6 @@ class FuelApp(tk.Tk):
         try:
             cars = db_get_cars(self.current_user)
         except Exception as e:
-            print(f"Error loading cars: {e}")
             tk.Label(self.cars_container, text=TR("database_error"),
                      font=("Courier", 11), bg=t["bg"], fg=t["red"]).pack(pady=16)
             return
@@ -1730,36 +1486,28 @@ class FuelApp(tk.Tk):
                      font=("Courier", 11), bg=t["bg"], fg=t["fg2"]).pack(pady=16)
             return
 
-        for row_idx in range(5):
-            row = tk.Frame(self.cars_container, bg=t["bg"])
-            row.pack(fill="x", pady=4)
-            for col_idx in range(5):
-                idx = row_idx * 5 + col_idx
-                if idx >= len(cars):
-                    break
-                car = cars[idx]
+        for idx, car in enumerate(cars):
+            card = tk.Frame(self.cars_container, bg=t["bg2"], bd=0, padx=6, pady=6)
+            card.pack(side="left", padx=6, pady=4)
 
-                card = tk.Frame(row, bg=t["bg2"], bd=0, relief="flat", padx=6, pady=6)
-                card.pack(side="left", padx=6, pady=4)
+            img_box = tk.Frame(card, bg=t["bg2"], width=120, height=75)
+            img_box.pack_propagate(False)
+            img_box.pack()
+            ph = car.get("photo")
+            img = load_car_image(ph, 120, 75)
+            photo = ImageTk.PhotoImage(img)
+            self._photo_refs[f"car_{idx}"] = photo
+            tk.Label(img_box, image=photo, bg=t["bg2"]).place(relx=0.5, rely=0.5, anchor="center")
 
-                img_box = tk.Frame(card, bg=t["bg2"], width=120, height=75)
-                img_box.pack_propagate(False)
-                img_box.pack()
-                ph = car.get("photo")
-                img = load_car_image(ph, 120, 75)
-                photo = ImageTk.PhotoImage(img)
-                self._photo_refs[f"car_{idx}"] = photo
-                tk.Label(img_box, image=photo, bg=t["bg2"]).place(relx=0.5, rely=0.5, anchor="center")
-
-                tk.Label(card, text=car["name"], font=("Courier", 9, "bold"),
-                         bg=t["bg2"], fg=t["fg"]).pack(pady=2)
-                avg = car.get("avg_consumption")
-                if avg:
-                    tk.Label(card, text=f"💧 {avg} л/100", font=("Courier", 7),
-                             bg=t["bg2"], fg=t["fg2"]).pack()
-                tk.Button(card, text=TR("delete"), font=("Courier", 8),
-                          bg=t["red"], fg="white", bd=0, padx=6, pady=2,
-                          command=lambda i=idx, name=car["name"]: self._delete_car(name)).pack(pady=(3, 0))
+            tk.Label(card, text=car["name"], font=("Courier", 9, "bold"),
+                     bg=t["bg2"], fg=t["fg"]).pack(pady=2)
+            avg = car.get("avg_consumption")
+            if avg:
+                tk.Label(card, text=f"💧 {avg} л/100", font=("Courier", 7),
+                         bg=t["bg2"], fg=t["fg2"]).pack()
+            tk.Button(card, text=TR("delete"), font=("Courier", 8),
+                      bg=t["red"], fg="white", bd=0, padx=6, pady=2,
+                      command=lambda name=car["name"]: self._delete_car(name)).pack(pady=(3, 0))
 
     def _delete_car(self, car_name):
         if messagebox.askyesno(TR("delete_confirm"), TR("delete_car_confirm")):
@@ -1768,13 +1516,13 @@ class FuelApp(tk.Tk):
                 self._render_cars()
                 self._refresh_car_combo()
             except Exception as e:
-                print(f"Error deleting car: {e}")
                 messagebox.showerror(TR("error"), TR("database_error"))
 
     def _logout(self):
         self.current_user = None
         self._refresh_car_combo()
         self._refresh_profile()
+        self._refresh_history()
         self._draw_fuel_chart()
 
     def _delete_account(self):
@@ -1784,9 +1532,9 @@ class FuelApp(tk.Tk):
                 self.current_user = None
                 self._refresh_car_combo()
                 self._refresh_profile()
+                self._refresh_history()
                 self._draw_fuel_chart()
             except Exception as e:
-                print(f"Error deleting account: {e}")
                 messagebox.showerror(TR("error"), TR("database_error"))
 
     def _refresh_profile(self):
@@ -1795,7 +1543,7 @@ class FuelApp(tk.Tk):
             w.destroy()
         self._build_profile()
 
-    # ── History ────────────────────────────────────────────────────────────────
+    # ─── History ────────────────────────────────────────────────────────────────
     def _build_history(self):
         t = T()
         f = self.sections["history"]
@@ -1810,9 +1558,14 @@ class FuelApp(tk.Tk):
         tk.Label(pad, text=TR("history_title"), font=("Georgia", 16, "bold"),
                  bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 4))
 
-        if not self.current_user or not self._db_connected:
+        if not self.current_user:
             tk.Label(pad, text=TR("login_for_history"),
-                     font=("Courier", 12), bg=t["bg"], fg=t["fg2"]).pack(pady=40)
+                     font=("Courier", 14), bg=t["bg"], fg=t["fg2"]).pack(pady=40)
+            return
+
+        if not self._db_connected:
+            tk.Label(pad, text=TR("database_error"),
+                     font=("Courier", 14), bg=t["bg"], fg=t["red"]).pack(pady=40)
             return
 
         hdr = tk.Frame(pad, bg=t["bg"])
@@ -1821,103 +1574,92 @@ class FuelApp(tk.Tk):
                   bg=t["red"], fg="white", bd=0, padx=8, pady=4,
                   command=self._clear_all_history).pack(side="right")
 
-        self._hist_inner = tk.Frame(pad, bg=t["bg"])
-        self._hist_inner.pack(fill="x", pady=8)
+        self._hist_container = tk.Frame(pad, bg=t["bg"])
+        self._hist_container.pack(fill="both", expand=True, pady=8)
         self._render_history_entries()
 
     def _render_history_entries(self):
-        t = T()
-        if not hasattr(self, '_hist_inner'):
+        if not hasattr(self, '_hist_container'):
             return
-        for w in self._hist_inner.winfo_children():
+        for w in self._hist_container.winfo_children():
             w.destroy()
+        
         if not self.current_user or not self._db_connected:
             return
             
         try:
             history = db_get_history(self.current_user)
         except Exception as e:
-            print(f"Error loading history: {e}")
-            tk.Label(self._hist_inner, text=TR("database_error"),
-                     font=("Courier", 12), bg=t["bg"], fg=t["red"]).pack(pady=40)
+            print(f"History error: {e}")
+            tk.Label(self._hist_container, text=TR("database_error"),
+                     font=("Courier", 12), bg=T()["bg"], fg=T()["red"]).pack(pady=40)
             return
             
         if not history:
-            tk.Label(self._hist_inner, text=TR("history_empty"),
-                     font=("Courier", 12), bg=t["bg"], fg=t["fg2"]).pack(pady=40)
+            tk.Label(self._hist_container, text=TR("history_empty"),
+                     font=("Courier", 12), bg=T()["bg"], fg=T()["fg2"]).pack(pady=40)
             return
 
+        t = T()
         for i, entry in enumerate(history):
-            card = tk.Frame(self._hist_inner, bg=t["bg2"], pady=8, padx=8)
+            card = tk.Frame(self._hist_container, bg=t["bg2"], pady=8, padx=8)
             card.pack(fill="x", pady=6)
 
+            # Header
             top_row = tk.Frame(card, bg=t["bg2"])
             top_row.pack(fill="x", pady=(0, 8))
 
             tk.Label(top_row, text=f"📅 {entry['date']}",
                      font=("Courier", 10, "bold"), bg=t["bg2"], fg=t["fg"]).pack(side="left")
 
-            btn_frame = tk.Frame(top_row, bg=t["bg2"])
-            btn_frame.pack(side="right")
-
+            # Copy button
             sym = entry.get("currency", "₽")
-            copy_text = (
-                f"Date: {entry['date']}\n"
-                f"Car: {entry.get('car', '—')}\n"
-                f"Distance: {entry['distance']} km\n"
-                f"Fuel: {entry['fuel']} L\n"
-                f"Price: {entry['price']} {sym}/L\n"
-                f"Consumption: {entry['consumption']} L/100km\n"
-                f"Cost: {entry['cost']:,.2f} {sym}"
-            )
-
+            copy_text = (f"Дата: {entry['date']}\nАвто: {entry.get('car', '—')}\n"
+                        f"Расстояние: {entry['distance']} км\nТопливо: {entry['fuel']} л\n"
+                        f"Цена: {entry['price']} {sym}/л\nРасход: {entry['consumption']} л/100км\n"
+                        f"Стоимость: {entry['cost']:,.2f} {sym}")
+            
             def copy_entry(txt=copy_text):
                 self.clipboard_clear()
                 self.clipboard_append(txt)
                 messagebox.showinfo(TR("copied"), TR("copied_msg"))
 
-            copy_btn = tk.Button(btn_frame, text="📋 " + TR("copy"),
-                                 font=("Courier", 9),
-                                 bg=t["green"], fg="white", bd=0,
-                                 padx=8, pady=4, cursor="hand2",
-                                 command=copy_entry)
-            copy_btn.pack(side="left", padx=(0, 8))
+            copy_btn = tk.Button(top_row, text="📋 " + TR("copy"), font=("Courier", 9),
+                                 bg=t["green"], fg="white", bd=0, padx=8, pady=4,
+                                 cursor="hand2", command=copy_entry)
+            copy_btn.pack(side="right")
 
-            content = tk.Frame(card, bg=t["bg2"])
-            content.pack(fill="x")
-
-            info = tk.Frame(content, bg=t["bg2"])
-            info.pack(side="left", fill="x", expand=True)
+            # Info
+            info = tk.Frame(card, bg=t["bg2"])
+            info.pack(fill="x")
 
             tk.Label(info, text=f"🚗 {entry.get('car', '—')}",
                      font=("Courier", 11, "bold"), bg=t["bg2"], fg=t["accent"]).pack(anchor="w")
 
-            data_text = f"📏 {TR('distance')}: {entry['distance']} км"
-            tk.Label(info, text=data_text,
-                     font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", pady=(4, 0))
+            row1 = tk.Frame(info, bg=t["bg2"])
+            row1.pack(fill="x", pady=(4, 0))
+            tk.Label(row1, text=f"📏 {TR('distance')}: {entry['distance']} км", font=("Courier", 10),
+                     bg=t["bg2"], fg=t["fg2"]).pack(side="left", padx=(0, 20))
+            tk.Label(row1, text=f"⛽ {TR('fuel')}: {entry['fuel']} л", font=("Courier", 10),
+                     bg=t["bg2"], fg=t["fg2"]).pack(side="left")
 
-            data_text = f"⛽ {TR('fuel')}: {entry['fuel']} л"
-            tk.Label(info, text=data_text,
-                     font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
+            row2 = tk.Frame(info, bg=t["bg2"])
+            row2.pack(fill="x")
+            tk.Label(row2, text=f"💰 {TR('fuel_price')}: {entry['price']} {sym}/л", font=("Courier", 10),
+                     bg=t["bg2"], fg=t["fg2"]).pack(side="left", padx=(0, 20))
 
-            data_text = f"💰 {TR('fuel_price')}: {entry['price']} {sym}/{TR('fuel_unit')}"
-            tk.Label(info, text=data_text,
-                     font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
-
+            # Results
             results_frame = tk.Frame(info, bg=t["bg3"], padx=8, pady=4)
             results_frame.pack(fill="x", pady=(8, 0))
 
-            result_text = f"💧 {TR('avg_consumption')}: {entry['consumption']} л/100км"
-            tk.Label(results_frame, text=result_text,
+            tk.Label(results_frame, text=f"💧 {TR('avg_consumption')}: {entry['consumption']} л/100км",
                      font=("Courier", 11, "bold"), bg=t["bg3"], fg=t["green"]).pack(anchor="w")
-
-            result_text = f"💳 {TR('trip_cost')}: {entry['cost']:,.2f} {sym}"
-            tk.Label(results_frame, text=result_text,
+            tk.Label(results_frame, text=f"💳 {TR('trip_cost')}: {entry['cost']:,.2f} {sym}",
                      font=("Courier", 11, "bold"), bg=t["bg3"], fg=t["yellow"]).pack(anchor="w")
 
+            # Separator
             if i < len(history) - 1:
-                separator = tk.Frame(self._hist_inner, bg=t["border"], height=1)
-                separator.pack(fill="x", pady=4)
+                tk.Frame(self._hist_container, bg=t["border"], height=1).pack(fill="x", pady=4)
 
     def _clear_all_history(self):
         if messagebox.askyesno(TR("clear_history_confirm"), TR("clear_history_msg")):
@@ -1925,14 +1667,12 @@ class FuelApp(tk.Tk):
                 db_clear_history(self.current_user)
                 self._render_history_entries()
             except Exception as e:
-                print(f"Error clearing history: {e}")
                 messagebox.showerror(TR("error"), TR("database_error"))
 
     def _refresh_history(self):
-        if hasattr(self, '_hist_inner'):
-            self._render_history_entries()
+        self._render_history_entries()
 
-    # ── About ──────────────────────────────────────────────────────────────────
+    # ─── About ──────────────────────────────────────────────────────────────────
     def _build_about(self):
         t = T()
         f = self.sections["about"]
@@ -1951,13 +1691,15 @@ class FuelApp(tk.Tk):
         tk.Label(hero, text=TR("version"), font=("Courier", 10),
                  bg=t["bg2"], fg=t["fg2"]).pack(pady=4)
 
-        for title_key, body_key in [
+        sections = [
             ("about_section1_title", "about_section1"),
             ("about_section2_title", "about_section2"),
             ("about_section3_title", "about_section3"),
             ("about_section4_title", "about_section4"),
             ("about_section5_title", "about_section5"),
-        ]:
+        ]
+
+        for title_key, body_key in sections:
             sec = tk.Frame(pad, bg=t["bg2"])
             sec.pack(fill="x", pady=8, ipadx=16, ipady=12)
             tk.Label(sec, text=TR(title_key), font=("Georgia", 13, "bold"),
@@ -1969,7 +1711,7 @@ class FuelApp(tk.Tk):
         tk.Label(pad, text=TR("footer"), font=("Courier", 9),
                  bg=t["bg"], fg=t["fg2"]).pack(pady=16)
 
-    # ── Settings ───────────────────────────────────────────────────────────────
+    # ─── Settings ───────────────────────────────────────────────────────────────
     def _build_settings(self):
         t = T()
         f = self.sections["settings"]
@@ -1983,6 +1725,7 @@ class FuelApp(tk.Tk):
         tk.Label(pad, text=TR("settings_title"), font=("Georgia", 18, "bold"),
                  bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 24))
 
+        # Theme
         tc = tk.Frame(pad, bg=t["bg2"], pady=16)
         tc.pack(fill="x", pady=8)
         tk.Label(tc, text=TR("theme"), font=("Georgia", 13, "bold"),
@@ -2007,6 +1750,7 @@ class FuelApp(tk.Tk):
                   bg="#e2e8f0", fg="#1a202c", bd=0, padx=20, pady=8,
                   command=lambda: apply_theme("light")).pack(side="left")
 
+        # Currency
         cc = tk.Frame(pad, bg=t["bg2"], pady=16)
         cc.pack(fill="x", pady=8)
         tk.Label(cc, text=TR("currency_setting"), font=("Georgia", 13, "bold"),
@@ -2032,6 +1776,7 @@ class FuelApp(tk.Tk):
 
         ccombo.bind("<<ComboboxSelected>>", apply_currency)
 
+        # Language
         lc = tk.Frame(pad, bg=t["bg2"], pady=16)
         lc.pack(fill="x", pady=8)
         tk.Label(lc, text=TR("language_setting"), font=("Georgia", 13, "bold"),
@@ -2049,12 +1794,12 @@ class FuelApp(tk.Tk):
             self._rebuild_ui()
             self._show_section("settings")
 
-        tk.Button(lr, text="🇷🇺  Русский", font=("Georgia", 11, "bold"),
+        tk.Button(lr, text="🇷🇺 Русский", font=("Georgia", 11, "bold"),
                   bg=t["btn"] if current_language == "ru" else t["btn2"],
                   fg="white" if current_language == "ru" else t["fg"],
                   bd=0, padx=20, pady=8,
                   command=lambda: apply_language("ru")).pack(side="left", padx=(0, 12))
-        tk.Button(lr, text="🇬🇧  English", font=("Georgia", 11, "bold"),
+        tk.Button(lr, text="🇬🇧 English", font=("Georgia", 11, "bold"),
                   bg=t["btn"] if current_language == "en" else t["btn2"],
                   fg="white" if current_language == "en" else t["fg"],
                   bd=0, padx=20, pady=8,
