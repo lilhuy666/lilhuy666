@@ -7,174 +7,321 @@ import hashlib
 import shutil
 from datetime import datetime, timedelta
 import math
-import webbrowser
+import psycopg2
+from psycopg2 import sql, pool
+from contextlib import contextmanager
+import threading
+from queue import Queue
 
 try:
     from PIL import Image, ImageTk, ImageDraw, ImageFont
 except ImportError:
     import subprocess, sys
-
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
     from PIL import Image, ImageTk, ImageDraw, ImageFont
 
-# ─── Data storage ──────────────────────────────────────────────────────────────
-DATA_FILE = os.path.join(os.path.expanduser("~"), ".fuel_calc_data.json")
-PHOTO_DIR = os.path.join(os.path.expanduser("~"), ".fuel_calc_photos")
-MAP_DIR = os.path.join(os.path.expanduser("~"), ".fuel_calc_maps")
-os.makedirs(PHOTO_DIR, exist_ok=True)
-os.makedirs(MAP_DIR, exist_ok=True)
+try:
+    import psycopg2
+except ImportError:
+    import subprocess, sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "psycopg2-binary"])
+    import psycopg2
 
+# ─── Database configuration ────────────────────────────────────────────────────
+DB_CONFIG = {
+    'dbname': 'fuel_calc',
+    'user': 'postgres',
+    'password': 'postgres',
+    'host': 'localhost',
+    'port': 5432
+}
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return {"users": {}, "current_user": None, "settings": {}}
-    return {"users": {}, "current_user": None, "settings": {}}
+# Connection pool
+connection_pool = None
 
-
-def save_data(data):
+def init_db_pool():
+    global connection_pool
     try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except IOError:
-        pass
+        connection_pool = pool.SimpleConnectionPool(
+            1, 20,
+            dbname=DB_CONFIG['dbname'],
+            user=DB_CONFIG['user'],
+            password=DB_CONFIG['password'],
+            host=DB_CONFIG['host'],
+            port=DB_CONFIG['port']
+        )
+        return True
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return False
 
+@contextmanager
+def get_db_connection():
+    conn = connection_pool.getconn()
+    try:
+        yield conn
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        connection_pool.putconn(conn)
 
-def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+# ─── Database initialization ───────────────────────────────────────────────────
+def create_tables():
+    """Create all necessary tables if they don't exist"""
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        # Users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                email TEXT PRIMARY KEY,
+                password TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Cars table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cars (
+                id SERIAL PRIMARY KEY,
+                email TEXT REFERENCES users(email) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                photo_path TEXT,
+                avg_consumption FLOAT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(email, name)
+            )
+        """)
+        
+        # History table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS history (
+                id SERIAL PRIMARY KEY,
+                email TEXT REFERENCES users(email) ON DELETE CASCADE,
+                car_name TEXT,
+                date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                distance FLOAT NOT NULL,
+                fuel FLOAT NOT NULL,
+                price FLOAT NOT NULL,
+                currency TEXT,
+                consumption FLOAT NOT NULL,
+                cost FLOAT NOT NULL
+            )
+        """)
+        
+        # Settings table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+                theme TEXT DEFAULT 'dark',
+                language TEXT DEFAULT 'ru',
+                currency TEXT DEFAULT '₽ RUB'
+            )
+        """)
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error creating tables: {e}")
+        return False
 
+# ─── Database operations ───────────────────────────────────────────────────────
+def db_create_user(email, password_hash):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (email, password) VALUES (%s, %s)",
+            (email, password_hash)
+        )
+        cursor.execute(
+            "INSERT INTO settings (email, theme, language, currency) VALUES (%s, %s, %s, %s)",
+            (email, 'dark', 'ru', '₽ RUB')
+        )
 
-def is_valid_email(email):
-    return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) is not None
+def db_get_user(email):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT password FROM users WHERE email = %s", (email,))
+        result = cursor.fetchone()
+        return result[0] if result else None
 
+def db_user_exists(email):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users WHERE email = %s", (email,))
+        return cursor.fetchone() is not None
 
-# ─── Currencies ────────────────────────────────────────────────────────────────
-CURRENCIES = {
-    "₽ RUB": "₽",
-    "$ USD": "$",
-}
+def db_update_password(email, new_password_hash):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET password = %s WHERE email = %s",
+            (new_password_hash, email)
+        )
 
-# ─── Real fuel prices data ────────────────────────────────────────────────────
-FUEL_PRICES = {
-    "АИ-92": {
-        "Москва": 48.50, "Санкт-Петербург": 48.20, "Казань": 46.80,
-        "Екатеринбург": 46.50, "Новосибирск": 45.90, "Сочи": 49.00,
-        "Краснодар": 47.50, "Владивосток": 51.00, "Нижний Новгород": 47.30,
-        "Самара": 46.70, "Омск": 45.50, "Челябинск": 46.20,
-        "Ростов-на-Дону": 47.80, "Уфа": 46.40
-    },
-    "АИ-95": {
-        "Москва": 52.50, "Санкт-Петербург": 52.00, "Казань": 50.50,
-        "Екатеринбург": 50.20, "Новосибирск": 49.80, "Сочи": 53.50,
-        "Краснодар": 51.50, "Владивосток": 55.00, "Нижний Новгород": 51.00,
-        "Самара": 50.00, "Омск": 48.50, "Челябинск": 49.80,
-        "Ростов-на-Дону": 51.50, "Уфа": 50.00
-    },
-    "ДТ": {
-        "Москва": 56.50, "Санкт-Петербург": 56.00, "Казань": 54.50,
-        "Екатеринбург": 54.00, "Новосибирск": 53.50, "Сочи": 57.00,
-        "Краснодар": 55.00, "Владивосток": 58.50, "Нижний Новгород": 55.00,
-        "Самара": 54.00, "Омск": 52.50, "Челябинск": 53.50,
-        "Ростов-на-Дону": 55.50, "Уфа": 54.00
-    }
-}
+def db_delete_user(email):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Delete photos from filesystem
+        cursor.execute("SELECT photo_path FROM cars WHERE email = %s", (email,))
+        for row in cursor.fetchall():
+            if row[0] and os.path.exists(row[0]):
+                try:
+                    os.remove(row[0])
+                except:
+                    pass
+        cursor.execute("DELETE FROM users WHERE email = %s", (email,))
 
-# ─── Gas stations data with real coordinates ──────────────────────────────────
-GAS_STATIONS_RUSSIA = [
-    # Москва
-    {"name": "Лукойл №1", "city": "Москва", "address": "Ленинградское шоссе, 1",
-     "lat": 55.7558, "lon": 37.6173, "brand": "lukoil",
-     "fuel_types": {"АИ-92": 48.50, "АИ-95": 52.50, "ДТ": 56.50}},
-    {"name": "Газпромнефть №1", "city": "Москва", "address": "Проспект Мира, 100",
-     "lat": 55.7512, "lon": 37.6184, "brand": "gazprom",
-     "fuel_types": {"АИ-92": 48.30, "АИ-95": 52.30, "ДТ": 56.20}},
-    {"name": "Роснефть №1", "city": "Москва", "address": "Варшавское шоссе, 25",
-     "lat": 55.7600, "lon": 37.6200, "brand": "rosneft",
-     "fuel_types": {"АИ-92": 48.00, "АИ-95": 52.00, "ДТ": 56.00}},
-    {"name": "Лукойл №2", "city": "Москва", "address": "Кутузовский пр., 30",
-     "lat": 55.7400, "lon": 37.5500, "brand": "lukoil",
-     "fuel_types": {"АИ-92": 48.60, "АИ-95": 52.60, "ДТ": 56.80}},
-    {"name": "Shell", "city": "Москва", "address": "МКАД, 15 км",
-     "lat": 55.7800, "lon": 37.6300, "brand": "shell",
-     "fuel_types": {"АИ-92": 49.00, "АИ-95": 53.00, "ДТ": 57.00}},
+def db_get_cars(email):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name, photo_path, avg_consumption FROM cars WHERE email = %s ORDER BY id",
+            (email,)
+        )
+        return [{"name": r[0], "photo": r[1], "avg_consumption": r[2]} for r in cursor.fetchall()]
 
-    # Санкт-Петербург
-    {"name": "Лукойл №3", "city": "Санкт-Петербург", "address": "Невский пр., 50",
-     "lat": 59.9343, "lon": 30.3351, "brand": "lukoil",
-     "fuel_types": {"АИ-92": 48.20, "АИ-95": 52.00, "ДТ": 56.00}},
-    {"name": "Газпромнефть №2", "city": "Санкт-Петербург", "address": "Московский пр., 150",
-     "lat": 59.9290, "lon": 30.3200, "brand": "gazprom",
-     "fuel_types": {"АИ-92": 48.00, "АИ-95": 51.80, "ДТ": 55.80}},
-    {"name": "Роснефть №2", "city": "Санкт-Петербург", "address": "Лиговский пр., 100",
-     "lat": 59.9200, "lon": 30.3500, "brand": "rosneft",
-     "fuel_types": {"АИ-92": 47.80, "АИ-95": 51.50, "ДТ": 55.50}},
+def db_add_car(email, name, photo_path=None):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO cars (email, name, photo_path) VALUES (%s, %s, %s)",
+            (email, name, photo_path)
+        )
 
-    # Казань
-    {"name": "Роснефть №3", "city": "Казань", "address": "Пр. Победы, 100",
-     "lat": 55.7961, "lon": 49.1064, "brand": "rosneft",
-     "fuel_types": {"АИ-92": 46.80, "АИ-95": 50.50, "ДТ": 54.50}},
-    {"name": "Газпромнефть №3", "city": "Казань", "address": "Ул. Декабристов, 50",
-     "lat": 55.8000, "lon": 49.1200, "brand": "gazprom",
-     "fuel_types": {"АИ-92": 47.00, "АИ-95": 50.80, "ДТ": 54.80}},
+def db_delete_car(email, name):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT photo_path FROM cars WHERE email = %s AND name = %s", (email, name))
+        row = cursor.fetchone()
+        if row and row[0] and os.path.exists(row[0]):
+            try:
+                os.remove(row[0])
+            except:
+                pass
+        cursor.execute("DELETE FROM cars WHERE email = %s AND name = %s", (email, name))
 
-    # Екатеринбург
-    {"name": "Лукойл №4", "city": "Екатеринбург", "address": "Ул. Ленина, 50",
-     "lat": 56.8389, "lon": 60.6057, "brand": "lukoil",
-     "fuel_types": {"АИ-92": 46.50, "АИ-95": 50.20, "ДТ": 54.00}},
+def db_update_car_consumption(email, car_name, consumption):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE cars SET avg_consumption = %s WHERE email = %s AND name = %s",
+            (consumption, email, car_name)
+        )
 
-    # Новосибирск
-    {"name": "Газпромнефть №4", "city": "Новосибирск", "address": "Красный пр., 100",
-     "lat": 55.0302, "lon": 82.9204, "brand": "gazprom",
-     "fuel_types": {"АИ-92": 45.90, "АИ-95": 49.80, "ДТ": 53.50}},
+def db_update_car_photo(email, car_name, photo_path):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE cars SET photo_path = %s WHERE email = %s AND name = %s",
+            (photo_path, email, car_name)
+        )
 
-    # Сочи
-    {"name": "Роснефть №4", "city": "Сочи", "address": "Курортный пр., 50",
-     "lat": 43.5855, "lon": 39.7231, "brand": "rosneft",
-     "fuel_types": {"АИ-92": 49.00, "АИ-95": 53.50, "ДТ": 57.00}},
+def db_add_history(email, entry):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO history (email, car_name, distance, fuel, price, currency, consumption, cost, date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            email, entry.get('car'), entry['distance'], entry['fuel'],
+            entry['price'], entry.get('currency'), entry['consumption'],
+            entry['cost'], datetime.strptime(entry['date'], "%d.%m.%Y %H:%M")
+        ))
 
-    # Краснодар
-    {"name": "Лукойл №5", "city": "Краснодар", "address": "Ул. Красная, 100",
-     "lat": 45.0355, "lon": 38.9753, "brand": "lukoil",
-     "fuel_types": {"АИ-92": 47.50, "АИ-95": 51.50, "ДТ": 55.00}},
+def db_get_history(email, car_name=None, days=None):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        query = """
+            SELECT car_name, distance, fuel, price, currency, consumption, cost, 
+                   TO_CHAR(date, 'DD.MM.YYYY HH24:MI') as date_str,
+                   date as raw_date
+            FROM history 
+            WHERE email = %s
+        """
+        params = [email]
+        
+        if car_name and car_name != "— Без авто —" and car_name != "— No car —":
+            query += " AND car_name = %s"
+            params.append(car_name)
+        
+        if days:
+            query += " AND date >= CURRENT_DATE - INTERVAL '%s days'"
+            params.append(days)
+        
+        query += " ORDER BY date DESC"
+        
+        cursor.execute(query, params)
+        results = []
+        for r in cursor.fetchall():
+            results.append({
+                'car': r[0], 'distance': r[1], 'fuel': r[2], 'price': r[3],
+                'currency': r[4], 'consumption': r[5], 'cost': r[6],
+                'date': r[7], 'raw_date': r[8]
+            })
+        return results
 
-    # Владивосток
-    {"name": "Газпромнефть №5", "city": "Владивосток", "address": "Океанский пр., 50",
-     "lat": 43.1155, "lon": 131.8855, "brand": "gazprom",
-     "fuel_types": {"АИ-92": 51.00, "АИ-95": 55.00, "ДТ": 58.50}},
+def db_delete_history_entry(email, entry_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM history WHERE email = %s AND id = %s", (email, entry_id))
 
-    # Нижний Новгород
-    {"name": "Роснефть №5", "city": "Нижний Новгород", "address": "Ул. Большая Покровская, 50",
-     "lat": 56.3268, "lon": 44.0065, "brand": "rosneft",
-     "fuel_types": {"АИ-92": 47.30, "АИ-95": 51.00, "ДТ": 55.00}},
+def db_clear_history(email):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM history WHERE email = %s", (email,))
 
-    # Самара
-    {"name": "Лукойл №6", "city": "Самара", "address": "Московское шоссе, 50",
-     "lat": 53.1959, "lon": 50.1002, "brand": "lukoil",
-     "fuel_types": {"АИ-92": 46.70, "АИ-95": 50.00, "ДТ": 54.00}},
+def db_get_settings(email):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT theme, language, currency FROM settings WHERE email = %s",
+            (email,)
+        )
+        result = cursor.fetchone()
+        if result:
+            return {'theme': result[0], 'language': result[1], 'currency': result[2]}
+        return {'theme': 'dark', 'language': 'ru', 'currency': '₽ RUB'}
 
-    # Омск
-    {"name": "Газпромнефть №6", "city": "Омск", "address": "Пр. Маркса, 50",
-     "lat": 54.9893, "lon": 73.3682, "brand": "gazprom",
-     "fuel_types": {"АИ-92": 45.50, "АИ-95": 48.50, "ДТ": 52.50}},
+def db_update_settings(email, theme, language, currency):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE settings 
+            SET theme = %s, language = %s, currency = %s 
+            WHERE email = %s
+        """, (theme, language, currency, email))
 
-    # Челябинск
-    {"name": "Роснефть №6", "city": "Челябинск", "address": "Пр. Ленина, 50",
-     "lat": 55.1644, "lon": 61.4368, "brand": "rosneft",
-     "fuel_types": {"АИ-92": 46.20, "АИ-95": 49.80, "ДТ": 53.50}},
+def db_count_cars(email):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM cars WHERE email = %s", (email,))
+        return cursor.fetchone()[0]
 
-    # Ростов-на-Дону
-    {"name": "Лукойл №7", "city": "Ростов-на-Дону", "address": "Ул. Большая Садовая, 50",
-     "lat": 47.2357, "lon": 39.7015, "brand": "lukoil",
-     "fuel_types": {"АИ-92": 47.80, "АИ-95": 51.50, "ДТ": 55.50}},
-
-    # Уфа
-    {"name": "Газпромнефть №7", "city": "Уфа", "address": "Пр. Октября, 50",
-     "lat": 54.7348, "lon": 55.9578, "brand": "gazprom",
-     "fuel_types": {"АИ-92": 46.40, "АИ-95": 50.00, "ДТ": 54.00}},
-]
+def db_get_history_for_chart(email, car_name, days):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        query = """
+            SELECT DATE(date) as day, AVG(consumption) as avg_consumption
+            FROM history 
+            WHERE email = %s 
+              AND date >= CURRENT_DATE - INTERVAL '%s days'
+        """
+        params = [email, days]
+        
+        if car_name and car_name != "— Без авто —" and car_name != "— No car —":
+            query += " AND car_name = %s"
+            params.append(car_name)
+        
+        query += " GROUP BY DATE(date) ORDER BY day"
+        
+        cursor.execute(query, params)
+        return [(r[0], r[1]) for r in cursor.fetchall()]
 
 # ─── Translations ──────────────────────────────────────────────────────────────
 TRANSLATIONS = {
@@ -184,7 +331,6 @@ TRANSLATIONS = {
         "calculator": "Калькулятор",
         "profile": "Профиль",
         "history": "История",
-        "gas_stations": "Заправки",
         "about": "О приложении",
         "settings": "Настройки",
         "no_car": "— Без авто —",
@@ -273,38 +419,22 @@ TRANSLATIONS = {
         "login_for_chart": "Войдите для просмотра графика",
         "fuel_unit": "л",
         "price_unit": "за л",
-        "gs_title": "Карта заправок России",
-        "gs_city": "Поиск по городу:",
-        "gs_search": "🔍 Найти",
-        "gs_open_map": "🗺 Открыть интерактивную карту",
-        "gs_to_calc": "В калькулятор",
-        "gs_enter_distance": "Ваше расстояние до заправки (км):",
-        "gs_avg_from_car": "Средний расход авто",
-        "gs_no_avg": "Нет данных о расходе",
-        "gs_selected_station": "Выбранная заправка:",
-        "gs_click_hint": "Нажмите на маркер на карте для просмотра цен",
-        "gs_distance_note": "💡 Введите примерное расстояние до заправки",
-        "gs_all_cities": "Все города",
-        "gs_fuel_price_hint": "Цена топлива:",
-        "gs_fuel_type": "Тип топлива:",
-        "brands": {
-            "lukoil": "Лукойл", "gazprom": "Газпромнефть",
-            "rosneft": "Роснефть", "shell": "Shell"
-        },
         "about_title": "О приложении",
         "version": "Версия 5.0  •  2024",
         "about_section1_title": "О приложении",
-        "about_section1": "Профессиональное приложение для расчёта расхода топлива с интерактивной картой заправок.",
+        "about_section1": "Профессиональное приложение для расчёта расхода топлива.",
         "about_section2_title": "Возможности",
-        "about_section2": "• Точный расчёт расхода\n• Расчёт стоимости поездки\n• Хранение до 25 автомобилей\n• История расчётов\n• Интерактивная карта заправок\n• Реальные цены на топливо",
+        "about_section2": "• Точный расчёт расхода\n• Расчёт стоимости поездки\n• Хранение до 25 автомобилей\n• История расчётов\n• PostgreSQL база данных",
         "about_section3_title": "Как использовать",
         "about_section3": "1. Зарегистрируйтесь\n2. Добавьте автомобиль\n3. Выберите режим расчёта\n4. Введите данные\n5. Нажмите «Рассчитать»",
         "about_section4_title": "Безопасность",
-        "about_section4": "Пароли зашифрованы (SHA-256). Данные хранятся локально.",
+        "about_section4": "Пароли зашифрованы (SHA-256). Данные хранятся в PostgreSQL.",
         "about_section5_title": "Интерпретация",
         "about_section5": "До 8 л/100 км — экономично\n8-12 л/100 км — средне\nБолее 12 л/100 км — высокий расход",
         "footer": "© 2024 Калькулятор расхода топлива",
         "no_cars_limit": "Максимум 25 автомобилей",
+        "database_error": "Ошибка подключения к базе данных",
+        "database_retry": "Попробуйте позже или проверьте настройки PostgreSQL",
     },
     "en": {
         "app_title": "Fuel Calculator",
@@ -312,7 +442,6 @@ TRANSLATIONS = {
         "calculator": "Calculator",
         "profile": "Profile",
         "history": "History",
-        "gas_stations": "Gas Stations",
         "about": "About",
         "settings": "Settings",
         "no_car": "— No car —",
@@ -401,39 +530,29 @@ TRANSLATIONS = {
         "login_for_chart": "Log in to view chart",
         "fuel_unit": "L",
         "price_unit": "per L",
-        "gs_title": "Russian Gas Stations Map",
-        "gs_city": "Search by city:",
-        "gs_search": "🔍 Search",
-        "gs_open_map": "🗺 Open interactive map",
-        "gs_to_calc": "To Calculator",
-        "gs_enter_distance": "Your distance to station (km):",
-        "gs_avg_from_car": "Vehicle avg. consumption",
-        "gs_no_avg": "No consumption data",
-        "gs_selected_station": "Selected station:",
-        "gs_click_hint": "Click on map marker to see prices",
-        "gs_distance_note": "💡 Enter approximate distance to station",
-        "gs_all_cities": "All cities",
-        "gs_fuel_price_hint": "Fuel price:",
-        "gs_fuel_type": "Fuel type:",
-        "brands": {
-            "lukoil": "Lukoil", "gazprom": "Gazpromneft",
-            "rosneft": "Rosneft", "shell": "Shell"
-        },
         "about_title": "About",
         "version": "Version 5.0  •  2024",
         "about_section1_title": "About",
-        "about_section1": "Professional fuel calculator with interactive gas stations map.",
+        "about_section1": "Professional fuel calculator with PostgreSQL database.",
         "about_section2_title": "Features",
-        "about_section2": "• Accurate consumption calculation\n• Trip cost calculation\n• Up to 25 vehicles\n• Calculation history\n• Interactive gas stations map\n• Real fuel prices",
+        "about_section2": "• Accurate consumption calculation\n• Trip cost calculation\n• Up to 25 vehicles\n• Calculation history\n• PostgreSQL database storage",
         "about_section3_title": "How to use",
         "about_section3": "1. Register\n2. Add a vehicle\n3. Select calculation mode\n4. Enter data\n5. Press Calculate",
         "about_section4_title": "Security",
-        "about_section4": "Passwords encrypted (SHA-256). Data stored locally.",
+        "about_section4": "Passwords encrypted (SHA-256). Data stored in PostgreSQL.",
         "about_section5_title": "Interpretation",
         "about_section5": "Up to 8 L/100 km — economical\n8-12 L/100 km — average\nOver 12 L/100 km — high",
         "footer": "© 2024 Fuel Consumption Calculator",
         "no_cars_limit": "Maximum 25 vehicles",
+        "database_error": "Database connection error",
+        "database_retry": "Please try again later or check PostgreSQL settings",
     }
+}
+
+# ─── Currencies ────────────────────────────────────────────────────────────────
+CURRENCIES = {
+    "₽ RUB": "₽",
+    "$ USD": "$",
 }
 
 # ─── Theme ─────────────────────────────────────────────────────────────────────
@@ -447,7 +566,6 @@ THEMES = {
         "chart_bg": "#161b22", "chart_line": "#58a6ff",
         "chart_fill": "#1c2d3f", "chart_grid": "#21262d",
         "chart_bar1": "#3fb950", "chart_bar2": "#d29922", "chart_bar3": "#f85149",
-        "map_bg": "#1a2a3a",
     },
     "light": {
         "bg": "#f0f4f8", "bg2": "#ffffff", "bg3": "#e2e8f0",
@@ -458,13 +576,16 @@ THEMES = {
         "chart_bg": "#ffffff", "chart_line": "#3182ce",
         "chart_fill": "#ebf4ff", "chart_grid": "#e2e8f0",
         "chart_bar1": "#38a169", "chart_bar2": "#d69e2e", "chart_bar3": "#e53e3e",
-        "map_bg": "#e8f0e8",
     }
 }
 
 current_theme = "dark"
 current_language = "ru"
 current_currency = "₽ RUB"
+
+# Global references
+PHOTO_DIR = os.path.join(os.path.expanduser("~"), ".fuel_calc_photos")
+os.makedirs(PHOTO_DIR, exist_ok=True)
 
 
 def T():
@@ -479,268 +600,12 @@ def get_currency_symbol():
     return CURRENCIES.get(current_currency, "₽")
 
 
-# ─── HTML Map Generator ───────────────────────────────────────────────────────
-def generate_map_html(selected_station=None):
-    """Генерирует HTML с интерактивной картой Leaflet"""
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
 
-    # JavaScript для карты
-    stations_js = json.dumps(GAS_STATIONS_RUSSIA, ensure_ascii=False)
 
-    html = f'''<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта заправок России</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <style>
-        body {{ margin: 0; padding: 0; font-family: Arial, sans-serif; }}
-        #map {{ height: 100vh; width: 100%; }}
-
-        .station-popup {{
-            padding: 10px;
-            max-width: 300px;
-        }}
-        .station-popup h3 {{
-            margin: 0 0 5px 0;
-            color: #e53935;
-        }}
-        .station-popup .brand {{
-            color: #666;
-            font-size: 12px;
-            margin-bottom: 10px;
-        }}
-        .station-popup .price-table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 10px 0;
-        }}
-        .station-popup .price-table td {{
-            padding: 4px 8px;
-            border-bottom: 1px solid #eee;
-            font-size: 13px;
-        }}
-        .station-popup .price-table .fuel-type {{
-            font-weight: bold;
-        }}
-        .station-popup .price-table .fuel-price {{
-            color: #2e7d32;
-            font-weight: bold;
-            text-align: right;
-        }}
-        .station-popup .address {{
-            color: #666;
-            font-size: 11px;
-            margin-top: 5px;
-            border-top: 1px solid #eee;
-            padding-top: 5px;
-        }}
-
-        .legend {{
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }}
-        .legend-item {{
-            display: flex;
-            align-items: center;
-            margin: 3px 0;
-            font-size: 12px;
-        }}
-        .legend-marker {{
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 5px;
-            border: 2px solid white;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-        }}
-
-        .control-panel {{
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }}
-        .control-panel select {{
-            padding: 5px;
-            border-radius: 3px;
-            border: 1px solid #ddd;
-            width: 200px;
-        }}
-    </style>
-</head>
-<body>
-    <div id="map"></div>
-
-    <script>
-        // Инициализация карты
-        var map = L.map('map').setView([57.0, 60.0], 4);
-
-        // Добавление слоя OpenStreetMap
-        L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 18
-        }}).addTo(map);
-
-        // Цвета для брендов
-        var brandColors = {{
-            'lukoil': '#e53935',
-            'gazprom': '#1e88e5',
-            'rosneft': '#fdd835',
-            'shell': '#f4511e'
-        }};
-
-        // Данные заправок
-        var stations = {stations_js};
-
-        // Создание маркеров
-        var markers = [];
-        var markerCluster = L.markerClusterGroup();
-
-        stations.forEach(function(station) {{
-            var color = brandColors[station.brand] || '#666';
-            var icon = L.divIcon({{
-                html: '<div style="background: ' + color + '; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>',
-                className: 'custom-marker',
-                iconSize: [12, 12],
-                iconAnchor: [6, 6]
-            }});
-
-            var popupContent = '<div class="station-popup">' +
-                '<h3>' + station.name + '</h3>' +
-                '<div class="brand">' + getBrandName(station.brand) + '</div>' +
-                '<table class="price-table">';
-
-            // Добавление цен на топливо
-            if (station.fuel_types) {{
-                for (var fuel in station.fuel_types) {{
-                    popupContent += '<tr>' +
-                        '<td class="fuel-type">' + fuel + '</td>' +
-                        '<td class="fuel-price">' + station.fuel_types[fuel] + ' ₽</td>' +
-                        '</tr>';
-                }}
-            }}
-
-            popupContent += '</table>' +
-                '<div class="address">📍 ' + station.city + ', ' + station.address + '</div>' +
-                '</div>';
-
-            var marker = L.marker([station.lat, station.lon], {{icon: icon}})
-                .bindPopup(popupContent, {{maxWidth: 300}});
-
-            marker.stationData = station;
-            markers.push(marker);
-            markerCluster.addLayer(marker);
-        }});
-
-        map.addLayer(markerCluster);
-
-        // Функция получения названия бренда
-        function getBrandName(brand) {{
-            var brands = {{
-                'lukoil': '⛽ Лукойл',
-                'gazprom': '⛽ Газпромнефть',
-                'rosneft': '⛽ Роснефть',
-                'shell': '🐚 Shell'
-            }};
-            return brands[brand] || brand;
-        }}
-
-        // Добавление легенды
-        var legend = L.control({{position: 'bottomright'}});
-        legend.onAdd = function(map) {{
-            var div = L.DomUtil.create('div', 'legend');
-            div.innerHTML = '<strong>Бренды АЗС:</strong><br>';
-
-            var brands = [
-                {{name: 'Лукойл', color: '#e53935'}},
-                {{name: 'Газпромнефть', color: '#1e88e5'}},
-                {{name: 'Роснефть', color: '#fdd835'}},
-                {{name: 'Shell', color: '#f4511e'}}
-            ];
-
-            brands.forEach(function(brand) {{
-                div.innerHTML += '<div class="legend-item">' +
-                    '<div class="legend-marker" style="background: ' + brand.color + ';"></div>' +
-                    brand.name +
-                    '</div>';
-            }});
-
-            return div;
-        }};
-        legend.addTo(map);
-
-        // Добавление панели управления
-        var control = L.control({{position: 'topleft'}});
-        control.onAdd = function(map) {{
-            var div = L.DomUtil.create('div', 'control-panel');
-            div.innerHTML = '<strong>🏙 Выбрать город:</strong><br>' +
-                '<select id="city-select" onchange="zoomToCity(this.value)">' +
-                '<option value="">— Все города —</option>';
-
-            // Получение уникальных городов
-            var cities = [...new Set(stations.map(s => s.city))].sort();
-            cities.forEach(function(city) {{
-                div.innerHTML += '<option value="' + city + '">' + city + '</option>';
-            }});
-
-            div.innerHTML += '</select>';
-            return div;
-        }};
-        control.addTo(map);
-
-        // Функция масштабирования к городу
-        window.zoomToCity = function(cityName) {{
-            if (!cityName) {{
-                map.setView([57.0, 60.0], 4);
-                return;
-            }}
-
-            var cityStations = stations.filter(function(s) {{
-                return s.city === cityName;
-            }});
-
-            if (cityStations.length > 0) {{
-                var bounds = L.latLngBounds(
-                    cityStations.map(function(s) {{ return [s.lat, s.lon]; }})
-                );
-                map.fitBounds(bounds, {{padding: [50, 50], maxZoom: 12}});
-            }}
-        }};
-
-        // Поиск ближайших заправок
-        map.on('click', function(e) {{
-            var latlng = e.latlng;
-            var nearest = null;
-            var minDist = Infinity;
-
-            stations.forEach(function(station) {{
-                var dist = map.distance(latlng, L.latLng(station.lat, station.lon));
-                if (dist < minDist && dist < 50000) {{ // 50km radius
-                    minDist = dist;
-                    nearest = station;
-                }}
-            }});
-
-            if (nearest) {{
-                var popup = L.popup()
-                    .setLatLng([nearest.lat, nearest.lon])
-                    .setContent('<div class="station-popup">' +
-                        '<h3>' + nearest.name + '</h3>' +
-                        '<div>Расстояние: ' + (minDist / 1000).toFixed(1) + ' км</div>' +
-                        '<div class="address">📍 ' + nearest.city + ', ' + nearest.address + '</div>' +
-                        '</div>')
-                    .openOn(map);
-            }}
-        }});
-    </script>
-</body>
-</html>'''
-
-    return html
+def is_valid_email(email):
+    return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) is not None
 
 
 # ─── Scroll helper ─────────────────────────────────────────────────────────────
@@ -866,29 +731,70 @@ class FuelApp(tk.Tk):
         self.minsize(1000, 700)
         self.resizable(True, True)
 
-        self.data = load_data()
-        self.current_user = self.data.get("current_user")
-
-        s = self.data.get("settings", {})
-        global current_theme, current_language, current_currency
-        current_theme = s.get("theme", "dark")
-        current_language = s.get("language", "ru")
-        current_currency = s.get("currency", "₽ RUB")
-
+        self.current_user = None
         self._photo_refs = {}
         self._calc_mode = tk.StringVar(value="consumption")
-        self._selected_station = None
-
+        self._db_connected = False
+        
+        # Initialize database
+        self._init_database()
+        
+        if self._db_connected:
+            self._load_user_settings()
+        
         self._build_ui()
 
+    def _init_database(self):
+        """Initialize database connection and tables"""
+        try:
+            # First, try to create database if it doesn't exist
+            conn = psycopg2.connect(
+                dbname='postgres',
+                user=DB_CONFIG['user'],
+                password=DB_CONFIG['password'],
+                host=DB_CONFIG['host'],
+                port=DB_CONFIG['port']
+            )
+            conn.autocommit = True
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM pg_database WHERE datname = 'fuel_calc'")
+            if not cursor.fetchone():
+                cursor.execute("CREATE DATABASE fuel_calc")
+            cursor.close()
+            conn.close()
+            
+            # Now connect to the fuel_calc database
+            if init_db_pool():
+                if create_tables():
+                    self._db_connected = True
+                    print("Database initialized successfully")
+                else:
+                    print("Failed to create tables")
+            else:
+                print("Failed to initialize connection pool")
+        except Exception as e:
+            print(f"Database initialization error: {e}")
+            self._db_connected = False
+
+    def _load_user_settings(self):
+        """Load settings for the current user if logged in"""
+        if self.current_user:
+            try:
+                settings = db_get_settings(self.current_user)
+                global current_theme, current_language, current_currency
+                current_theme = settings.get('theme', 'dark')
+                current_language = settings.get('language', 'ru')
+                current_currency = settings.get('currency', '₽ RUB')
+            except Exception as e:
+                print(f"Error loading settings: {e}")
+
     def _save_settings(self):
-        self.data.setdefault("settings", {})
-        self.data["settings"] = {
-            "theme": current_theme,
-            "language": current_language,
-            "currency": current_currency
-        }
-        save_data(self.data)
+        """Save settings to database"""
+        if self.current_user and self._db_connected:
+            try:
+                db_update_settings(self.current_user, current_theme, current_language, current_currency)
+            except Exception as e:
+                print(f"Error saving settings: {e}")
 
     def _rebuild_ui(self):
         self.header.destroy()
@@ -929,13 +835,12 @@ class FuelApp(tk.Tk):
         self.content.pack(side="left", fill="both", expand=True)
 
         self.sections = {}
-        for name in ["calculator", "profile", "history", "gas_stations", "about", "settings"]:
+        for name in ["calculator", "profile", "history", "about", "settings"]:
             self.sections[name] = tk.Frame(self.content, bg=t["bg"])
 
         self._build_calculator()
         self._build_profile()
         self._build_history()
-        self._build_gas_stations()
         self._build_about()
         self._build_settings()
 
@@ -949,7 +854,6 @@ class FuelApp(tk.Tk):
             ("🧮  " + TR("calculator"), "calculator"),
             ("👤  " + TR("profile"), "profile"),
             ("📋  " + TR("history"), "history"),
-            ("⛽  " + TR("gas_stations"), "gas_stations"),
             ("ℹ️  " + TR("about"), "about"),
         ]
         tk.Frame(self.sidebar, bg=t["bg2"], height=20).pack()
@@ -976,10 +880,8 @@ class FuelApp(tk.Tk):
             self._refresh_history()
         if name == "profile":
             self._refresh_profile()
-        if name == "gas_stations":
-            self._refresh_gas_stations()
 
-    # ── Calculator (упрощен для компактности) ─────────────────────────────────
+    # ── Calculator ─────────────────────────────────────────────────
     def _build_calculator(self):
         t = T()
         f = self.sections["calculator"]
@@ -1165,26 +1067,32 @@ class FuelApp(tk.Tk):
 
     def _refresh_car_combo(self):
         cars = [TR("no_car")]
-        if self.current_user:
-            user = self.data["users"].get(self.current_user, {})
-            cars += [c["name"] for c in user.get("cars", [])]
+        if self.current_user and self._db_connected:
+            try:
+                user_cars = db_get_cars(self.current_user)
+                cars += [c["name"] for c in user_cars]
+            except Exception as e:
+                print(f"Error loading cars: {e}")
         self.calc_car_combo["values"] = cars
         self.calc_car_var.set(cars[0])
 
     def _on_car_selected(self, event=None):
         sel = self.calc_car_var.get()
-        if sel == TR("no_car") or not self.current_user:
+        if sel == TR("no_car") or not self.current_user or not self._db_connected:
             self._set_calc_car_image(None)
             self._draw_fuel_chart()
             return
-        for car in self.data["users"].get(self.current_user, {}).get("cars", []):
-            if car["name"] == sel:
-                self._set_calc_car_image(car.get("photo"))
-                avg = car.get("avg_consumption")
-                if avg and hasattr(self, 'avg_var'):
-                    self.avg_var.set(str(avg))
-                self._draw_fuel_chart()
-                return
+        try:
+            for car in db_get_cars(self.current_user):
+                if car["name"] == sel:
+                    self._set_calc_car_image(car.get("photo"))
+                    avg = car.get("avg_consumption")
+                    if avg and hasattr(self, 'avg_var'):
+                        self.avg_var.set(str(avg))
+                    self._draw_fuel_chart()
+                    return
+        except Exception:
+            pass
         self._set_calc_car_image(None)
         self._draw_fuel_chart()
 
@@ -1226,23 +1134,25 @@ class FuelApp(tk.Tk):
         self.stat_labels["fuel"].configure(text=f"{fuel:.1f} л")
         self.stat_labels["cost"].configure(text=f"{cost:,.2f} {sym}")
 
-        if self.current_user:
-            entry = {
-                "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                "car": self.calc_car_var.get(),
-                "distance": dist, "fuel": round(fuel, 2),
-                "price": price, "currency": sym,
-                "consumption": round(consumption, 2), "cost": round(cost, 2),
-            }
-            user = self.data["users"][self.current_user]
-            user.setdefault("history", []).insert(0, entry)
-            if self.calc_car_var.get() != TR("no_car"):
-                for car in user.get("cars", []):
-                    if car["name"] == self.calc_car_var.get():
-                        car["avg_consumption"] = round(consumption, 2)
-                        break
-            save_data(self.data)
-            self._draw_fuel_chart()
+        if self.current_user and self._db_connected:
+            try:
+                entry = {
+                    "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                    "car": self.calc_car_var.get(),
+                    "distance": dist, "fuel": round(fuel, 2),
+                    "price": price, "currency": sym,
+                    "consumption": round(consumption, 2), "cost": round(cost, 2),
+                }
+                db_add_history(self.current_user, entry)
+                
+                # Update car's average consumption
+                if self.calc_car_var.get() != TR("no_car"):
+                    db_update_car_consumption(self.current_user, self.calc_car_var.get(), round(consumption, 2))
+                
+                self._draw_fuel_chart()
+            except Exception as e:
+                print(f"Error saving to database: {e}")
+                messagebox.showerror(TR("error"), TR("database_error"))
 
     def _clear_calc(self):
         self.dist_var.set("")
@@ -1292,7 +1202,7 @@ class FuelApp(tk.Tk):
             self.chart_canvas.delete("tooltip")
 
     def _draw_fuel_chart(self):
-        if not hasattr(self, 'chart_canvas'):
+        if not hasattr(self, 'chart_canvas') or not self._db_connected:
             return
         c = self.chart_canvas
         t = T()
@@ -1314,39 +1224,14 @@ class FuelApp(tk.Tk):
             days_limit = 30
 
         sel = self.calc_car_var.get() if hasattr(self, 'calc_car_var') else TR("no_car")
-        history = self.data["users"][self.current_user].get("history", [])
-        cutoff = datetime.now() - timedelta(days=days_limit)
-        filtered = []
-        for e in history:
-            try:
-                dt = datetime.strptime(e["date"], "%d.%m.%Y %H:%M")
-            except Exception:
-                continue
-            if dt < cutoff:
-                continue
-            if sel == TR("no_car") or e.get("car") == sel:
-                filtered.append((dt, e["consumption"]))
-
-        if not filtered:
-            c.create_text(W // 2, H // 2, text=TR("no_history_chart"),
-                          fill=t["fg2"], font=("Courier", 12))
+        
+        try:
+            daily_avg = db_get_history_for_chart(self.current_user, sel, days_limit)
+        except Exception as e:
+            print(f"Error getting chart data: {e}")
+            c.create_text(W // 2, H // 2, text=TR("database_error"),
+                          fill=t["red"], font=("Courier", 12))
             return
-
-        filtered.sort(key=lambda x: x[0])
-
-        daily_data = {}
-        for dt, val in filtered:
-            day_key = dt.strftime("%Y-%m-%d")
-            if day_key not in daily_data:
-                daily_data[day_key] = []
-            daily_data[day_key].append(val)
-
-        daily_avg = []
-        for day_key in sorted(daily_data.keys()):
-            vals = daily_data[day_key]
-            dt = datetime.strptime(day_key, "%Y-%m-%d")
-            avg_val = sum(vals) / len(vals)
-            daily_avg.append((dt, avg_val))
 
         if not daily_avg:
             c.create_text(W // 2, H // 2, text=TR("no_history_chart"),
@@ -1414,6 +1299,13 @@ class FuelApp(tk.Tk):
         outer.pack(fill="both", expand=True)
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=32, pady=24)
+
+        if not self._db_connected:
+            tk.Label(pad, text=TR("database_error"), font=("Georgia", 14, "bold"),
+                     bg=t["bg"], fg=t["red"]).pack(pady=40)
+            tk.Label(pad, text=TR("database_retry"), font=("Courier", 10),
+                     bg=t["bg"], fg=t["fg2"]).pack()
+            return
 
         if not self.current_user:
             self._build_login_form(pad)
@@ -1506,27 +1398,31 @@ class FuelApp(tk.Tk):
                     if pw != pw2:
                         status.configure(text=TR("passwords_mismatch"))
                         return
-                    if email in self.data.get("users", {}):
-                        status.configure(text=TR("user_exists"))
-                        return
-                    self.data.setdefault("users", {})[email] = {
-                        "password": hash_pw(pw), "cars": [], "history": []
-                    }
-                    self.current_user = email
-                    self.data["current_user"] = email
-                    save_data(self.data)
-                    self._refresh_car_combo()
-                    self._refresh_profile()
+                    try:
+                        if db_user_exists(email):
+                            status.configure(text=TR("user_exists"))
+                            return
+                        db_create_user(email, hash_pw(pw))
+                        self.current_user = email
+                        self._save_settings()
+                        self._refresh_car_combo()
+                        self._refresh_profile()
+                    except Exception as e:
+                        print(f"Registration error: {e}")
+                        status.configure(text=TR("database_error"))
                 else:
-                    users = self.data.get("users", {})
-                    if email not in users or users[email]["password"] != hash_pw(pw):
-                        status.configure(text=TR("wrong_credentials"))
-                        return
-                    self.current_user = email
-                    self.data["current_user"] = email
-                    save_data(self.data)
-                    self._refresh_car_combo()
-                    self._refresh_profile()
+                    try:
+                        stored_pw = db_get_user(email)
+                        if not stored_pw or stored_pw != hash_pw(pw):
+                            status.configure(text=TR("wrong_credentials"))
+                            return
+                        self.current_user = email
+                        self._load_user_settings()
+                        self._refresh_car_combo()
+                        self._refresh_profile()
+                    except Exception as e:
+                        print(f"Login error: {e}")
+                        status.configure(text=TR("database_error"))
 
             btn_text = TR("login") if mode == "login" else TR("register")
             tk.Button(self._auth_form_frame, text=btn_text,
@@ -1566,16 +1462,19 @@ class FuelApp(tk.Tk):
             if not is_valid_email(email):
                 status.configure(text=TR("invalid_email"))
                 return
-            if email not in self.data.get("users", {}):
-                status.configure(text="Email не найден")
-                return
-            if len(pw) < 6:
-                status.configure(text=TR("password_short"))
-                return
-            self.data["users"][email]["password"] = hash_pw(pw)
-            save_data(self.data)
-            messagebox.showinfo(TR("password_changed"), TR("new_password_set"))
-            dialog.destroy()
+            try:
+                if not db_user_exists(email):
+                    status.configure(text="Email не найден")
+                    return
+                if len(pw) < 6:
+                    status.configure(text=TR("password_short"))
+                    return
+                db_update_password(email, hash_pw(pw))
+                messagebox.showinfo(TR("password_changed"), TR("new_password_set"))
+                dialog.destroy()
+            except Exception as e:
+                print(f"Password reset error: {e}")
+                status.configure(text=TR("database_error"))
 
         tk.Button(dialog, text=TR("change_password_btn"),
                   font=("Georgia", 11, "bold"), bg=T()["btn"], fg="white",
@@ -1624,11 +1523,14 @@ class FuelApp(tk.Tk):
             if np1 != np2:
                 pw_status.configure(text=TR("passwords_mismatch"), fg=t["red"])
                 return
-            self.data["users"][self.current_user]["password"] = hash_pw(np1)
-            save_data(self.data)
-            pw_status.configure(text=TR("password_changed"), fg=t["green"])
-            self._new_pw_entry.delete(0, "end")
-            self._new_pw2_entry.delete(0, "end")
+            try:
+                db_update_password(self.current_user, hash_pw(np1))
+                pw_status.configure(text=TR("password_changed"), fg=t["green"])
+                self._new_pw_entry.delete(0, "end")
+                self._new_pw2_entry.delete(0, "end")
+            except Exception as e:
+                print(f"Password change error: {e}")
+                pw_status.configure(text=TR("database_error"), fg=t["red"])
 
         tk.Button(pw_frame, text=TR("change_password_btn"), font=("Courier", 10),
                   bg=t["btn"], fg="white", bd=0, padx=10, pady=5,
@@ -1651,10 +1553,13 @@ class FuelApp(tk.Tk):
 
     def _add_car_inline(self):
         t = T()
-        cars = self.data["users"][self.current_user].get("cars", [])
-        if len(cars) >= 25:
-            messagebox.showwarning(TR("error"), TR("no_cars_limit"))
-            return
+        try:
+            car_count = db_count_cars(self.current_user)
+            if car_count >= 25:
+                messagebox.showwarning(TR("error"), TR("no_cars_limit"))
+                return
+        except Exception as e:
+            print(f"Error checking car count: {e}")
 
         if self._add_car_form_visible:
             self._add_car_form_frame.pack_forget()
@@ -1723,13 +1628,15 @@ class FuelApp(tk.Tk):
             if not name:
                 status.configure(text=TR("enter_name"))
                 return
-            car = {"name": name, "photo": photo_path_var.get() or None}
-            self.data["users"][self.current_user].setdefault("cars", []).append(car)
-            save_data(self.data)
-            self._add_car_form_frame.pack_forget()
-            self._add_car_form_visible = False
-            self._render_cars()
-            self._refresh_car_combo()
+            try:
+                db_add_car(self.current_user, name, photo_path_var.get() or None)
+                self._add_car_form_frame.pack_forget()
+                self._add_car_form_visible = False
+                self._render_cars()
+                self._refresh_car_combo()
+            except Exception as e:
+                print(f"Error adding car: {e}")
+                status.configure(text=TR("database_error"))
 
         cancel_text = "✕ Отмена" if current_language == "ru" else "✕ Cancel"
         tk.Button(btn_row, text=TR("save"), font=("Georgia", 11, "bold"),
@@ -1744,9 +1651,17 @@ class FuelApp(tk.Tk):
         t = T()
         for w in self.cars_container.winfo_children():
             w.destroy()
-        if not self.current_user:
+        if not self.current_user or not self._db_connected:
             return
-        cars = self.data["users"][self.current_user].get("cars", [])
+        
+        try:
+            cars = db_get_cars(self.current_user)
+        except Exception as e:
+            print(f"Error loading cars: {e}")
+            tk.Label(self.cars_container, text=TR("database_error"),
+                     font=("Courier", 11), bg=t["bg"], fg=t["red"]).pack(pady=16)
+            return
+            
         if not cars:
             tk.Label(self.cars_container, text=TR("no_cars"),
                      font=("Courier", 11), bg=t["bg"], fg=t["fg2"]).pack(pady=16)
@@ -1781,36 +1696,35 @@ class FuelApp(tk.Tk):
                              bg=t["bg2"], fg=t["fg2"]).pack()
                 tk.Button(card, text=TR("delete"), font=("Courier", 8),
                           bg=t["red"], fg="white", bd=0, padx=6, pady=2,
-                          command=lambda i=idx: self._delete_car(i)).pack(pady=(3, 0))
+                          command=lambda i=idx, name=car["name"]: self._delete_car(name)).pack(pady=(3, 0))
 
-    def _delete_car(self, idx):
+    def _delete_car(self, car_name):
         if messagebox.askyesno(TR("delete_confirm"), TR("delete_car_confirm")):
-            del self.data["users"][self.current_user]["cars"][idx]
-            save_data(self.data)
-            self._render_cars()
-            self._refresh_car_combo()
+            try:
+                db_delete_car(self.current_user, car_name)
+                self._render_cars()
+                self._refresh_car_combo()
+            except Exception as e:
+                print(f"Error deleting car: {e}")
+                messagebox.showerror(TR("error"), TR("database_error"))
 
     def _logout(self):
         self.current_user = None
-        self.data["current_user"] = None
-        save_data(self.data)
         self._refresh_car_combo()
         self._refresh_profile()
+        self._draw_fuel_chart()
 
     def _delete_account(self):
         if messagebox.askyesno(TR("delete_account_confirm"), TR("delete_account_msg")):
-            for car in self.data["users"].get(self.current_user, {}).get("cars", []):
-                if car.get("photo") and os.path.exists(car["photo"]):
-                    try:
-                        os.remove(car["photo"])
-                    except Exception:
-                        pass
-            del self.data["users"][self.current_user]
-            self.current_user = None
-            self.data["current_user"] = None
-            save_data(self.data)
-            self._refresh_car_combo()
-            self._refresh_profile()
+            try:
+                db_delete_user(self.current_user)
+                self.current_user = None
+                self._refresh_car_combo()
+                self._refresh_profile()
+                self._draw_fuel_chart()
+            except Exception as e:
+                print(f"Error deleting account: {e}")
+                messagebox.showerror(TR("error"), TR("database_error"))
 
     def _refresh_profile(self):
         f = self.sections["profile"]
@@ -1833,7 +1747,7 @@ class FuelApp(tk.Tk):
         tk.Label(pad, text=TR("history_title"), font=("Georgia", 16, "bold"),
                  bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 4))
 
-        if not self.current_user:
+        if not self.current_user or not self._db_connected:
             tk.Label(pad, text=TR("login_for_history"),
                      font=("Courier", 12), bg=t["bg"], fg=t["fg2"]).pack(pady=40)
             return
@@ -1854,366 +1768,106 @@ class FuelApp(tk.Tk):
             return
         for w in self._hist_inner.winfo_children():
             w.destroy()
-        if not self.current_user:
+        if not self.current_user or not self._db_connected:
             return
-        history = self.data["users"][self.current_user].get("history", [])
+            
+        try:
+            history = db_get_history(self.current_user)
+        except Exception as e:
+            print(f"Error loading history: {e}")
+            tk.Label(self._hist_inner, text=TR("database_error"),
+                     font=("Courier", 12), bg=t["bg"], fg=t["red"]).pack(pady=40)
+            return
+            
         if not history:
             tk.Label(self._hist_inner, text=TR("history_empty"),
                      font=("Courier", 12), bg=t["bg"], fg=t["fg2"]).pack(pady=40)
             return
 
         for i, entry in enumerate(history):
-            # Основная карточка записи
             card = tk.Frame(self._hist_inner, bg=t["bg2"], pady=8, padx=8)
             card.pack(fill="x", pady=6)
 
-            # Верхняя строка с датой и кнопками
             top_row = tk.Frame(card, bg=t["bg2"])
             top_row.pack(fill="x", pady=(0, 8))
 
-            # Дата слева
             tk.Label(top_row, text=f"📅 {entry['date']}",
                      font=("Courier", 10, "bold"), bg=t["bg2"], fg=t["fg"]).pack(side="left")
 
-            # Кнопки справа
             btn_frame = tk.Frame(top_row, bg=t["bg2"])
             btn_frame.pack(side="right")
 
-            # Текст для копирования
             sym = entry.get("currency", "₽")
             copy_text = (
-                f"Дата: {entry['date']}\n"
-                f"Авто: {entry.get('car', '—')}\n"
-                f"Расстояние: {entry['distance']} км\n"
-                f"Топливо: {entry['fuel']} л\n"
-                f"Цена: {entry['price']} {sym}/л\n"
-                f"Расход: {entry['consumption']} л/100км\n"
-                f"Стоимость: {entry['cost']:,.2f} {sym}"
+                f"Date: {entry['date']}\n"
+                f"Car: {entry.get('car', '—')}\n"
+                f"Distance: {entry['distance']} km\n"
+                f"Fuel: {entry['fuel']} L\n"
+                f"Price: {entry['price']} {sym}/L\n"
+                f"Consumption: {entry['consumption']} L/100km\n"
+                f"Cost: {entry['cost']:,.2f} {sym}"
             )
 
-            # Кнопка Копировать
             def copy_entry(txt=copy_text):
                 self.clipboard_clear()
                 self.clipboard_append(txt)
                 messagebox.showinfo(TR("copied"), TR("copied_msg"))
 
-            copy_btn = tk.Button(btn_frame, text="📋 Копировать",
+            copy_btn = tk.Button(btn_frame, text="📋 " + TR("copy"),
                                  font=("Courier", 9),
                                  bg=t["green"], fg="white", bd=0,
                                  padx=8, pady=4, cursor="hand2",
                                  command=copy_entry)
             copy_btn.pack(side="left", padx=(0, 8))
 
-            # Кнопка Удалить
-            def delete_entry(idx=i):
-                if messagebox.askyesno(TR("delete_confirm"),
-                                       "Вы уверены, что хотите удалить эту запись?"):
-                    del self.data["users"][self.current_user]["history"][idx]
-                    save_data(self.data)
-                    self._render_history_entries()
-
-            delete_btn = tk.Button(btn_frame, text="🗑 Удалить",
-                                   font=("Courier", 9),
-                                   bg=t["red"], fg="white", bd=0,
-                                   padx=8, pady=4, cursor="hand2",
-                                   command=delete_entry)
-            delete_btn.pack(side="left")
-
-            # Фото автомобиля
-            ph = None
-            car_name = entry.get("car", "—")
-            if car_name not in (TR("no_car"), "— Без авто —", "— No car —"):
-                for car in self.data["users"].get(self.current_user, {}).get("cars", []):
-                    if car["name"] == car_name and car.get("photo"):
-                        ph = car["photo"]
-                        break
-
-            # Контент записи
             content = tk.Frame(card, bg=t["bg2"])
             content.pack(fill="x")
 
-            # Фото слева
-            if ph or car_name not in (TR("no_car"), "— Без авто —", "— No car —"):
-                img_box = tk.Frame(content, bg=t["bg2"], width=150, height=90)
-                img_box.pack_propagate(False)
-                img_box.pack(side="left", padx=(0, 12))
-
-                if ph:
-                    img = load_car_image(ph, 150, 90)
-                    photo = ImageTk.PhotoImage(img)
-                    self._photo_refs[f"hist_car_{i}"] = photo
-                    tk.Label(img_box, image=photo, bg=t["bg2"]).place(relx=0.5, rely=0.5, anchor="center")
-                else:
-                    placeholder = make_placeholder(150, 90, "🚗")
-                    photo = ImageTk.PhotoImage(placeholder)
-                    self._photo_refs[f"hist_car_{i}"] = photo
-                    tk.Label(img_box, image=photo, bg=t["bg2"]).place(relx=0.5, rely=0.5, anchor="center")
-
-            # Информация справа
             info = tk.Frame(content, bg=t["bg2"])
             info.pack(side="left", fill="x", expand=True)
 
-            # Автомобиль
-            tk.Label(info, text=f"🚗 {car_name}",
+            tk.Label(info, text=f"🚗 {entry.get('car', '—')}",
                      font=("Courier", 11, "bold"), bg=t["bg2"], fg=t["accent"]).pack(anchor="w")
 
-            # Основные данные
-            data_text = f"📏 Расстояние: {entry['distance']} км"
+            data_text = f"📏 {TR('distance')}: {entry['distance']} км"
             tk.Label(info, text=data_text,
                      font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", pady=(4, 0))
 
-            data_text = f"⛽ Топливо: {entry['fuel']} л"
+            data_text = f"⛽ {TR('fuel')}: {entry['fuel']} л"
             tk.Label(info, text=data_text,
                      font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
 
-            data_text = f"💰 Цена: {entry['price']} {sym}/л"
+            data_text = f"💰 {TR('fuel_price')}: {entry['price']} {sym}/{TR('fuel_unit')}"
             tk.Label(info, text=data_text,
                      font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
 
-            # Результаты расчета
             results_frame = tk.Frame(info, bg=t["bg3"], padx=8, pady=4)
             results_frame.pack(fill="x", pady=(8, 0))
 
-            result_text = f"💧 Расход: {entry['consumption']} л/100км"
+            result_text = f"💧 {TR('avg_consumption')}: {entry['consumption']} л/100км"
             tk.Label(results_frame, text=result_text,
                      font=("Courier", 11, "bold"), bg=t["bg3"], fg=t["green"]).pack(anchor="w")
 
-            result_text = f"💳 Стоимость: {entry['cost']:,.2f} {sym}"
+            result_text = f"💳 {TR('trip_cost')}: {entry['cost']:,.2f} {sym}"
             tk.Label(results_frame, text=result_text,
                      font=("Courier", 11, "bold"), bg=t["bg3"], fg=t["yellow"]).pack(anchor="w")
 
-            # Разделитель между записями
             if i < len(history) - 1:
                 separator = tk.Frame(self._hist_inner, bg=t["border"], height=1)
                 separator.pack(fill="x", pady=4)
 
-    def _delete_history_entry(self, idx):
-        if messagebox.askyesno(TR("delete_confirm"), "Удалить эту запись?"):
-            del self.data["users"][self.current_user]["history"][idx]
-            save_data(self.data)
-            self._render_history_entries()
-
     def _clear_all_history(self):
         if messagebox.askyesno(TR("clear_history_confirm"), TR("clear_history_msg")):
-            self.data["users"][self.current_user]["history"] = []
-            save_data(self.data)
+            try:
+                db_clear_history(self.current_user)
+                self._render_history_entries()
+            except Exception as e:
+                print(f"Error clearing history: {e}")
+                messagebox.showerror(TR("error"), TR("database_error"))
+
+    def _refresh_history(self):
+        if hasattr(self, '_hist_inner'):
             self._render_history_entries()
-    # ─── Gas Stations with interactive map ─────────────────────────────────────
-    def _build_gas_stations(self):
-        t = T()
-        f = self.sections["gas_stations"]
-        for w in f.winfo_children():
-            w.destroy()
-
-        outer, inner = make_scrollable(f, t["bg"])
-        outer.pack(fill="both", expand=True)
-        pad = tk.Frame(inner, bg=t["bg"])
-        pad.pack(fill="both", expand=True, padx=48, pady=32)
-
-        tk.Label(pad, text=TR("gs_title"), font=("Georgia", 18, "bold"),
-                 bg=t["bg"], fg=t["fg"]).pack(anchor="w", pady=(0, 8))
-
-        # Кнопка открытия интерактивной карты
-        map_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-        map_card.pack(fill="x", pady=8)
-
-        tk.Label(map_card, text="🌍 Интерактивная карта заправок",
-                 font=("Georgia", 14, "bold"), bg=t["bg2"], fg=t["fg"]).pack(pady=(0, 8))
-        tk.Label(map_card, text="Нажмите на карту для поиска ближайших заправок\n"
-                                "Кликайте по маркерам для просмотра цен на топливо",
-                 font=("Courier", 10), bg=t["bg2"], fg=t["fg2"],
-                 justify="center").pack(pady=(0, 12))
-
-        def open_map():
-            # Генерируем HTML с картой
-            html = generate_map_html()
-            # Сохраняем во временный файл
-            map_path = os.path.join(MAP_DIR, "gas_stations_map.html")
-            with open(map_path, "w", encoding="utf-8") as f:
-                f.write(html)
-            # Открываем в браузере
-            webbrowser.open(f"file://{map_path}")
-
-        tk.Button(map_card, text=TR("gs_open_map"),
-                  font=("Georgia", 14, "bold"),
-                  bg=t["btn"], fg="white", bd=0, pady=15, cursor="hand2",
-                  command=open_map).pack(fill="x", padx=20, pady=10)
-
-        # Поиск по городу
-        search_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-        search_card.pack(fill="x", pady=8)
-        tk.Label(search_card, text=TR("gs_city"), font=("Georgia", 13, "bold"),
-                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
-
-        search_row = tk.Frame(search_card, bg=t["bg2"])
-        search_row.pack(fill="x", padx=20)
-
-        cities = sorted(list(set([s["city"] for s in GAS_STATIONS_RUSSIA])))
-
-        search_var = tk.StringVar()
-        search_entry = ttk.Combobox(search_row, textvariable=search_var,
-                                    values=cities, font=("Courier", 12), width=30)
-        search_entry.pack(side="left", padx=(0, 10))
-
-        def search_city():
-            city = search_var.get().strip()
-            if city:
-                city_stations = [s for s in GAS_STATIONS_RUSSIA if s["city"] == city]
-                if city_stations:
-                    self._show_city_stations(city, city_stations)
-                else:
-                    self._station_info_text.configure(text=f"Заправки в городе {city} не найдены")
-
-        tk.Button(search_row, text=TR("gs_search"), font=("Courier", 11),
-                  bg=t["btn"], fg="white", bd=0, padx=15, pady=8,
-                  command=search_city).pack(side="left")
-        tk.Button(search_row, text=TR("gs_open_map"), font=("Courier", 11),
-                  bg=t["btn2"], fg=t["fg"], bd=0, padx=15, pady=8,
-                  command=open_map).pack(side="left", padx=(10, 0))
-
-        # Информация о заправках
-        info_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-        info_card.pack(fill="x", pady=8)
-        self._station_info_text = tk.Label(info_card,
-                                           text=TR("gs_click_hint"),
-                                           font=("Courier", 11), bg=t["bg2"], fg=t["fg2"],
-                                           justify="left", wraplength=800)
-        self._station_info_text.pack(anchor="w", padx=20, pady=8)
-
-        # Выбор авто
-        car_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-        car_card.pack(fill="x", pady=8)
-        tk.Label(car_card, text=TR("car"), font=("Georgia", 13, "bold"),
-                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
-        self.gs_car_var = tk.StringVar(value=TR("no_car"))
-        self.gs_car_combo = ttk.Combobox(car_card, textvariable=self.gs_car_var,
-                                         state="readonly", font=("Courier", 11))
-        self.gs_car_combo.pack(anchor="w", padx=20, pady=(0, 8))
-        self.gs_car_combo.bind("<<ComboboxSelected>>", self._on_gs_car_selected)
-        self._refresh_gs_car_combo()
-
-        self.gs_avg_lbl = tk.Label(car_card, text="", font=("Courier", 10),
-                                   bg=t["bg2"], fg=t["accent"])
-        self.gs_avg_lbl.pack(anchor="w", padx=20, pady=(0, 8))
-
-        # Расстояние
-        dist_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-        dist_card.pack(fill="x", pady=8)
-        tk.Label(dist_card, text=TR("gs_enter_distance"), font=("Georgia", 13, "bold"),
-                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
-        tk.Label(dist_card, text=TR("gs_distance_note"),
-                 font=("Courier", 9), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w", padx=20, pady=(0, 4))
-        dist_row = tk.Frame(dist_card, bg=t["input_bg"], bd=1, relief="solid")
-        dist_row.pack(fill="x", padx=20, pady=(0, 12))
-        tk.Label(dist_row, text="📏", font=("Courier", 13), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="left")
-        self.gs_dist_var = tk.StringVar()
-        tk.Entry(dist_row, textvariable=self.gs_dist_var, font=("Courier", 13),
-                 bg=t["input_bg"], fg=t["fg"], bd=0).pack(side="left", fill="x", expand=True, pady=8)
-        tk.Label(dist_row, text="км", font=("Courier", 10), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
-
-        # Цена топлива
-        price_card = tk.Frame(pad, bg=t["bg2"], pady=16)
-        price_card.pack(fill="x", pady=8)
-        tk.Label(price_card, text=TR("gs_fuel_price_hint"), font=("Georgia", 13, "bold"),
-                 bg=t["bg2"], fg=t["fg"]).pack(anchor="w", padx=20, pady=(0, 8))
-        price_row = tk.Frame(price_card, bg=t["input_bg"], bd=1, relief="solid")
-        price_row.pack(fill="x", padx=20, pady=(0, 12))
-        tk.Label(price_row, text="💰", font=("Courier", 13), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="left")
-        self.gs_price_var = tk.StringVar()
-        tk.Entry(price_row, textvariable=self.gs_price_var, font=("Courier", 13),
-                 bg=t["input_bg"], fg=t["fg"], bd=0).pack(side="left", fill="x", expand=True, pady=8)
-        tk.Label(price_row, text=f"{get_currency_symbol()}/л", font=("Courier", 10),
-                 bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
-
-        # Кнопка
-        tk.Button(pad, text=TR("gs_to_calc"), font=("Georgia", 12, "bold"),
-                  bg=t["btn"], fg="white", bd=0, pady=12,
-                  command=self._gs_to_calculator).pack(fill="x", pady=16)
-
-    def _show_city_stations(self, city, stations):
-        """Показывает информацию о заправках в городе"""
-        t = T()
-        info_text = f"🏙 Заправки в городе {city}:\n\n"
-
-        for station in stations[:10]:
-            brand = TR("brands").get(station["brand"], station["brand"])
-            info_text += f"⛽ {brand} — {station['name']}\n"
-            info_text += f"   📍 {station['address']}\n"
-
-            if "fuel_types" in station:
-                info_text += "   💰 Цены:\n"
-                for fuel_type, price in station["fuel_types"].items():
-                    info_text += f"      {fuel_type}: {price} ₽/л\n"
-
-            info_text += "\n"
-
-        if len(stations) > 10:
-            info_text += f"... и ещё {len(stations) - 10} заправок\n"
-
-        info_text += f"\n💡 Откройте интерактивную карту для просмотра всех заправок на карте"
-
-        self._station_info_text.configure(text=info_text, fg=t["fg"])
-
-        if stations and "fuel_types" in stations[0]:
-            # Берем цену АИ-95 по умолчанию
-            price = stations[0]["fuel_types"].get("АИ-95", 50)
-            self.gs_price_var.set(str(price))
-
-    def _refresh_gs_car_combo(self):
-        cars = [TR("no_car")]
-        if self.current_user:
-            user = self.data["users"].get(self.current_user, {})
-            cars += [c["name"] for c in user.get("cars", [])]
-        if hasattr(self, 'gs_car_combo'):
-            self.gs_car_combo["values"] = cars
-            self.gs_car_var.set(cars[0])
-
-    def _on_gs_car_selected(self, event=None):
-        self._update_gs_avg_display()
-
-    def _update_gs_avg_display(self):
-        if not hasattr(self, 'gs_avg_lbl'):
-            return
-        sel = self.gs_car_var.get() if hasattr(self, 'gs_car_var') else TR("no_car")
-        if sel == TR("no_car") or not self.current_user:
-            self.gs_avg_lbl.configure(text="")
-            return
-        for car in self.data["users"].get(self.current_user, {}).get("cars", []):
-            if car["name"] == sel:
-                avg = car.get("avg_consumption")
-                if avg:
-                    self.gs_avg_lbl.configure(text=f"💧 {TR('gs_avg_from_car')}: {avg} л/100 км", fg=T()["accent"])
-                    return
-        self.gs_avg_lbl.configure(text=TR("gs_no_avg"), fg=T()["fg2"])
-
-    def _gs_to_calculator(self):
-        ds = self.gs_dist_var.get().strip()
-        ps = self.gs_price_var.get().strip()
-        if not ds:
-            messagebox.showwarning(TR("error"), TR("gs_enter_distance"))
-            return
-        self._show_section("calculator")
-        if ds:
-            self.dist_var.set(ds)
-        if ps:
-            self.price_var.set(ps)
-        sel = self.gs_car_var.get()
-        if sel != TR("no_car") and self.current_user:
-            for car in self.data["users"].get(self.current_user, {}).get("cars", []):
-                if car["name"] == sel:
-                    avg = car.get("avg_consumption")
-                    if avg:
-                        self._calc_mode.set("cost")
-                        self._build_calc_form()
-                        self._update_result_widgets("cost")
-                        self.avg_var.set(str(avg))
-                    self.calc_car_var.set(sel)
-                    self._on_car_selected()
-                    break
-
-    def _refresh_gas_stations(self):
-        self._refresh_gs_car_combo()
-        self._update_gs_avg_display()
 
     # ── About ──────────────────────────────────────────────────────────────────
     def _build_about(self):
@@ -2278,7 +1932,8 @@ class FuelApp(tk.Tk):
         def apply_theme(name):
             global current_theme
             current_theme = name
-            self._save_settings()
+            if self.current_user:
+                self._save_settings()
             self._rebuild_ui()
             self._show_section("settings")
 
@@ -2306,7 +1961,8 @@ class FuelApp(tk.Tk):
         def apply_currency(event=None):
             global current_currency
             current_currency = cv.get()
-            self._save_settings()
+            if self.current_user:
+                self._save_settings()
             cs.configure(text=f"{TR('current')} {get_currency_symbol()}")
             if hasattr(self, 'calc_form_frame'):
                 self._build_calc_form()
@@ -2325,7 +1981,8 @@ class FuelApp(tk.Tk):
         def apply_language(lang):
             global current_language
             current_language = lang
-            self._save_settings()
+            if self.current_user:
+                self._save_settings()
             self._rebuild_ui()
             self._show_section("settings")
 
