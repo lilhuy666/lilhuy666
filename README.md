@@ -7,9 +7,6 @@ import hashlib
 import shutil
 from datetime import datetime, timedelta
 import math
-import psycopg2
-from psycopg2 import sql, pool
-from contextlib import contextmanager
 import threading
 from queue import Queue
 
@@ -20,18 +17,26 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
     from PIL import Image, ImageTk, ImageDraw, ImageFont
 
+# PostgreSQL imports
 try:
     import psycopg2
+    from psycopg2 import sql
+    from psycopg2 import pool
+    PSYCOPG2_AVAILABLE = True
 except ImportError:
+    print("Устанавливаем psycopg2-binary...")
     import subprocess, sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "psycopg2-binary"])
     import psycopg2
+    from psycopg2 import sql
+    from psycopg2 import pool
+    PSYCOPG2_AVAILABLE = True
 
 # ─── Database configuration ────────────────────────────────────────────────────
 DB_CONFIG = {
     'dbname': 'fuel_calc',
     'user': 'postgres',
-    'password': 'postgres',
+    'password': '12345',  # ваш пароль
     'host': 'localhost',
     'port': 5432
 }
@@ -43,7 +48,7 @@ def init_db_pool():
     global connection_pool
     try:
         connection_pool = pool.SimpleConnectionPool(
-            1, 20,
+            1, 10,
             dbname=DB_CONFIG['dbname'],
             user=DB_CONFIG['user'],
             password=DB_CONFIG['password'],
@@ -55,21 +60,16 @@ def init_db_pool():
         print(f"Database connection error: {e}")
         return False
 
-@contextmanager
 def get_db_connection():
-    conn = connection_pool.getconn()
-    try:
-        yield conn
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        connection_pool.putconn(conn)
+    return connection_pool.getconn()
+
+def put_db_connection(conn):
+    connection_pool.putconn(conn)
 
 # ─── Database initialization ───────────────────────────────────────────────────
 def create_tables():
     """Create all necessary tables if they don't exist"""
+    conn = None
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -132,7 +132,8 @@ def create_tables():
 
 # ─── Database operations ───────────────────────────────────────────────────────
 def db_create_user(email, password_hash):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO users (email, password) VALUES (%s, %s)",
@@ -142,30 +143,44 @@ def db_create_user(email, password_hash):
             "INSERT INTO settings (email, theme, language, currency) VALUES (%s, %s, %s, %s)",
             (email, 'dark', 'ru', '₽ RUB')
         )
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_get_user(email):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute("SELECT password FROM users WHERE email = %s", (email,))
         result = cursor.fetchone()
         return result[0] if result else None
+    finally:
+        put_db_connection(conn)
 
 def db_user_exists(email):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM users WHERE email = %s", (email,))
         return cursor.fetchone() is not None
+    finally:
+        put_db_connection(conn)
 
 def db_update_password(email, new_password_hash):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE users SET password = %s WHERE email = %s",
             (new_password_hash, email)
         )
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_delete_user(email):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         # Delete photos from filesystem
         cursor.execute("SELECT photo_path FROM cars WHERE email = %s", (email,))
@@ -176,26 +191,37 @@ def db_delete_user(email):
                 except:
                     pass
         cursor.execute("DELETE FROM users WHERE email = %s", (email,))
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_get_cars(email):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT name, photo_path, avg_consumption FROM cars WHERE email = %s ORDER BY id",
             (email,)
         )
         return [{"name": r[0], "photo": r[1], "avg_consumption": r[2]} for r in cursor.fetchall()]
+    finally:
+        put_db_connection(conn)
 
 def db_add_car(email, name, photo_path=None):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO cars (email, name, photo_path) VALUES (%s, %s, %s)",
             (email, name, photo_path)
         )
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_delete_car(email, name):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute("SELECT photo_path FROM cars WHERE email = %s AND name = %s", (email, name))
         row = cursor.fetchone()
@@ -205,25 +231,25 @@ def db_delete_car(email, name):
             except:
                 pass
         cursor.execute("DELETE FROM cars WHERE email = %s AND name = %s", (email, name))
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_update_car_consumption(email, car_name, consumption):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE cars SET avg_consumption = %s WHERE email = %s AND name = %s",
             (consumption, email, car_name)
         )
-
-def db_update_car_photo(email, car_name, photo_path):
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE cars SET photo_path = %s WHERE email = %s AND name = %s",
-            (photo_path, email, car_name)
-        )
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_add_history(email, entry):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO history (email, car_name, distance, fuel, price, currency, consumption, cost, date)
@@ -233,9 +259,13 @@ def db_add_history(email, entry):
             entry['price'], entry.get('currency'), entry['consumption'],
             entry['cost'], datetime.strptime(entry['date'], "%d.%m.%Y %H:%M")
         ))
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_get_history(email, car_name=None, days=None):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         query = """
             SELECT car_name, distance, fuel, price, currency, consumption, cost, 
@@ -265,19 +295,21 @@ def db_get_history(email, car_name=None, days=None):
                 'date': r[7], 'raw_date': r[8]
             })
         return results
-
-def db_delete_history_entry(email, entry_id):
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM history WHERE email = %s AND id = %s", (email, entry_id))
+    finally:
+        put_db_connection(conn)
 
 def db_clear_history(email):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM history WHERE email = %s", (email,))
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_get_settings(email):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT theme, language, currency FROM settings WHERE email = %s",
@@ -287,24 +319,34 @@ def db_get_settings(email):
         if result:
             return {'theme': result[0], 'language': result[1], 'currency': result[2]}
         return {'theme': 'dark', 'language': 'ru', 'currency': '₽ RUB'}
+    finally:
+        put_db_connection(conn)
 
 def db_update_settings(email, theme, language, currency):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE settings 
             SET theme = %s, language = %s, currency = %s 
             WHERE email = %s
         """, (theme, language, currency, email))
+        conn.commit()
+    finally:
+        put_db_connection(conn)
 
 def db_count_cars(email):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM cars WHERE email = %s", (email,))
         return cursor.fetchone()[0]
+    finally:
+        put_db_connection(conn)
 
 def db_get_history_for_chart(email, car_name, days):
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    try:
         cursor = conn.cursor()
         query = """
             SELECT DATE(date) as day, AVG(consumption) as avg_consumption
@@ -322,6 +364,29 @@ def db_get_history_for_chart(email, car_name, days):
         
         cursor.execute(query, params)
         return [(r[0], r[1]) for r in cursor.fetchall()]
+    finally:
+        put_db_connection(conn)
+
+# ─── Data storage (fallback if PostgreSQL fails) ──────────────────────────────
+DATA_FILE = os.path.join(os.path.expanduser("~"), ".fuel_calc_data.json")
+PHOTO_DIR = os.path.join(os.path.expanduser("~"), ".fuel_calc_photos")
+os.makedirs(PHOTO_DIR, exist_ok=True)
+
+def load_data():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {"users": {}, "current_user": None, "settings": {}}
+    return {"users": {}, "current_user": None, "settings": {}}
+
+def save_data(data):
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except IOError:
+        pass
 
 # ─── Translations ──────────────────────────────────────────────────────────────
 TRANSLATIONS = {
@@ -583,10 +648,6 @@ current_theme = "dark"
 current_language = "ru"
 current_currency = "₽ RUB"
 
-# Global references
-PHOTO_DIR = os.path.join(os.path.expanduser("~"), ".fuel_calc_photos")
-os.makedirs(PHOTO_DIR, exist_ok=True)
-
 
 def T():
     return THEMES[current_theme]
@@ -610,7 +671,6 @@ def is_valid_email(email):
 
 # ─── Scroll helper ─────────────────────────────────────────────────────────────
 def make_scrollable(parent, bg=None):
-    """Создаёт скроллируемый контейнер с поддержкой мыши"""
     if bg is None:
         bg = T()["bg"]
     outer = tk.Frame(parent, bg=bg)
@@ -633,7 +693,6 @@ def make_scrollable(parent, bg=None):
 
     canvas.bind("<Configure>", configure_canvas)
 
-    # Универсальный скроллинг мышкой
     def _on_mousewheel(event):
         if event.num == 4:
             canvas.yview_scroll(-1, "units")
@@ -746,6 +805,7 @@ class FuelApp(tk.Tk):
 
     def _init_database(self):
         """Initialize database connection and tables"""
+        global connection_pool
         try:
             # First, try to create database if it doesn't exist
             conn = psycopg2.connect(
@@ -770,15 +830,18 @@ class FuelApp(tk.Tk):
                     print("Database initialized successfully")
                 else:
                     print("Failed to create tables")
+                    self._db_connected = False
             else:
                 print("Failed to initialize connection pool")
+                self._db_connected = False
         except Exception as e:
             print(f"Database initialization error: {e}")
+            print("Using local file storage instead...")
             self._db_connected = False
 
     def _load_user_settings(self):
         """Load settings for the current user if logged in"""
-        if self.current_user:
+        if self.current_user and self._db_connected:
             try:
                 settings = db_get_settings(self.current_user)
                 global current_theme, current_language, current_currency
