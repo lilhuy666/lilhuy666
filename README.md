@@ -7,19 +7,18 @@ import hashlib
 import shutil
 from datetime import datetime, timedelta
 import math
-import random
-import string
 
 try:
-    from PIL import Image, ImageTk, ImageDraw, UnidentifiedImageError, ImageFont
+    from PIL import Image, ImageTk, ImageDraw, ImageFont
 except ImportError:
     import subprocess, sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
-    from PIL import Image, ImageTk, ImageDraw, UnidentifiedImageError, ImageFont
+    from PIL import Image, ImageTk, ImageDraw, ImageFont
 
 # ─── Data storage ──────────────────────────────────────────────────────────────
 DATA_FILE = os.path.join(os.path.expanduser("~"), ".fuel_calc_data.json")
 PHOTO_DIR = os.path.join(os.path.expanduser("~"), ".fuel_calc_photos")
+MAP_IMAGE_PATH = os.path.join(os.path.expanduser("~"), ".fuel_calc_russia_map.png")
 os.makedirs(PHOTO_DIR, exist_ok=True)
 
 def load_data():
@@ -44,49 +43,179 @@ def hash_pw(pw):
 def is_valid_email(email):
     return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) is not None
 
+def generate_russia_map():
+    """Создает реалистичную карту России с городами"""
+    if os.path.exists(MAP_IMAGE_PATH):
+        return MAP_IMAGE_PATH
+    
+    # Создаем карту России с реальными очертаниями
+    width, height = 1200, 700
+    img = Image.new("RGB", (width, height), "#e8f0e8")
+    draw = ImageDraw.Draw(img)
+    
+    # Контур России (упрощенный, но реалистичный)
+    russia_outline = [
+        # Калининградская область
+        (50, 365), (55, 360), (60, 365), (65, 370), (60, 375), (55, 375), (50, 370),
+        # Основная территория (северо-запад)
+        (100, 200), (120, 180), (150, 160), (180, 155), (200, 160),
+        # Север
+        (250, 140), (300, 120), (350, 110), (400, 100), (450, 95),
+        (500, 90), (550, 85), (600, 80), (650, 75), (700, 70),
+        (750, 65), (800, 60), (850, 55),
+        # Дальний Восток
+        (900, 60), (950, 65), (1000, 70), (1050, 80), (1080, 90),
+        (1100, 100), (1120, 110), (1130, 120), (1140, 130),
+        # Камчатка
+        (1150, 140), (1155, 150), (1150, 160), (1145, 170), (1135, 175),
+        # Сахалин
+        (1100, 200), (1105, 210), (1100, 220), (1095, 230), (1100, 240),
+        # Юг Дальнего Востока
+        (1050, 250), (1000, 260), (950, 270), (900, 280),
+        # Южная граница
+        (850, 300), (800, 320), (750, 340), (700, 360),
+        (650, 380), (600, 400), (550, 420), (500, 440),
+        # Кавказ
+        (450, 460), (400, 470), (380, 480), (370, 490),
+        # Юг России
+        (350, 480), (300, 470), (250, 460), (200, 450),
+        # Западная граница
+        (150, 440), (120, 430), (100, 420), (90, 400),
+        # Северо-запад
+        (80, 380), (90, 350), (100, 320), (110, 280),
+        # Карелия
+        (100, 250), (110, 220), (120, 200), (130, 190),
+        # Кольский полуостров
+        (140, 170), (150, 150), (160, 140), (170, 130),
+        (100, 200)
+    ]
+    
+    # Масштабируем контур
+    pts = []
+    for x, y in russia_outline:
+        # Масштабирование
+        scaled_x = int(x * width / 1200)
+        scaled_y = int(y * height / 700)
+        pts.append((scaled_x, scaled_y))
+    
+    # Рисуем основную территорию
+    draw.polygon(pts, fill="#c8e6c9", outline="#4caf50", width=2)
+    
+    # Рисуем Калининград отдельно
+    kaliningrad = [(30, 380), (35, 375), (40, 378), (38, 385), (32, 383)]
+    draw.polygon(kaliningrad, fill="#c8e6c9", outline="#4caf50", width=2)
+    
+    # Добавляем крупные реки
+    rivers = [
+        [(500, 300), (480, 350), (450, 400), (420, 450)],  # Волга
+        [(600, 200), (650, 250), (700, 300)],  # Обь
+        [(800, 150), (850, 200), (900, 250)],  # Енисей
+        [(950, 180), (980, 220), (1000, 260)],  # Лена
+    ]
+    for river in rivers:
+        draw.line(river, fill="#64b5f6", width=2)
+    
+    # Наносим города
+    cities = {
+        "Москва": (250, 370),
+        "Санкт-Петербург": (160, 250),
+        "Казань": (380, 350),
+        "Екатеринбург": (450, 320),
+        "Новосибирск": (580, 300),
+        "Сочи": (300, 480),
+        "Краснодар": (280, 460),
+        "Владивосток": (1080, 250),
+        "Нижний Новгород": (310, 340),
+        "Самара": (370, 390),
+        "Омск": (530, 320),
+        "Челябинск": (440, 350),
+        "Ростов-на-Дону": (260, 440),
+        "Уфа": (400, 360),
+    }
+    
+    try:
+        font = ImageFont.truetype("arial.ttf", 14)
+        font_small = ImageFont.truetype("arial.ttf", 12)
+    except:
+        font = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+    
+    for city, (cx, cy) in cities.items():
+        # Рисуем точку города
+        draw.ellipse([cx-4, cy-4, cx+4, cy+4], fill="#e53935", outline="white", width=1)
+        # Подписываем город
+        draw.text((cx+8, cy-8), city, fill="#1a202c", font=font_small)
+    
+    # Добавляем легенду
+    draw.rectangle([width-250, 10, width-10, 90], fill="white", outline="#cbd5e0")
+    draw.text((width-240, 15), "Легенда:", fill="#1a202c", font=font)
+    draw.ellipse([width-240, 35, width-232, 43], fill="#e53935")
+    draw.text((width-225, 37), "Город / Заправки", fill="#1a202c", font=font_small)
+    draw.rectangle([width-240, 55, width-232, 65], fill="#3182ce")
+    draw.text((width-225, 57), "АЗС Лукойл", fill="#1a202c", font=font_small)
+    draw.rectangle([width-120, 55, width-112, 65], fill="#38a169")
+    draw.text((width-105, 57), "АЗС Газпром", fill="#1a202c", font=font_small)
+    draw.rectangle([width-240, 72, width-232, 82], fill="#f59e0b")
+    draw.text((width-225, 74), "АЗС Роснефть", fill="#1a202c", font=font_small)
+    
+    img.save(MAP_IMAGE_PATH)
+    return MAP_IMAGE_PATH
+
+# Генерируем карту при запуске
+generate_russia_map()
+
 # ─── Currencies ────────────────────────────────────────────────────────────────
 CURRENCIES = {
     "₽ RUB": "₽",
     "$ USD": "$",
 }
 
-# ─── Gas stations data (расширенные данные с координатами) ─────────────────────
+# ─── Gas stations data ─────────────────────────────────────────────────────────
 GAS_STATIONS_RUSSIA = [
     # Москва
-    {"name": "Лукойл", "city": "Москва", "address": "Ленинградское шоссе, 1", "lat": 55.7558, "lon": 37.6173, "brand": "lukoil", "price": 52.50},
-    {"name": "Газпромнефть", "city": "Москва", "address": "Проспект Мира, 100", "lat": 55.7512, "lon": 37.6184, "brand": "gazprom", "price": 53.20},
-    {"name": "Роснефть", "city": "Москва", "address": "Варшавское шоссе, 25", "lat": 55.7600, "lon": 37.6200, "brand": "rosneft", "price": 51.80},
-    {"name": "Лукойл", "city": "Москва", "address": "Кутузовский проспект, 30", "lat": 55.7400, "lon": 37.5500, "brand": "lukoil", "price": 52.80},
+    {"name": "Лукойл №1", "city": "Москва", "address": "Ленинградское шоссе, 1", "lat": 55.7558, "lon": 37.6173, "brand": "lukoil", "price": 52.50},
+    {"name": "Газпромнефть №1", "city": "Москва", "address": "Проспект Мира, 100", "lat": 55.7512, "lon": 37.6184, "brand": "gazprom", "price": 53.20},
+    {"name": "Роснефть №1", "city": "Москва", "address": "Варшавское шоссе, 25", "lat": 55.7600, "lon": 37.6200, "brand": "rosneft", "price": 51.80},
+    {"name": "Лукойл №2", "city": "Москва", "address": "Кутузовский пр., 30", "lat": 55.7400, "lon": 37.5500, "brand": "lukoil", "price": 52.80},
     # Санкт-Петербург
-    {"name": "Лукойл", "city": "Санкт-Петербург", "address": "Невский проспект, 50", "lat": 59.9343, "lon": 30.3351, "brand": "lukoil", "price": 53.00},
-    {"name": "Газпромнефть", "city": "Санкт-Петербург", "address": "Московский проспект, 150", "lat": 59.9290, "lon": 30.3200, "brand": "gazprom", "price": 54.00},
-    {"name": "Роснефть", "city": "Санкт-Петербург", "address": "Лиговский проспект, 100", "lat": 59.9200, "lon": 30.3500, "brand": "rosneft", "price": 52.50},
+    {"name": "Лукойл №3", "city": "Санкт-Петербург", "address": "Невский пр., 50", "lat": 59.9343, "lon": 30.3351, "brand": "lukoil", "price": 53.00},
+    {"name": "Газпромнефть №2", "city": "Санкт-Петербург", "address": "Московский пр., 150", "lat": 59.9290, "lon": 30.3200, "brand": "gazprom", "price": 54.00},
+    {"name": "Роснефть №2", "city": "Санкт-Петербург", "address": "Лиговский пр., 100", "lat": 59.9200, "lon": 30.3500, "brand": "rosneft", "price": 52.50},
     # Казань
-    {"name": "Роснефть", "city": "Казань", "address": "Проспект Победы, 100", "lat": 55.7961, "lon": 49.1064, "brand": "rosneft", "price": 50.50},
-    {"name": "Газпромнефть", "city": "Казань", "address": "Улица Декабристов, 50", "lat": 55.8000, "lon": 49.1200, "brand": "gazprom", "price": 51.20},
+    {"name": "Роснефть №3", "city": "Казань", "address": "Пр. Победы, 100", "lat": 55.7961, "lon": 49.1064, "brand": "rosneft", "price": 50.50},
+    {"name": "Газпромнефть №3", "city": "Казань", "address": "Ул. Декабристов, 50", "lat": 55.8000, "lon": 49.1200, "brand": "gazprom", "price": 51.20},
     # Екатеринбург
-    {"name": "Лукойл", "city": "Екатеринбург", "address": "Улица Ленина, 50", "lat": 56.8389, "lon": 60.6057, "brand": "lukoil", "price": 51.00},
+    {"name": "Лукойл №4", "city": "Екатеринбург", "address": "Ул. Ленина, 50", "lat": 56.8389, "lon": 60.6057, "brand": "lukoil", "price": 51.00},
     # Новосибирск
-    {"name": "Газпромнефть", "city": "Новосибирск", "address": "Красный проспект, 100", "lat": 55.0302, "lon": 82.9204, "brand": "gazprom", "price": 50.00},
+    {"name": "Газпромнефть №4", "city": "Новосибирск", "address": "Красный пр., 100", "lat": 55.0302, "lon": 82.9204, "brand": "gazprom", "price": 50.00},
     # Сочи
-    {"name": "Роснефть", "city": "Сочи", "address": "Курортный проспект, 50", "lat": 43.5855, "lon": 39.7231, "brand": "rosneft", "price": 55.00},
+    {"name": "Роснефть №4", "city": "Сочи", "address": "Курортный пр., 50", "lat": 43.5855, "lon": 39.7231, "brand": "rosneft", "price": 55.00},
     # Краснодар
-    {"name": "Лукойл", "city": "Краснодар", "address": "Улица Красная, 100", "lat": 45.0355, "lon": 38.9753, "brand": "lukoil", "price": 52.00},
+    {"name": "Лукойл №5", "city": "Краснодар", "address": "Ул. Красная, 100", "lat": 45.0355, "lon": 38.9753, "brand": "lukoil", "price": 52.00},
     # Владивосток
-    {"name": "Газпромнефть", "city": "Владивосток", "address": "Океанский проспект, 50", "lat": 43.1155, "lon": 131.8855, "brand": "gazprom", "price": 54.50},
+    {"name": "Газпромнефть №5", "city": "Владивосток", "address": "Океанский пр., 50", "lat": 43.1155, "lon": 131.8855, "brand": "gazprom", "price": 54.50},
     # Нижний Новгород
-    {"name": "Роснефть", "city": "Нижний Новгород", "address": "Улица Большая Покровская, 50", "lat": 56.3268, "lon": 44.0065, "brand": "rosneft", "price": 51.50},
+    {"name": "Роснефть №5", "city": "Нижний Новгород", "address": "Ул. Большая Покровская, 50", "lat": 56.3268, "lon": 44.0065, "brand": "rosneft", "price": 51.50},
     # Самара
-    {"name": "Лукойл", "city": "Самара", "address": "Московское шоссе, 50", "lat": 53.1959, "lon": 50.1002, "brand": "lukoil", "price": 50.00},
+    {"name": "Лукойл №6", "city": "Самара", "address": "Московское шоссе, 50", "lat": 53.1959, "lon": 50.1002, "brand": "lukoil", "price": 50.00},
     # Омск
-    {"name": "Газпромнефть", "city": "Омск", "address": "Проспект Маркса, 50", "lat": 54.9893, "lon": 73.3682, "brand": "gazprom", "price": 49.50},
+    {"name": "Газпромнефть №6", "city": "Омск", "address": "Пр. Маркса, 50", "lat": 54.9893, "lon": 73.3682, "brand": "gazprom", "price": 49.50},
     # Челябинск
-    {"name": "Роснефть", "city": "Челябинск", "address": "Проспект Ленина, 50", "lat": 55.1644, "lon": 61.4368, "brand": "rosneft", "price": 50.80},
+    {"name": "Роснефть №6", "city": "Челябинск", "address": "Пр. Ленина, 50", "lat": 55.1644, "lon": 61.4368, "brand": "rosneft", "price": 50.80},
     # Ростов-на-Дону
-    {"name": "Лукойл", "city": "Ростов-на-Дону", "address": "Улица Большая Садовая, 50", "lat": 47.2357, "lon": 39.7015, "brand": "lukoil", "price": 51.50},
+    {"name": "Лукойл №7", "city": "Ростов-на-Дону", "address": "Ул. Большая Садовая, 50", "lat": 47.2357, "lon": 39.7015, "brand": "lukoil", "price": 51.50},
     # Уфа
-    {"name": "Газпромнефть", "city": "Уфа", "address": "Проспект Октября, 50", "lat": 54.7348, "lon": 55.9578, "brand": "gazprom", "price": 50.50},
+    {"name": "Газпромнефть №7", "city": "Уфа", "address": "Пр. Октября, 50", "lat": 54.7348, "lon": 55.9578, "brand": "gazprom", "price": 50.50},
 ]
+
+# Московская область (дополнительные)
+MOSCOW_REGION_STATIONS = [
+    {"name": "Лукойл МО1", "city": "Москва", "address": "МКАД, 15км", "lat": 55.7800, "lon": 37.6300, "brand": "lukoil", "price": 52.70},
+    {"name": "Газпромнефть МО1", "city": "Москва", "address": "МКАД, 25км", "lat": 55.7700, "lon": 37.6400, "brand": "gazprom", "price": 53.10},
+    {"name": "Роснефть МО1", "city": "Москва", "address": "МКАД, 35км", "lat": 55.7900, "lon": 37.6100, "brand": "rosneft", "price": 52.00},
+]
+
+GAS_STATIONS_RUSSIA.extend(MOSCOW_REGION_STATIONS)
 
 # ─── Translations ──────────────────────────────────────────────────────────────
 TRANSLATIONS = {
@@ -131,25 +260,15 @@ TRANSLATIONS = {
         "wrong_credentials": "Неверный email или пароль",
         "forgot_password": "Забыли пароль?",
         "forgot_password_title": "Восстановление пароля",
-        "forgot_password_msg": "На вашу почту отправлен код подтверждения.\n\nВведите код ниже:",
-        "verification_code": "Код подтверждения",
-        "verify_code": "Подтвердить",
-        "verification_sent": "Код отправлен на почту",
-        "verification_failed": "Неверный код",
-        "verification_register": "Подтверждение регистрации",
+        "new_password": "Новый пароль",
         "new_password_set": "Новый пароль установлен",
-        "send_code_btn": "Отправить код",
-        "enter_code": "Введите код из письма",
-        "invalid_code": "Неверный код подтверждения",
-        "code_expired": "Код истёк или неверен",
+        "password_changed": "Пароль изменён",
         "logout": "Выйти",
         "delete_account": "Удалить аккаунт",
         "change_password": "Сменить пароль",
-        "new_password": "Новый пароль",
         "repeat_new_password": "Повторите новый пароль",
         "change_password_btn": "Сменить пароль",
-        "password_changed": "Пароль изменён",
-        "my_cars": "Мои автомобили",
+        "my_cars": "Мои автомобили (макс. 25)",
         "add_car": "+ Добавить авто",
         "no_cars": "Автомобили не добавлены",
         "delete": "Удалить",
@@ -180,8 +299,6 @@ TRANSLATIONS = {
         "dark_theme": "Тёмная",
         "light_theme": "Светлая",
         "current_theme": "Текущая тема:",
-        "dark": "Тёмная",
-        "light": "Светлая",
         "currency_setting": "Валюта",
         "currency_desc": "Выберите валюту",
         "language_setting": "Язык / Language",
@@ -199,31 +316,31 @@ TRANSLATIONS = {
         "price_unit": "за л",
         "gs_title": "Карта заправок России",
         "gs_city": "Город:",
-        "gs_search": "Показать на карте",
+        "gs_search": "Показать заправки",
         "gs_to_calc": "В калькулятор",
         "gs_enter_distance": "Ваше расстояние до заправки (км):",
         "gs_avg_from_car": "Средний расход авто",
         "gs_no_avg": "Нет данных о расходе",
         "gs_selected_station": "Выбранная заправка:",
-        "gs_click_hint": "Нажмите на маркер города на карте, чтобы увидеть заправки",
+        "gs_click_hint": "Нажмите на город на карте, чтобы увидеть заправки",
         "gs_distance_note": "💡 Введите примерное расстояние до заправки",
         "gs_all_cities": "Все города",
         "gs_fuel_price_hint": "Цена топлива:",
         "brands": {"lukoil": "Лукойл", "gazprom": "Газпромнефть", "rosneft": "Роснефть"},
         "about_title": "О приложении",
-        "version": "Версия 3.0  •  2024",
+        "version": "Версия 4.0  •  2024",
         "about_section1_title": "О приложении",
         "about_section1": "Профессиональное приложение для расчёта расхода топлива.",
         "about_section2_title": "Возможности",
-        "about_section2": "• Точный расчёт расхода\n• Расчёт стоимости поездки\n• Хранение автомобилей\n• История расчётов\n• Карта заправок России\n• Верификация по email",
+        "about_section2": "• Точный расчёт расхода\n• Расчёт стоимости поездки\n• Хранение до 25 автомобилей\n• История расчётов\n• Карта заправок России\n• Улучшенный график",
         "about_section3_title": "Как использовать",
-        "about_section3": "1. Зарегистрируйтесь с подтверждением email\n2. Добавьте автомобиль\n3. Выберите режим расчёта\n4. Введите данные\n5. Нажмите «Рассчитать»",
+        "about_section3": "1. Зарегистрируйтесь\n2. Добавьте автомобиль\n3. Выберите режим расчёта\n4. Введите данные\n5. Нажмите «Рассчитать»",
         "about_section4_title": "Безопасность",
-        "about_section4": "Регистрация с подтверждением email. Пароли зашифрованы (SHA-256).",
+        "about_section4": "Пароли зашифрованы (SHA-256). Данные хранятся локально.",
         "about_section5_title": "Интерпретация",
         "about_section5": "До 8 л/100 км — экономично\n8-12 л/100 км — средне\nБолее 12 л/100 км — высокий расход",
         "footer": "© 2024 Калькулятор расхода топлива",
-        "no_cars_limit": "Максимум 5 автомобилей",
+        "no_cars_limit": "Максимум 25 автомобилей",
     },
     "en": {
         "app_title": "Fuel Calculator",
@@ -266,25 +383,15 @@ TRANSLATIONS = {
         "wrong_credentials": "Invalid email or password",
         "forgot_password": "Forgot password?",
         "forgot_password_title": "Password recovery",
-        "forgot_password_msg": "A verification code has been sent to your email.\n\nEnter the code:",
-        "verification_code": "Verification code",
-        "verify_code": "Verify",
-        "verification_sent": "Code sent to email",
-        "verification_failed": "Invalid code",
-        "verification_register": "Registration verification",
+        "new_password": "New password",
         "new_password_set": "New password set",
-        "send_code_btn": "Send code",
-        "enter_code": "Enter code from email",
-        "invalid_code": "Invalid verification code",
-        "code_expired": "Code expired or invalid",
+        "password_changed": "Password changed",
         "logout": "Logout",
         "delete_account": "Delete account",
         "change_password": "Change password",
-        "new_password": "New password",
         "repeat_new_password": "Repeat new password",
         "change_password_btn": "Change password",
-        "password_changed": "Password changed",
-        "my_cars": "My vehicles",
+        "my_cars": "My vehicles (max. 25)",
         "add_car": "+ Add vehicle",
         "no_cars": "No vehicles added",
         "delete": "Delete",
@@ -315,8 +422,6 @@ TRANSLATIONS = {
         "dark_theme": "Dark",
         "light_theme": "Light",
         "current_theme": "Current theme:",
-        "dark": "Dark",
-        "light": "Light",
         "currency_setting": "Currency",
         "currency_desc": "Choose currency",
         "language_setting": "Language / Язык",
@@ -325,7 +430,7 @@ TRANSLATIONS = {
         "error": "Error",
         "enter_numbers": "Enter valid numbers!",
         "distance_positive": "Distance must be greater than 0!",
-        "distance_positive2": "Distance and consumption must be greater than 0!",
+        "distance_positive2": "Distance and Avg must be greater than 0!",
         "fuel_chart_title": "Fuel consumption chart",
         "chart_days": "Days:",
         "no_history_chart": "No data for chart",
@@ -334,7 +439,7 @@ TRANSLATIONS = {
         "price_unit": "per L",
         "gs_title": "Russian Gas Stations Map",
         "gs_city": "City:",
-        "gs_search": "Show on map",
+        "gs_search": "Find stations",
         "gs_to_calc": "To Calculator",
         "gs_enter_distance": "Your distance to station (km):",
         "gs_avg_from_car": "Vehicle avg. consumption",
@@ -346,19 +451,19 @@ TRANSLATIONS = {
         "gs_fuel_price_hint": "Fuel price:",
         "brands": {"lukoil": "Lukoil", "gazprom": "Gazpromneft", "rosneft": "Rosneft"},
         "about_title": "About",
-        "version": "Version 3.0  •  2024",
+        "version": "Version 4.0  •  2024",
         "about_section1_title": "About",
         "about_section1": "Professional fuel consumption calculator.",
         "about_section2_title": "Features",
-        "about_section2": "• Accurate consumption calculation\n• Trip cost calculation\n• Multiple vehicles\n• Calculation history\n• Russian gas stations map\n• Email verification",
+        "about_section2": "• Accurate consumption calculation\n• Trip cost calculation\n• Up to 25 vehicles\n• Calculation history\n• Russian gas stations map\n• Enhanced chart",
         "about_section3_title": "How to use",
-        "about_section3": "1. Register with email verification\n2. Add a vehicle\n3. Select calculation mode\n4. Enter data\n5. Press Calculate",
+        "about_section3": "1. Register\n2. Add a vehicle\n3. Select calculation mode\n4. Enter data\n5. Press Calculate",
         "about_section4_title": "Security",
-        "about_section4": "Registration with email confirmation. Passwords encrypted (SHA-256).",
+        "about_section4": "Passwords encrypted (SHA-256). Data stored locally.",
         "about_section5_title": "Interpretation",
         "about_section5": "Up to 8 L/100 km — economical\n8-12 L/100 km — average\nOver 12 L/100 km — high",
         "footer": "© 2024 Fuel Consumption Calculator",
-        "no_cars_limit": "Maximum 5 vehicles",
+        "no_cars_limit": "Maximum 25 vehicles",
     }
 }
 
@@ -372,8 +477,8 @@ THEMES = {
         "btn2": "#21262d", "btn2_hover": "#30363d", "input_bg": "#0d1117",
         "chart_bg": "#161b22", "chart_line": "#58a6ff",
         "chart_fill": "#1c2d3f", "chart_grid": "#21262d",
-        "map_bg": "#1a2a3a", "map_land": "#2a4a2a",
-        "map_marker": "#ff4444", "map_marker_selected": "#ffaa00",
+        "chart_bar1": "#3fb950", "chart_bar2": "#d29922", "chart_bar3": "#f85149",
+        "map_bg": "#1a2a3a",
     },
     "light": {
         "bg": "#f0f4f8", "bg2": "#ffffff", "bg3": "#e2e8f0",
@@ -383,8 +488,8 @@ THEMES = {
         "btn2": "#e2e8f0", "btn2_hover": "#cbd5e0", "input_bg": "#ffffff",
         "chart_bg": "#ffffff", "chart_line": "#3182ce",
         "chart_fill": "#ebf4ff", "chart_grid": "#e2e8f0",
-        "map_bg": "#e8f0e8", "map_land": "#c8e6c9",
-        "map_marker": "#e53935", "map_marker_selected": "#ff8f00",
+        "chart_bar1": "#38a169", "chart_bar2": "#d69e2e", "chart_bar3": "#e53e3e",
+        "map_bg": "#e8f0e8",
     }
 }
 
@@ -403,11 +508,12 @@ def get_currency_symbol():
 
 # ─── Scroll helper ─────────────────────────────────────────────────────────────
 def make_scrollable(parent, bg=None):
-    """Создаёт скроллируемый контейнер и возвращает (outer_frame, inner_frame)"""
+    """Создаёт скроллируемый контейнер с поддержкой мыши"""
     if bg is None:
         bg = T()["bg"]
-    canvas = tk.Canvas(parent, bg=bg, highlightthickness=0)
-    scroll = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+    outer = tk.Frame(parent, bg=bg)
+    canvas = tk.Canvas(outer, bg=bg, highlightthickness=0)
+    scroll = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
     canvas.configure(yscrollcommand=scroll.set)
     scroll.pack(side="right", fill="y")
     canvas.pack(side="left", fill="both", expand=True)
@@ -415,8 +521,13 @@ def make_scrollable(parent, bg=None):
     inner = tk.Frame(canvas, bg=bg)
     win = canvas.create_window((0, 0), window=inner, anchor="nw")
 
-    inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+    def configure_inner(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+    inner.bind("<Configure>", configure_inner)
+
+    def configure_canvas(event):
+        canvas.itemconfig(win, width=event.width)
+    canvas.bind("<Configure>", configure_canvas)
 
     # Универсальный скроллинг мышкой
     def _on_mousewheel(event):
@@ -427,6 +538,7 @@ def make_scrollable(parent, bg=None):
         else:
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
+    # Привязываем скроллинг глобально
     def _bind_mw(e):
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
         canvas.bind_all("<Button-4>", _on_mousewheel)
@@ -447,7 +559,7 @@ def make_scrollable(parent, bg=None):
     canvas.bind("<Enter>", _bind_mw)
     canvas.bind("<Leave>", _unbind_mw)
 
-    return inner
+    return outer, inner
 
 # ─── Image helpers ─────────────────────────────────────────────────────────────
 def make_placeholder(w=300, h=180, text=""):
@@ -509,8 +621,8 @@ class FuelApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(TR("app_title"))
-        self.geometry("1100x820")
-        self.minsize(900, 680)
+        self.geometry("1200x850")
+        self.minsize(1000, 700)
         self.resizable(True, True)
 
         self.data = load_data()
@@ -525,8 +637,9 @@ class FuelApp(tk.Tk):
         self._photo_refs = {}
         self._calc_mode = tk.StringVar(value="consumption")
         self._selected_station = None
-        self._map_markers = []
         self._map_city_filter = tk.StringVar(value="")
+        self._map_photo = None
+        self._city_markers = {}
 
         self._build_ui()
 
@@ -543,7 +656,6 @@ class FuelApp(tk.Tk):
         self.header.destroy()
         self.body.destroy()
         self._photo_refs.clear()
-        self._map_markers.clear()
         self._build_ui()
 
     # ── Layout ──────────────────────────────────────────────────────────────────
@@ -636,7 +748,8 @@ class FuelApp(tk.Tk):
         for w in f.winfo_children():
             w.destroy()
 
-        inner = make_scrollable(f, t["bg"])
+        outer, inner = make_scrollable(f, t["bg"])
+        outer.pack(fill="both", expand=True)
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=24, pady=16)
 
@@ -731,7 +844,7 @@ class FuelApp(tk.Tk):
         self.result_container.pack(fill="x", padx=16, pady=12)
         self._update_result_widgets("consumption")
 
-        # Chart
+        # Chart section
         co = tk.Frame(pad, bg=t["bg2"])
         co.pack(fill="x", pady=(12, 0))
         ch = tk.Frame(co, bg=t["bg2"])
@@ -744,12 +857,12 @@ class FuelApp(tk.Tk):
                  bg=t["bg2"], fg=t["fg2"]).pack(side="left", padx=(0, 6))
         self.chart_days_var = tk.StringVar(value="30")
         dc = ttk.Combobox(df, textvariable=self.chart_days_var,
-                          values=["7", "14", "30", "60", "90"],
+                          values=["7", "30", "90", "180", "360"],
                           state="readonly", width=5, font=("Courier", 10))
         dc.pack(side="left")
         dc.bind("<<ComboboxSelected>>", lambda e: self._draw_fuel_chart())
 
-        self.chart_canvas = tk.Canvas(co, bg=t["chart_bg"], height=280,
+        self.chart_canvas = tk.Canvas(co, bg=t["chart_bg"], height=300,
                                       highlightthickness=1, highlightbackground=t["border"])
         self.chart_canvas.pack(fill="x", padx=16, pady=(0, 16))
         self.chart_canvas.bind("<Configure>", lambda e: self._draw_fuel_chart())
@@ -759,12 +872,10 @@ class FuelApp(tk.Tk):
         self.after(100, self._draw_fuel_chart)
 
     def _update_result_widgets(self, mode):
-        """Обновляет виджеты результатов в зависимости от режима"""
         for w in self.result_container.winfo_children():
             w.destroy()
         t = T()
         if mode == "consumption":
-            # Только расход топлива
             tk.Label(self.result_container, text=TR("fuel_consumption"),
                      font=("Courier", 10), bg=t["bg3"], fg=t["fg2"]).pack(anchor="w")
             self.result_consumption_label = tk.Label(self.result_container, text="— л/100 км",
@@ -772,7 +883,6 @@ class FuelApp(tk.Tk):
             self.result_consumption_label.pack(anchor="w")
             self.result_cost_label = None
         else:
-            # Только стоимость поездки
             tk.Label(self.result_container, text=TR("trip_cost"),
                      font=("Courier", 10), bg=t["bg3"], fg=t["fg2"]).pack(anchor="w")
             self.result_cost_label = tk.Label(self.result_container, text="—",
@@ -875,17 +985,11 @@ class FuelApp(tk.Tk):
             fuel = (avg_input / 100) * dist
             cost = fuel * price
 
-        # Обновляем ТОЛЬКО нужный результат
         if mode == "consumption":
             self.result_consumption_label.configure(text=f"{consumption:.2f} л/100 км")
-            if self.result_cost_label:
-                self.result_cost_label.configure(text="—")
         else:
             self.result_cost_label.configure(text=f"{cost:,.2f} {sym}")
-            if self.result_consumption_label:
-                self.result_consumption_label.configure(text="— л/100 км")
 
-        # Статистика обновляется всегда
         self.stat_labels["avg"].configure(text=f"{consumption:.2f} л/100 км")
         self.stat_labels["dist"].configure(text=f"{dist:.0f} км")
         self.stat_labels["fuel"].configure(text=f"{fuel:.1f} л")
@@ -921,7 +1025,7 @@ class FuelApp(tk.Tk):
         for k, v in {"avg": "— л/100 км", "dist": "— км", "fuel": "— л", "cost": "—"}.items():
             self.stat_labels[k].configure(text=v)
 
-    # ── Chart ──────────────────────────────────────────────────────────────────
+    # ── Improved Chart ─────────────────────────────────────────────────────────
     def _on_chart_hover(self, event):
         if not self._chart_data_points:
             return
@@ -929,14 +1033,14 @@ class FuelApp(tk.Tk):
         best = None
         best_d = 9999
         for (cx, cy, dt, val) in self._chart_data_points:
-            d = abs(event.x - cx)
+            d = math.sqrt((event.x - cx)**2 + (event.y - cy)**2)
             if d < best_d:
                 best_d = d
                 best = (cx, cy, dt, val)
-        if best and best_d < 40:
+        if best and best_d < 30:
             cx, cy, dt, val = best
             c.delete("tooltip")
-            txt = f"{dt.strftime('%d.%m.%Y')}  {val:.1f} л/100"
+            txt = f"{dt.strftime('%d.%m.%Y')}: {val:.1f} л/100"
             pad = 6
             tw = len(txt) * 7 + pad * 2
             th = 22
@@ -949,7 +1053,7 @@ class FuelApp(tk.Tk):
                                fill=T()["bg3"], outline=T()["accent"], tags="tooltip")
             c.create_text(tx + tw // 2, ty + th // 2, text=txt,
                           fill=T()["fg"], font=("Courier", 9), tags="tooltip")
-            c.create_oval(cx - 6, cy - 6, cx + 6, cy + 6,
+            c.create_oval(cx - 5, cy - 5, cx + 5, cy + 5,
                           fill=T()["accent"], outline=T()["bg2"], width=2, tags="tooltip")
 
     def _on_chart_leave(self, event):
@@ -967,7 +1071,7 @@ class FuelApp(tk.Tk):
         if W < 10 or H < 10:
             return
 
-        pl, pr, pt, pb = 56, 24, 24, 40
+        pl, pr, pt, pb = 80, 30, 40, 80
         if not self.current_user:
             c.create_text(W // 2, H // 2, text=TR("login_for_chart"),
                           fill=t["fg2"], font=("Courier", 12))
@@ -998,57 +1102,101 @@ class FuelApp(tk.Tk):
             return
 
         filtered.sort(key=lambda x: x[0])
-        values = [v for _, v in filtered]
-        min_v = max(0, min(values) - 1)
-        max_v = max(values) + 1
+        
+        # Группируем по дням
+        daily_data = {}
+        for dt, val in filtered:
+            day_key = dt.strftime("%Y-%m-%d")
+            if day_key not in daily_data:
+                daily_data[day_key] = []
+            daily_data[day_key].append(val)
+        
+        # Усредняем по дням
+        daily_avg = []
+        for day_key in sorted(daily_data.keys()):
+            vals = daily_data[day_key]
+            dt = datetime.strptime(day_key, "%Y-%m-%d")
+            avg_val = sum(vals) / len(vals)
+            daily_avg.append((dt, avg_val))
+
+        if not daily_avg:
+            c.create_text(W // 2, H // 2, text=TR("no_history_chart"),
+                          fill=t["fg2"], font=("Courier", 12))
+            return
+
+        values = [v for _, v in daily_avg]
+        min_v = max(0, min(values) - 2)
+        max_v = max(values) + 2
         rng = max_v - min_v if max_v != min_v else 1
         cw, ch = W - pl - pr, H - pt - pb
-
-        def px(i):
-            return pl + (i / max(len(filtered) - 1, 1)) * cw
-
-        def py(v):
-            return pt + (1 - (v - min_v) / rng) * ch
-
+        
+        # Рисуем оси
+        c.create_line(pl, H - pb, W - pr, H - pb, fill=t["fg2"], width=2)  # X axis
+        c.create_line(pl, pt, pl, H - pb, fill=t["fg2"], width=2)  # Y axis
+        
+        # Горизонтальные линии и метки
         for gi in range(6):
             gv = min_v + gi * rng / 5
-            gy = py(gv)
+            gy = pt + (1 - (gv - min_v) / rng) * ch
             c.create_line(pl, gy, W - pr, gy, fill=t["chart_grid"], dash=(4, 6))
-            c.create_text(pl - 6, gy, text=f"{gv:.1f}", anchor="e", fill=t["fg2"], font=("Courier", 9))
-
-        yg, yy = py(8), py(12)
-        if yg > pt:
+            c.create_text(pl - 10, gy, text=f"{gv:.1f}", anchor="e", fill=t["fg2"], font=("Courier", 9))
+        
+        # Зоны расхода
+        yg = pt + (1 - (8 - min_v) / rng) * ch if 8 > min_v and 8 < max_v else None
+        yy = pt + (1 - (12 - min_v) / rng) * ch if 12 > min_v and 12 < max_v else None
+        
+        if yg:
             c.create_rectangle(pl, pt, W - pr, min(yg, H - pb), fill="#1a2f1a", outline="")
-        if yy > yg:
+        if yy and yg:
             c.create_rectangle(pl, max(yg, pt), W - pr, min(yy, H - pb), fill="#2a2410", outline="")
-        c.create_rectangle(pl, max(yy, pt), W - pr, H - pb, fill="#2a1212", outline="")
-
-        pts = []
-        for i, (_, v) in enumerate(filtered):
-            pts += [px(i), py(v)]
-        if len(pts) >= 4:
-            c.create_polygon([pl, H - pb] + pts + [W - pr, H - pb],
-                             fill=t["chart_fill"], outline="")
-
-        for i in range(len(filtered) - 1):
-            v1, v2 = filtered[i][1], filtered[i + 1][1]
-            lc = t["green"] if (v1 + v2) / 2 <= 8 else (t["yellow"] if (v1 + v2) / 2 <= 12 else t["red"])
-            c.create_line(px(i), py(v1), px(i + 1), py(v2), fill=lc, width=2.5, smooth=True)
-
-        for i, (dt, v) in enumerate(filtered):
-            x, y = px(i), py(v)
-            dc = t["green"] if v <= 8 else (t["yellow"] if v <= 12 else t["red"])
-            c.create_oval(x - 5, y - 5, x + 5, y + 5, fill=dc, outline=t["bg2"], width=2)
-            self._chart_data_points.append((x, y, dt, v))
-
-        c.create_line(pl, H - pb, W - pr, H - pb, fill=t["border"])
-        c.create_line(pl, pt, pl, H - pb, fill=t["border"])
-        step = max(1, len(filtered) // 8)
-        for i in range(0, len(filtered), step):
-            dt, _ = filtered[i]
-            x = px(i)
-            c.create_text(x, H - pb + 14, text=dt.strftime("%d.%m"),
-                          fill=t["fg2"], font=("Courier", 8))
+        if yy:
+            c.create_rectangle(pl, max(yy, pt), W - pr, H - pb, fill="#2a1212", outline="")
+        
+        # Столбчатая диаграмма
+        bar_width = max(10, min(40, cw / len(daily_avg) - 5))
+        for i, (dt, val) in enumerate(daily_avg):
+            x = pl + (i + 0.5) * cw / len(daily_avg)
+            y = pt + (1 - (val - min_v) / rng) * ch
+            
+            # Цвет столбца
+            if val <= 8:
+                color = t["chart_bar1"]
+            elif val <= 12:
+                color = t["chart_bar2"]
+            else:
+                color = t["chart_bar3"]
+            
+            # Рисуем столбец
+            bar_height = H - pb - y
+            c.create_rectangle(x - bar_width/2, y, x + bar_width/2, H - pb,
+                             fill=color, outline=t["bg2"], width=1)
+            
+            # Значение над столбцом
+            c.create_text(x, y - 10, text=f"{val:.1f}",
+                         fill=t["fg"], font=("Courier", 8, "bold"))
+            
+            self._chart_data_points.append((x, y, dt, val))
+        
+        # Подписи дат
+        step = max(1, len(daily_avg) // 10)
+        for i in range(0, len(daily_avg), step):
+            dt, _ = daily_avg[i]
+            x = pl + (i + 0.5) * cw / len(daily_avg)
+            c.create_text(x, H - pb + 15, text=dt.strftime("%d.%m"),
+                         fill=t["fg2"], font=("Courier", 8), angle=45)
+        
+        # Названия осей
+        c.create_text(W // 2, H - 15, text="Дата", fill=t["fg2"], font=("Courier", 10))
+        c.create_text(15, H // 2, text="л/100км", fill=t["fg2"], font=("Courier", 10), angle=90)
+        
+        # Легенда
+        legend_y = pt + 10
+        c.create_text(W - pr - 60, legend_y, text="Расход:", fill=t["fg"], font=("Courier", 8, "bold"))
+        colors = [(t["chart_bar1"], "≤8"), (t["chart_bar2"], "8-12"), (t["chart_bar3"], ">12")]
+        for i, (color, label) in enumerate(colors):
+            y = legend_y + 15 + i * 15
+            c.create_rectangle(W - pr - 80, y, W - pr - 70, y + 10, fill=color)
+            c.create_text(W - pr - 65, y + 5, text=label, fill=t["fg2"], font=("Courier", 8), anchor="w")
 
     # ── Profile ────────────────────────────────────────────────────────────────
     def _build_profile(self):
@@ -1056,7 +1204,8 @@ class FuelApp(tk.Tk):
         f = self.sections["profile"]
         for w in f.winfo_children():
             w.destroy()
-        inner = make_scrollable(f, t["bg"])
+        outer, inner = make_scrollable(f, t["bg"])
+        outer.pack(fill="both", expand=True)
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=32, pady=24)
 
@@ -1088,14 +1237,12 @@ class FuelApp(tk.Tk):
                      text=TR("create_account") if mode == "register" else TR("login_account"),
                      font=("Georgia", 15, "bold"), bg=t["bg2"], fg=t["fg"]).pack(pady=(0, 16))
 
-            # Email
             tk.Label(self._auth_form_frame, text=TR("email"),
                      font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
             email_entry = tk.Entry(self._auth_form_frame, font=("Courier", 12),
                                    bg=t["input_bg"], fg=t["fg"], bd=1, relief="solid")
             email_entry.pack(fill="x", pady=4, ipady=6)
 
-            # Password
             tk.Label(self._auth_form_frame, text=TR("password"),
                      font=("Courier", 10), bg=t["bg2"], fg=t["fg2"]).pack(anchor="w")
             pw_row = tk.Frame(self._auth_form_frame, bg=t["input_bg"], bd=1, relief="solid")
@@ -1114,15 +1261,12 @@ class FuelApp(tk.Tk):
                             fg=t["fg2"], bd=0, cursor="hand2", command=toggle_pw)
             eye.pack(side="right", padx=2)
 
-            # Forgot password link (только в режиме логина)
-            forgot_btn = None
             if mode == "login":
                 forgot_btn = tk.Button(self._auth_form_frame, text=TR("forgot_password"),
                                        font=("Courier", 9, "underline"), bg=t["bg2"], fg=t["accent"],
-                                       bd=0, cursor="hand2")
+                                       bd=0, cursor="hand2",
+                                       command=self._show_forgot_password_dialog)
                 forgot_btn.pack(anchor="e", pady=(2, 0))
-                # Восстановление пароля теперь просто запрашивает новый пароль без кода
-                forgot_btn.configure(command=lambda: self._show_forgot_password_dialog())
 
             pw2_entry = None
             if mode == "register":
@@ -1159,7 +1303,6 @@ class FuelApp(tk.Tk):
                     if email in self.data.get("users", {}):
                         status.configure(text=TR("user_exists"))
                         return
-                    # Регистрация без кода
                     self.data.setdefault("users", {})[email] = {
                         "password": hash_pw(pw), "cars": [], "history": []
                     }
@@ -1169,7 +1312,6 @@ class FuelApp(tk.Tk):
                     self._refresh_car_combo()
                     self._refresh_profile()
                 else:
-                    # Логин без кода
                     users = self.data.get("users", {})
                     if email not in users or users[email]["password"] != hash_pw(pw):
                         status.configure(text=TR("wrong_credentials"))
@@ -1188,7 +1330,6 @@ class FuelApp(tk.Tk):
         build()
 
     def _show_forgot_password_dialog(self):
-        """Диалог восстановления пароля (упрощённый, без кода)"""
         dialog = tk.Toplevel(self)
         dialog.title(TR("forgot_password_title"))
         dialog.geometry("400x300")
@@ -1306,9 +1447,8 @@ class FuelApp(tk.Tk):
 
     def _add_car_inline(self):
         t = T()
-        # Проверка лимита
         cars = self.data["users"][self.current_user].get("cars", [])
-        if len(cars) >= 5:
+        if len(cars) >= 25:
             messagebox.showwarning(TR("error"), TR("no_cars_limit"))
             return
 
@@ -1408,35 +1548,37 @@ class FuelApp(tk.Tk):
                      font=("Courier", 11), bg=t["bg"], fg=t["fg2"]).pack(pady=16)
             return
 
-        # Отображаем машины в сетке по 5 в ряд
-        row = tk.Frame(self.cars_container, bg=t["bg"])
-        row.pack(fill="x")
-        for i, car in enumerate(cars):
-            if i > 0 and i % 5 == 0:
-                row = tk.Frame(self.cars_container, bg=t["bg"])
-                row.pack(fill="x")
+        # Отображаем машины в сетке 5x5
+        for row_idx in range(5):
+            row = tk.Frame(self.cars_container, bg=t["bg"])
+            row.pack(fill="x", pady=4)
+            for col_idx in range(5):
+                idx = row_idx * 5 + col_idx
+                if idx >= len(cars):
+                    break
+                car = cars[idx]
+                
+                card = tk.Frame(row, bg=t["bg2"], bd=0, relief="flat", padx=6, pady=6)
+                card.pack(side="left", padx=6, pady=4)
 
-            card = tk.Frame(row, bg=t["bg2"], bd=0, relief="flat", padx=8, pady=8)
-            card.pack(side="left", padx=8, pady=4)
+                img_box = tk.Frame(card, bg=t["bg2"], width=120, height=75)
+                img_box.pack_propagate(False)
+                img_box.pack()
+                ph = car.get("photo")
+                img = load_car_image(ph, 120, 75)
+                photo = ImageTk.PhotoImage(img)
+                self._photo_refs[f"car_{idx}"] = photo
+                tk.Label(img_box, image=photo, bg=t["bg2"]).place(relx=0.5, rely=0.5, anchor="center")
 
-            img_box = tk.Frame(card, bg=t["bg2"], width=140, height=90)
-            img_box.pack_propagate(False)
-            img_box.pack()
-            ph = car.get("photo")
-            img = load_car_image(ph, 140, 90)
-            photo = ImageTk.PhotoImage(img)
-            self._photo_refs[f"car_{i}"] = photo
-            tk.Label(img_box, image=photo, bg=t["bg2"]).place(relx=0.5, rely=0.5, anchor="center")
-
-            tk.Label(card, text=car["name"], font=("Courier", 10, "bold"),
-                     bg=t["bg2"], fg=t["fg"]).pack(pady=2)
-            avg = car.get("avg_consumption")
-            if avg:
-                tk.Label(card, text=f"💧 {avg} л/100", font=("Courier", 8),
-                         bg=t["bg2"], fg=t["fg2"]).pack()
-            tk.Button(card, text=TR("delete"), font=("Courier", 9),
-                      bg=t["red"], fg="white", bd=0, padx=8, pady=3,
-                      command=lambda idx=i: self._delete_car(idx)).pack(pady=(4, 0))
+                tk.Label(card, text=car["name"], font=("Courier", 9, "bold"),
+                         bg=t["bg2"], fg=t["fg"]).pack(pady=2)
+                avg = car.get("avg_consumption")
+                if avg:
+                    tk.Label(card, text=f"💧 {avg} л/100", font=("Courier", 7),
+                             bg=t["bg2"], fg=t["fg2"]).pack()
+                tk.Button(card, text=TR("delete"), font=("Courier", 8),
+                          bg=t["red"], fg="white", bd=0, padx=6, pady=2,
+                          command=lambda i=idx: self._delete_car(i)).pack(pady=(3, 0))
 
     def _delete_car(self, idx):
         if messagebox.askyesno(TR("delete_confirm"), TR("delete_car_confirm")):
@@ -1451,7 +1593,6 @@ class FuelApp(tk.Tk):
         save_data(self.data)
         self._refresh_car_combo()
         self._refresh_profile()
-        self._refresh_history()
 
     def _delete_account(self):
         if messagebox.askyesno(TR("delete_account_confirm"), TR("delete_account_msg")):
@@ -1467,7 +1608,6 @@ class FuelApp(tk.Tk):
             save_data(self.data)
             self._refresh_car_combo()
             self._refresh_profile()
-            self._refresh_history()
 
     def _refresh_profile(self):
         f = self.sections["profile"]
@@ -1482,7 +1622,8 @@ class FuelApp(tk.Tk):
         for w in f.winfo_children():
             w.destroy()
 
-        inner = make_scrollable(f, t["bg"])
+        outer, inner = make_scrollable(f, t["bg"])
+        outer.pack(fill="both", expand=True)
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=24, pady=20)
 
@@ -1554,7 +1695,7 @@ class FuelApp(tk.Tk):
                      text=f"💧 {entry['consumption']} л/100км  💳 {entry['cost']:,.2f} {sym}",
                      font=("Courier", 11, "bold"), bg=t["bg2"], fg=t["green"]).pack(anchor="w")
 
-            # Кнопки справа
+            # Кнопки справа - отдельные для копирования и удаления
             btn_col = tk.Frame(card, bg=t["bg2"], width=110)
             btn_col.pack_propagate(False)
             btn_col.pack(side="right", padx=12, pady=4)
@@ -1583,9 +1724,10 @@ class FuelApp(tk.Tk):
                       width=12, height=2).pack(fill="x")
 
     def _delete_history_entry(self, idx):
-        del self.data["users"][self.current_user]["history"][idx]
-        save_data(self.data)
-        self._render_history_entries()
+        if messagebox.askyesno(TR("delete_confirm"), "Удалить эту запись?"):
+            del self.data["users"][self.current_user]["history"][idx]
+            save_data(self.data)
+            self._render_history_entries()
 
     def _clear_all_history(self):
         if messagebox.askyesno(TR("clear_history_confirm"), TR("clear_history_msg")):
@@ -1599,14 +1741,15 @@ class FuelApp(tk.Tk):
             w.destroy()
         self._build_history()
 
-    # ── Gas Stations (переработанная карта на Pillow) ──────────────────────────
+    # ── Gas Stations (улучшенная карта) ────────────────────────────────────────
     def _build_gas_stations(self):
         t = T()
         f = self.sections["gas_stations"]
         for w in f.winfo_children():
             w.destroy()
 
-        inner = make_scrollable(f, t["bg"])
+        outer, inner = make_scrollable(f, t["bg"])
+        outer.pack(fill="both", expand=True)
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=48, pady=32)
 
@@ -1628,31 +1771,38 @@ class FuelApp(tk.Tk):
                                    values=city_values, state="readonly",
                                    font=("Courier", 11), width=20)
         city_combo.pack(side="left", padx=(0, 12))
-        tk.Label(search_row, text=TR("gs_search"),
-                 font=("Courier", 11), bg=t["bg2"], fg=t["fg"]).pack(side="left", padx=(0, 12))
-        tk.Button(search_row, text="🔍",
+        tk.Button(search_row, text=TR("gs_search"), font=("Courier", 10),
                   bg=t["btn"], fg="white", bd=0, padx=12, pady=6,
-                  command=self._redraw_map).pack(side="left")
+                  command=self._update_map_display).pack(side="left")
 
-        # Контейнер для карты
-        self.map_frame = tk.Frame(pad, bg=t["bg2"])
+        # Карта
+        self.map_frame = tk.Frame(pad, bg=t["bg2"], pady=16)
         self.map_frame.pack(fill="x", pady=8)
-
-        # Будем использовать Label для отображения PIL Image
-        self.map_label = tk.Label(self.map_frame, bg=t["map_bg"])
-        self.map_label.pack(fill="x", padx=8, pady=8)
-        self.map_label.bind("<Button-1>", self._on_map_click)
-
-        # Станция info
+        
+        # Загружаем карту России
+        map_img = load_car_image(MAP_IMAGE_PATH, 1100, 600)
+        self._map_photo = ImageTk.PhotoImage(map_img)
+        
+        self.map_canvas = tk.Canvas(self.map_frame, bg=t["map_bg"], 
+                                   height=620, highlightthickness=1, 
+                                   highlightbackground=t["border"])
+        self.map_canvas.pack(fill="x", padx=8, pady=8)
+        self.map_canvas.create_image(550, 310, image=self._map_photo)
+        self.map_canvas.bind("<Button-1>", self._on_map_click)
+        
+        # Наносим заправки
+        self._draw_stations_on_map()
+        
+        # Info panel
         self.station_info_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         self.station_info_card.pack(fill="x", pady=8)
         self.station_info_text = tk.Label(self.station_info_card,
                                            text=TR("gs_click_hint"),
                                            font=("Courier", 11), bg=t["bg2"], fg=t["fg2"],
-                                           justify="left")
+                                           justify="left", wraplength=800)
         self.station_info_text.pack(anchor="w", padx=20, pady=8)
 
-        # Выбор авто
+        # Car selector
         car_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         car_card.pack(fill="x", pady=8)
         tk.Label(car_card, text=TR("car"), font=("Georgia", 13, "bold"),
@@ -1668,7 +1818,7 @@ class FuelApp(tk.Tk):
                                     bg=t["bg2"], fg=t["accent"])
         self.gs_avg_lbl.pack(anchor="w", padx=20, pady=(0, 8))
 
-        # Расстояние
+        # Distance
         dist_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         dist_card.pack(fill="x", pady=8)
         tk.Label(dist_card, text=TR("gs_enter_distance"), font=("Georgia", 13, "bold"),
@@ -1683,7 +1833,7 @@ class FuelApp(tk.Tk):
                  bg=t["input_bg"], fg=t["fg"], bd=0).pack(side="left", fill="x", expand=True, pady=8)
         tk.Label(dist_row, text="км", font=("Courier", 10), bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
 
-        # Цена
+        # Price
         price_card = tk.Frame(pad, bg=t["bg2"], pady=16)
         price_card.pack(fill="x", pady=8)
         tk.Label(price_card, text=TR("gs_fuel_price_hint"), font=("Georgia", 13, "bold"),
@@ -1697,12 +1847,85 @@ class FuelApp(tk.Tk):
         tk.Label(price_row, text=f"{get_currency_symbol()}/л", font=("Courier", 10),
                  bg=t["input_bg"], fg=t["fg2"], padx=8).pack(side="right")
 
-        # Кнопка "В калькулятор"
+        # Button
         tk.Button(pad, text=TR("gs_to_calc"), font=("Georgia", 12, "bold"),
                   bg=t["btn"], fg="white", bd=0, pady=12,
                   command=self._gs_to_calculator).pack(fill="x", pady=16)
 
-        self.after(200, self._redraw_map)
+    def _draw_stations_on_map(self):
+        """Рисует заправки на карте"""
+        if not hasattr(self, 'map_canvas'):
+            return
+        
+        self.map_canvas.delete("station")
+        self._city_markers = {}
+        
+        t = T()
+        stations = self._get_filtered_stations()
+        
+        # Координаты городов на карте
+        city_coords = {
+            "Москва": (250, 370),
+            "Санкт-Петербург": (160, 250),
+            "Казань": (380, 350),
+            "Екатеринбург": (450, 320),
+            "Новосибирск": (580, 300),
+            "Сочи": (300, 480),
+            "Краснодар": (280, 460),
+            "Владивосток": (1080, 250),
+            "Нижний Новгород": (310, 340),
+            "Самара": (370, 390),
+            "Омск": (530, 320),
+            "Челябинск": (440, 350),
+            "Ростов-на-Дону": (260, 440),
+            "Уфа": (400, 360),
+        }
+        
+        # Группируем по городам
+        city_groups = {}
+        for st in stations:
+            city = st["city"]
+            if city not in city_groups:
+                city_groups[city] = []
+            city_groups[city].append(st)
+        
+        for city, st_list in city_groups.items():
+            if city in city_coords:
+                cx, cy = city_coords[city]
+                
+                # Рисуем маркер
+                count = len(st_list)
+                radius = max(12, min(25, 15 + count * 2))
+                
+                # Подсветка выбранного
+                is_selected = (self._selected_station and self._selected_station.get("city") == city)
+                color = "#ff8f00" if is_selected else "#e53935"
+                
+                marker = self.map_canvas.create_oval(
+                    cx - radius, cy - radius, 
+                    cx + radius, cy + radius,
+                    fill=color, outline="white", width=2,
+                    tags=("station", city)
+                )
+                
+                # Количество заправок
+                self.map_canvas.create_text(
+                    cx, cy, text=str(count),
+                    fill="white", font=("Courier", 10, "bold"),
+                    tags=("station", city)
+                )
+                
+                # Название города
+                self.map_canvas.create_text(
+                    cx, cy - radius - 15, text=city,
+                    fill=t["fg"], font=("Courier", 9, "bold"),
+                    tags=("station", city)
+                )
+                
+                self._city_markers[city] = {
+                    "x": cx, "y": cy, "radius": radius,
+                    "stations": st_list
+                }
 
     def _get_filtered_stations(self):
         city = self._map_city_filter.get()
@@ -1710,124 +1933,26 @@ class FuelApp(tk.Tk):
             return GAS_STATIONS_RUSSIA
         return [s for s in GAS_STATIONS_RUSSIA if s["city"] == city]
 
-    def _lat_lon_to_xy(self, lat, lon, img_w, img_h):
-        """Преобразует географические координаты в пиксельные на изображении карты"""
-        # Крайние точки России для проекции
-        lat_min, lat_max = 41.0, 82.0
-        lon_min, lon_max = 19.0, 170.0
-        
-        # Отступы внутри изображения
-        margin = 20
-        w = img_w - 2 * margin
-        h = img_h - 2 * margin
-        
-        x = margin + (lon - lon_min) / (lon_max - lon_min) * w
-        y = margin + (lat_max - lat) / (lat_max - lat_min) * h
-        return x, y
-
-    def _draw_map_on_pil(self, width=800, height=500):
-        """Рисует карту России с помощью Pillow"""
-        t = T()
-        img = Image.new("RGB", (width, height), t["map_bg"])
-        draw = ImageDraw.Draw(img)
-
-        # Упрощенный контур России (многоугольник)
-        outline_coords = [
-            (41, 43), (41, 45), (37, 46), (36, 47), (32, 46), (28, 44), (22, 44),
-            (20, 55), (19, 60), (20, 65), (28, 69), (32, 70), (40, 69), (45, 68),
-            (50, 72), (60, 75), (70, 76), (80, 74), (90, 73), (100, 74), (110, 74),
-            (120, 72), (130, 70), (140, 68), (150, 65), (160, 62), (170, 60),
-            (170, 55), (160, 50), (150, 48), (140, 45), (135, 43), (130, 42),
-            (120, 40), (110, 42), (100, 45), (90, 50), (80, 55), (70, 55),
-            (60, 50), (50, 45), (45, 42), (41, 43)
-        ]
-        pts = [self._lat_lon_to_xy(lat, lon, width, height) for lat, lon in outline_coords]
-        draw.polygon(pts, fill=t["map_land"], outline=t["border"])
-
-        # Группировка заправок по городам
-        stations = self._get_filtered_stations()
-        city_groups = {}
-        for st in stations:
-            city = st["city"]
-            if city not in city_groups:
-                city_groups[city] = {"lat": st["lat"], "lon": st["lon"], "stations": [], "count": 0}
-            city_groups[city]["count"] += 1
-            city_groups[city]["stations"].append(st)
-
-        self._map_markers = []
-        for city, data in city_groups.items():
-            x, y = self._lat_lon_to_xy(data["lat"], data["lon"], width, height)
-            radius = max(8, min(20, 6 + data["count"] * 3))
-
-            # Если город выбран, подсвечиваем его
-            is_selected = (self._selected_station and self._selected_station["city"] == city)
-            color = t["map_marker_selected"] if is_selected else t["accent"]
-            outline_color = "white" if is_selected else t["bg2"]
-            
-            draw.ellipse([x - radius, y - radius, x + radius, y + radius], fill=color, outline=outline_color, width=2)
-            # Название города
-            try:
-                font = ImageFont.truetype("arial.ttf", 12)
-            except IOError:
-                font = ImageFont.load_default()
-            draw.text((x - len(city)*3, y - radius - 18), city, fill=t["fg"], font=font)
-            # Количество заправок
-            draw.text((x - len(str(data["count"]))*3, y - 6), str(data["count"]), fill="white", font=font)
-
-            self._map_markers.append({
-                "city": city, "x": x, "y": y, "radius": radius,
-                "stations": data["stations"]
-            })
-
-        # Легенда
-        legend_x = width - 150
-        legend_y = 20
-        draw.rectangle([legend_x - 5, legend_y - 5, width - 10, legend_y + 70], fill=t["bg2"], outline=t["border"])
-        draw.text((legend_x, legend_y), "Бренды:", fill=t["fg"], font=font)
-        brands = [("Лукойл", "#ff4444"), ("Газпромнефть", "#58a6ff"), ("Роснефть", "#f0a000")]
-        for i, (name, color_hex) in enumerate(brands):
-            yb = legend_y + 20 + i * 18
-            draw.rectangle([legend_x, yb, legend_x + 10, yb + 10], fill=color_hex)
-            draw.text((legend_x + 15, yb), name, fill=t["fg"], font=font)
-
-        return img
-
-    def _redraw_map(self):
-        """Перерисовывает карту в GUI"""
-        if not hasattr(self, 'map_label'):
-            return
-        # Определяем размеры
-        w = self.map_label.winfo_width()
-        h = self.map_label.winfo_height()
-        if w < 100 or h < 100:
-            w, h = 800, 450
-        img = self._draw_map_on_pil(w, h)
-        photo = ImageTk.PhotoImage(img)
-        self._photo_refs["map"] = photo
-        self.map_label.configure(image=photo, width=w, height=h)
-
     def _on_map_click(self, event):
         """Обработка клика по карте"""
-        if not self._map_markers:
-            return
-        # Ищем ближайший маркер
         closest = None
         closest_d = 9999
-        for m in self._map_markers:
-            d = math.sqrt((event.x - m["x"])**2 + (event.y - m["y"])**2)
-            if d < m["radius"] + 10 and d < closest_d:
-                closest = m
+        for city, data in self._city_markers.items():
+            d = math.sqrt((event.x - data["x"])**2 + (event.y - data["y"])**2)
+            if d < data["radius"] + 10 and d < closest_d:
+                closest = {"city": city, **data}
                 closest_d = d
+        
         if closest:
             self._selected_station = closest
             self._show_station_info(closest)
+            self._draw_stations_on_map()
         else:
             self._selected_station = None
             self.station_info_text.configure(text=TR("gs_click_hint"))
-        self._redraw_map()
 
     def _show_station_info(self, marker):
-        """Отображает информацию о заправках города"""
+        """Показывает информацию о заправках"""
         stations = marker["stations"]
         city = marker["city"]
         info_text = f"🏙 {TR('gs_selected_station')} {city}\n\n"
@@ -1840,6 +1965,9 @@ class FuelApp(tk.Tk):
         self.station_info_text.configure(text=info_text, fg=T()["fg"])
         if stations:
             self.gs_price_var.set(str(stations[0]["price"]))
+
+    def _update_map_display(self):
+        self._draw_stations_on_map()
 
     def _refresh_gs_car_combo(self):
         cars = [TR("no_car")]
@@ -1896,8 +2024,8 @@ class FuelApp(tk.Tk):
     def _refresh_gas_stations(self):
         self._refresh_gs_car_combo()
         self._update_gs_avg_display()
-        if hasattr(self, 'map_label') and self.map_label.winfo_exists():
-            self.after(100, self._redraw_map)
+        if hasattr(self, 'map_canvas') and self.map_canvas.winfo_exists():
+            self._draw_stations_on_map()
 
     # ── About ──────────────────────────────────────────────────────────────────
     def _build_about(self):
@@ -1905,7 +2033,8 @@ class FuelApp(tk.Tk):
         f = self.sections["about"]
         for w in f.winfo_children():
             w.destroy()
-        inner = make_scrollable(f, t["bg"])
+        outer, inner = make_scrollable(f, t["bg"])
+        outer.pack(fill="both", expand=True)
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(anchor="center", padx=48, pady=32)
 
@@ -1941,7 +2070,8 @@ class FuelApp(tk.Tk):
         f = self.sections["settings"]
         for w in f.winfo_children():
             w.destroy()
-        inner = make_scrollable(f, t["bg"])
+        outer, inner = make_scrollable(f, t["bg"])
+        outer.pack(fill="both", expand=True)
         pad = tk.Frame(inner, bg=t["bg"])
         pad.pack(fill="both", expand=True, padx=48, pady=32)
 
