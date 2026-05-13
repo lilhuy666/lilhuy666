@@ -241,7 +241,6 @@ def db_get_history_for_chart(email, car_name, days):
             return [(r[0], float(r[1])) for r in cur.fetchall() if r[0] and r[1] is not None]
 
 def db_get_car_stats(email, car_name):
-    """Возвращает общий пробег, общие затраты и средний расход по автомобилю"""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -581,7 +580,7 @@ THEMES = {
     }
 }
 
-# ---------- Шаблоны ----------
+# ---------- Шаблоны с полупрозрачным (Glassmorphism) дизайном ----------
 TEMPLATES = {
     "base.html": r'''<!DOCTYPE html>
 <html lang="{{ lang }}">
@@ -599,9 +598,9 @@ TEMPLATES = {
             --fg2: {{ theme.fg2 }};
             --accent: {{ theme.accent }};
             --green: {{ theme.green }};
+            --red: {{ theme.red }};
         }
         body {
-            /* Фоновая картинка – замените путь на свою */
             background-image: url('{{ url_for('static', filename='background.jpg') }}');
             background-size: cover;
             background-position: center;
@@ -609,9 +608,8 @@ TEMPLATES = {
             color: var(--fg);
             min-height: 100vh;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            transition: background 0.3s ease, color 0.3s ease;
         }
-        /* Лёгкая подложка для контента, если изображение слишком яркое/тёмное */
+        /* Полупрозрачная подложка поверх фона */
         body::before {
             content: "";
             position: fixed;
@@ -619,15 +617,16 @@ TEMPLATES = {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba({{ theme.bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.6);
+            background: rgba({{ theme.bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.5);
             z-index: -1;
         }
+        /* Navbar – стеклянный эффект */
         .navbar {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.85) !important;
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.55) !important;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         }
         .logo-icon {
             width: 38px;
@@ -673,17 +672,19 @@ TEMPLATES = {
         .nav-link.active::after {
             width: 100%;
         }
+        /* Карточки – стекло */
         .card {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.9);
-            backdrop-filter: blur(10px);
+            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border: 1px solid var(--border);
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border-radius: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .card:hover {
             transform: translateY(-3px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.12);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
         }
         .btn {
             border-radius: 14px;
@@ -703,71 +704,85 @@ TEMPLATES = {
         .btn-outline-secondary {
             border: 1px solid var(--border);
             color: var(--fg2);
+            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.4);
+            backdrop-filter: blur(4px);
         }
         .btn-outline-secondary:hover {
-            background: rgba(var(--accent), 0.08);
+            background: rgba(var(--accent), 0.15);
             border-color: var(--accent);
             color: var(--accent);
         }
+        /* Поля ввода – стеклянные */
         .form-control, .form-select {
-            background: {{ theme.input_bg }};
+            background: rgba({{ theme.input_bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.7);
+            backdrop-filter: blur(8px);
             color: var(--fg);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 14px;
             padding: 10px 15px;
             transition: all 0.3s;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
         }
         .form-control:focus, .form-select:focus {
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(var(--accent), 0.15);
+            box-shadow: 0 0 0 3px rgba(var(--accent), 0.2);
+            background: rgba({{ theme.input_bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.85);
         }
         .alert {
-            border-radius: 12px;
-            font-weight: 500;
-        }
-        .list-group-item {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.7);
-            border: 1px solid var(--border);
             border-radius: 16px;
-            margin-bottom: 8px;
-            backdrop-filter: blur(5px);
+            font-weight: 500;
+            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.8);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+        }
+        /* Элементы списка истории */
+        .list-group-item {
+            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            margin-bottom: 10px;
             transition: all 0.25s;
         }
         .list-group-item:hover {
-            background: rgba(var(--accent), 0.04);
-            transform: translateX(4px);
+            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.8);
+            transform: translateX(5px);
         }
         .chart-container {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.6);
-            border-radius: 20px;
-            padding: 10px;
+            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.5);
+            backdrop-filter: blur(8px);
+            border-radius: 24px;
+            padding: 15px;
         }
         .car-photo-small {
             width: 60px;
             height: 60px;
             object-fit: cover;
-            border-radius: 14px;
+            border-radius: 16px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
         .car-photo-medium {
             height: 160px;
             object-fit: cover;
-            border-radius: 16px;
+            border-radius: 20px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .input-group .btn-eye {
+            background: rgba({{ theme.input_bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.7);
             border: 1px solid var(--border);
-            background: {{ theme.input_bg }};
             color: var(--fg2);
-        }
-        .history-hidden {
-            display: none;
+            backdrop-filter: blur(4px);
         }
         .badge {
             border-radius: 20px;
             padding: 5px 12px;
             font-weight: 500;
+        }
+        footer {
+            margin-top: 3rem;
+            text-align: center;
+            padding: 1rem;
+            font-size: 0.9rem;
+            color: var(--fg2);
         }
     </style>
 </head>
@@ -809,6 +824,9 @@ TEMPLATES = {
         {% endwith %}
         {% block content %}{% endblock %}
     </div>
+    <footer>
+        {{ tr('footer') }}
+    </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
@@ -845,7 +863,7 @@ TEMPLATES = {
                     {% endfor %}
                 </select>
                 <div class="mt-2 text-center">
-                    <img id="carPhoto" src="" class="img-fluid rounded" style="max-height:200px; display:none; border-radius: 16px;">
+                    <img id="carPhoto" src="" class="img-fluid rounded" style="max-height:200px; display:none;">
                 </div>
             </div>
             <form id="calcForm">
@@ -982,7 +1000,7 @@ TEMPLATES = {
                     label: 'л/100км',
                     data: json.values,
                     borderColor: gradient,
-                    backgroundColor: 'rgba({{ theme.accent|replace("#", "")|regex_replace("(..)(..)(..)", "\\1, \\2, \\3") }}, 0.15)',
+                    backgroundColor: 'rgba({{ theme.accent|replace("#", "")|regex_replace("(..)(..)(..)", "\\1, \\2, \\3") }}, 0.2)',
                     fill: true,
                     tension: 0.4,
                     pointBackgroundColor: '{{ theme.accent }}',
