@@ -545,38 +545,46 @@ CURRENCIES = {"₽ RUB": "₽", "$ USD": "$", "€ EUR": "€"}
 
 THEMES = {
     "dark": {
-        "bg": "#0d1117",
-        "bg2": "#161b22",
-        "bg3": "#21262d",
-        "fg": "#e6edf3",
-        "fg2": "#8b949e",
-        "accent": "#58a6ff",
-        "green": "#3fb950",
-        "yellow": "#d29922",
-        "red": "#f85149",
-        "border": "#30363d",
-        "btn": "#238636",
-        "btn_hover": "#2ea043",
-        "btn2": "#21262d",
-        "btn2_hover": "#30363d",
-        "input_bg": "#0d1117"
+        "bg": "#0a0e17",
+        "bg2": "#111827",
+        "bg3": "#1f2937",
+        "fg": "#f3f4f6",
+        "fg2": "#9ca3af",
+        "accent": "#3b82f6",
+        "green": "#10b981",
+        "yellow": "#f59e0b",
+        "red": "#ef4444",
+        "border": "#374151",
+        "btn": "#3b82f6",
+        "btn_hover": "#2563eb",
+        "btn2": "#1f2937",
+        "btn2_hover": "#374151",
+        "input_bg": "#111827",
+        "nav_bg": "rgba(17, 24, 39, 0.95)",
+        "card_bg": "rgba(17, 24, 39, 0.8)",
+        "card_border": "rgba(59, 130, 246, 0.2)",
+        "glass_bg": "rgba(17, 24, 39, 0.7)"
     },
     "light": {
-        "bg": "#f8fafc",
+        "bg": "#f0f4f8",
         "bg2": "#ffffff",
         "bg3": "#e2e8f0",
-        "fg": "#0f172a",
-        "fg2": "#475569",
+        "fg": "#1e293b",
+        "fg2": "#64748b",
         "accent": "#3b82f6",
-        "green": "#22c55e",
-        "yellow": "#eab308",
+        "green": "#10b981",
+        "yellow": "#f59e0b",
         "red": "#ef4444",
-        "border": "#cbd5e1",
+        "border": "#e2e8f0",
         "btn": "#3b82f6",
         "btn_hover": "#2563eb",
         "btn2": "#e2e8f0",
         "btn2_hover": "#cbd5e1",
-        "input_bg": "#ffffff"
+        "input_bg": "#ffffff",
+        "nav_bg": "rgba(255, 255, 255, 0.95)",
+        "card_bg": "rgba(255, 255, 255, 0.9)",
+        "card_border": "rgba(59, 130, 246, 0.15)",
+        "glass_bg": "rgba(255, 255, 255, 0.8)"
     }
 }
 
@@ -590,223 +598,444 @@ TEMPLATES = {
     <title>{{ tr('app_title') }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
+            --bg: {{ theme.bg }};
             --bg2: {{ theme.bg2 }};
-            --border: {{ theme.border }};
+            --bg3: {{ theme.bg3 }};
             --fg: {{ theme.fg }};
             --fg2: {{ theme.fg2 }};
             --accent: {{ theme.accent }};
+            --accent-rgb: 59, 130, 246;
             --green: {{ theme.green }};
+            --green-rgb: 16, 185, 129;
+            --yellow: {{ theme.yellow }};
             --red: {{ theme.red }};
+            --border: {{ theme.border }};
+            --btn: {{ theme.btn }};
+            --btn-hover: {{ theme.btn_hover }};
+            --input-bg: {{ theme.input_bg }};
+            --nav-bg: {{ theme.nav_bg }};
+            --card-bg: {{ theme.card_bg }};
+            --card-border: {{ theme.card_border }};
+            --glass-bg: {{ theme.glass_bg }};
         }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            background-image: url('{{ url_for('static', filename='background.jpg') }}');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
+            background: linear-gradient(135deg, var(--bg) 0%, var(--bg2) 50%, var(--bg3) 100%);
             color: var(--fg);
             min-height: 100vh;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            position: relative;
+            overflow-x: hidden;
         }
+        
         body::before {
-            content: "";
+            content: '';
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba({{ theme.bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.5);
-            z-index: -1;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(var(--accent-rgb), 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(var(--green-rgb), 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(var(--accent-rgb), 0.05) 0%, transparent 50%);
+            animation: bgRotate 30s linear infinite;
+            z-index: 0;
         }
+        
+        @keyframes bgRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
         .navbar {
-            background: rgba(255, 255, 255, 0.75) !important;
+            background: var(--nav-bg) !important;
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            border-bottom: 1px solid var(--card-border);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
-        .navbar-light .navbar-nav .nav-link {
-            color: #333;
+        
+        .navbar .container {
+            position: relative;
         }
-        .navbar-light .navbar-nav .nav-link:hover {
-            color: #000;
-        }
-        .navbar-light .navbar-brand {
-            color: #333;
-        }
-        .logo-icon {
-            width: 38px;
-            height: 38px;
-            background: linear-gradient(135deg, var(--accent), var(--green));
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.3rem;
-            margin-right: 8px;
-            box-shadow: 0 2px 8px rgba(var(--accent), 0.4);
-            object-fit: cover;
-        }
-        .logo-icon.fallback {
-            background: linear-gradient(135deg, var(--accent), var(--green));
-        }
-        .navbar-brand {
-            font-weight: 700;
-            font-size: 1.4rem;
-            letter-spacing: -0.5px;
+        
+        .logo-container {
             display: flex;
             align-items: center;
             text-decoration: none;
         }
-        .nav-link {
-            font-weight: 500;
-            position: relative;
-            margin: 0 4px;
+        
+        .logo-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            object-fit: contain;
+            margin-right: 12px;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2));
+            transition: transform 0.3s ease;
         }
+        
+        .logo-icon:hover {
+            transform: scale(1.05);
+        }
+        
+        .logo-icon.fallback {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, var(--accent), var(--green));
+            border-radius: 12px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.4rem;
+            box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.4);
+        }
+        
+        .navbar-brand-text {
+            font-weight: 800;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--accent), var(--green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+        
+        .nav-link {
+            font-weight: 600;
+            position: relative;
+            margin: 0 8px;
+            color: var(--fg) !important;
+            transition: color 0.3s ease;
+        }
+        
+        .nav-link:hover {
+            color: var(--accent) !important;
+        }
+        
         .nav-link::after {
             content: '';
             position: absolute;
             bottom: -2px;
-            left: 0;
+            left: 50%;
             width: 0;
             height: 2px;
-            background: var(--accent);
-            transition: width 0.3s;
+            background: linear-gradient(90deg, var(--accent), var(--green));
+            transition: all 0.3s ease;
+            transform: translateX(-50%);
         }
-        .nav-link:hover::after,
-        .nav-link.active::after {
+        
+        .nav-link:hover::after {
             width: 100%;
         }
+        
         .card, .white-bg, .window {
-            background: rgba(255, 255, 255, 0.3) !important;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 24px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
+            background: var(--card-bg) !important;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 1;
         }
+        
         .card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            border-color: rgba(var(--accent-rgb), 0.3);
         }
+        
         .btn {
-            border-radius: 14px;
+            border-radius: 12px;
             font-weight: 600;
-            transition: all 0.25s;
+            transition: all 0.3s ease;
             letter-spacing: 0.3px;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
         .btn-success {
-            background-color: #22c55e;
-            border-color: #22c55e;
-        }
-        .btn-success:hover {
-            background-color: #16a34a;
-            border-color: #16a34a;
-        }
-        .btn-danger {
-            background-color: #ef4444;
-            border-color: #ef4444;
-        }
-        .btn-danger:hover {
-            background-color: #dc2626;
-            border-color: #dc2626;
-        }
-        .btn-outline-dark {
-            border: 1px solid #333;
-            color: #333;
-            background: rgba(255, 255, 255, 0.4);
-            backdrop-filter: blur(4px);
-        }
-        .btn-outline-dark:hover {
-            background: #333;
+            background: linear-gradient(135deg, var(--green), #059669);
+            border: none;
             color: white;
         }
-        .form-control, .form-select {
-            background: rgba(255, 255, 255, 0.6);
-            backdrop-filter: blur(8px);
-            color: #333;
-            border: 1px solid rgba(0,0,0,0.2);
-            border-radius: 14px;
-            padding: 10px 15px;
-            transition: all 0.3s;
+        
+        .btn-success:hover {
+            background: linear-gradient(135deg, #059669, var(--green));
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(var(--green-rgb), 0.4);
         }
-        .form-control:focus, .form-select:focus {
-            background: rgba(255, 255, 255, 0.8);
+        
+        .btn-danger {
+            background: linear-gradient(135deg, var(--red), #dc2626);
+            border: none;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #dc2626, var(--red));
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #2563eb);
+            border: none;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb, var(--accent));
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(var(--accent-rgb), 0.4);
+        }
+        
+        .btn-outline-dark {
+            border: 2px solid var(--border);
+            color: var(--fg);
+            background: transparent;
+            backdrop-filter: blur(10px);
+        }
+        
+        .btn-outline-dark:hover {
+            background: var(--accent);
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
-            color: #111;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(var(--accent-rgb), 0.3);
         }
+        
+        .form-control, .form-select {
+            background: var(--input-bg);
+            color: var(--fg);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        .form-control:focus, .form-select:focus {
+            background: var(--input-bg);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.1);
+            color: var(--fg);
+        }
+        
+        .form-control::placeholder {
+            color: var(--fg2);
+        }
+        
         .alert {
             border-radius: 16px;
             font-weight: 500;
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(0,0,0,0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--card-border);
+            animation: slideIn 0.3s ease;
         }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .alert-success {
+            background: rgba(var(--green-rgb), 0.1);
+            border-color: rgba(var(--green-rgb), 0.3);
+            color: var(--green);
+        }
+        
+        .alert-danger {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: var(--red);
+        }
+        
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: var(--yellow);
+        }
+        
         .list-group-item {
-            background: rgba(255, 255, 255, 0.5);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(0,0,0,0.1);
-            border-radius: 20px;
-            margin-bottom: 10px;
-            transition: all 0.25s;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            margin-bottom: 12px;
+            transition: all 0.3s ease;
         }
+        
         .list-group-item:hover {
-            background: rgba(255, 255, 255, 0.7);
+            background: var(--card-bg);
             transform: translateX(5px);
+            border-color: rgba(var(--accent-rgb), 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         }
+        
         .chart-container {
-            background: rgba(255, 255, 255, 0.4);
-            backdrop-filter: blur(8px);
-            border-radius: 24px;
-            padding: 15px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 20px;
+            border: 1px solid var(--card-border);
         }
+        
         .car-photo-small {
-            width: 60px;
-            height: 60px;
+            width: 65px;
+            height: 65px;
+            object-fit: cover;
+            border-radius: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border: 2px solid var(--card-border);
+        }
+        
+        .car-photo-medium {
+            height: 180px;
             object-fit: cover;
             border-radius: 16px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border: 2px solid var(--card-border);
         }
-        .car-photo-medium {
-            height: 160px;
-            object-fit: cover;
-            border-radius: 20px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
+        
         .input-group .btn-eye {
-            background: rgba(255, 255, 255, 0.6);
-            border: 1px solid rgba(0,0,0,0.2);
-            color: #333;
-            backdrop-filter: blur(4px);
+            background: var(--input-bg);
+            border: 2px solid var(--border);
+            color: var(--fg2);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
         }
+        
+        .input-group .btn-eye:hover {
+            background: var(--border);
+            color: var(--fg);
+        }
+        
         .badge {
             border-radius: 20px;
-            padding: 5px 12px;
-            font-weight: 500;
+            padding: 6px 14px;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent), #2563eb);
+            color: white;
         }
+        
         .history-hidden {
             display: none;
         }
+        
         footer {
-            margin-top: 3rem;
+            margin-top: 4rem;
             text-align: center;
-            padding: 1rem;
+            padding: 2rem;
             font-size: 0.9rem;
             color: var(--fg2);
+            position: relative;
+            z-index: 1;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+        
+        h2 {
+            background: linear-gradient(135deg, var(--fg), var(--fg2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: var(--fg2);
+            border-radius: 12px;
+            padding: 10px 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tabs .nav-link.active {
+            background: linear-gradient(135deg, var(--accent), #2563eb);
+            color: white;
+            box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.3);
+        }
+        
+        .nav-tabs .nav-link:hover:not(.active) {
+            color: var(--fg);
+            background: var(--glass-bg);
+        }
+        
+        .form-check-input:checked {
+            background-color: var(--accent);
+            border-color: var(--accent);
+        }
+        
+        .container {
+            position: relative;
+            z-index: 1;
+        }
+        
+        @media (max-width: 768px) {
+            .navbar-brand-text {
+                font-size: 1.2rem;
+            }
+            .logo-icon {
+                width: 35px;
+                height: 35px;
+            }
+            .card {
+                border-radius: 16px;
+            }
         }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg sticky-top navbar-light">
+    <nav class="navbar navbar-expand-lg">
         <div class="container">
-            <a class="navbar-brand" href="/">
+            <a class="logo-container" href="/">
                 <img src="{{ url_for('static', filename='logo.png') }}" class="logo-icon" alt="Logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                <span class="logo-icon fallback" style="display:none;"><i class="fas fa-gas-pump"></i></span>
-                {{ tr('app_title') }}
+                <span class="logo-icon fallback"><i class="fas fa-gas-pump"></i></span>
+                <span class="navbar-brand-text">{{ tr('app_title') }}</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -1078,14 +1307,12 @@ TEMPLATES = {
         if (!btn) return;
 
         if (currentVisible >= total) {
-            // Свернуть: оставить только первые 10
             const newVisible = 10;
             for (let i = newVisible; i < currentVisible; i++) {
                 if (items[i]) items[i].classList.add('history-hidden');
             }
             currentVisible = newVisible;
         } else {
-            // Показать ещё 10
             const nextLimit = Math.min(currentVisible + 10, total);
             for (let i = currentVisible; i < nextLimit; i++) {
                 if (items[i]) items[i].classList.remove('history-hidden');
@@ -1093,7 +1320,6 @@ TEMPLATES = {
             currentVisible = nextLimit;
         }
 
-        // Обновить текст кнопки
         btn.textContent = (currentVisible >= total) ? '{{ tr("show_less") }}' : '{{ tr("show_more") }}';
     };
 </script>
@@ -1107,7 +1333,7 @@ TEMPLATES = {
                 {% if entry.photo %}
                 <img src="{{ url_for('static', filename='uploads/' + entry.photo) }}" class="car-photo-small me-3">
                 {% else %}
-                <div class="car-photo-small me-3 bg-secondary d-flex align-items-center justify-content-center text-white" style="min-width:60px;">
+                <div class="car-photo-small me-3 bg-secondary d-flex align-items-center justify-content-center text-white" style="min-width:65px;">
                     <i class="fas fa-car"></i>
                 </div>
                 {% endif %}
@@ -1172,7 +1398,7 @@ TEMPLATES = {
                                 </button>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-outline-dark w-100">{{ tr('login_account') }}</button>
+                        <button type="submit" class="btn btn-primary w-100">{{ tr('login_account') }}</button>
                     </form>
                 </div>
                 <div class="tab-pane fade" id="register-pane" role="tabpanel">
@@ -1200,7 +1426,7 @@ TEMPLATES = {
                                 </button>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-outline-dark w-100">{{ tr('create_account') }}</button>
+                        <button type="submit" class="btn btn-primary w-100">{{ tr('create_account') }}</button>
                     </form>
                 </div>
             </div>
@@ -1257,7 +1483,7 @@ TEMPLATES = {
                 </button>
             </div>
         </div>
-        <button type="submit" class="btn btn-outline-dark">{{ tr('change_password_btn') }}</button>
+        <button type="submit" class="btn btn-primary">{{ tr('change_password_btn') }}</button>
     </form>
 </div>
 
@@ -1327,7 +1553,7 @@ async function deleteCar(name) {
             {% if car.photo %}
             <img src="{{ url_for('static', filename='uploads/' + car.photo) }}" class="car-photo-medium w-100 mb-2">
             {% else %}
-            <div class="bg-secondary d-flex align-items-center justify-content-center car-photo-medium w-100 mb-2" style="height:160px;">
+            <div class="bg-secondary d-flex align-items-center justify-content-center car-photo-medium w-100 mb-2" style="height:180px;">
                 <i class="fas fa-car fa-3x text-white"></i>
             </div>
             {% endif %}
@@ -1354,7 +1580,7 @@ async function deleteCar(name) {
     "settings.html": r'''{% extends "base.html" %}
 {% block content %}
 <h2 class="mb-4"><i class="fas fa-sliders-h me-2"></i>{{ tr('settings_title') }}</h2>
-<div class="card p-4" style="background: transparent !important;">
+<div class="card p-4">
     <form id="settingsForm" onsubmit="submitSettings(event)">
         <div class="mb-4">
             <label class="form-label fw-bold"><i class="fas fa-globe me-2"></i>{{ tr('language_setting') }}</label>
