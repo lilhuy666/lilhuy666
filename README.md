@@ -580,7 +580,7 @@ THEMES = {
     }
 }
 
-# ---------- Шаблоны с полупрозрачным (Glassmorphism) дизайном ----------
+# ---------- Шаблоны ----------
 TEMPLATES = {
     "base.html": r'''<!DOCTYPE html>
 <html lang="{{ lang }}">
@@ -609,7 +609,6 @@ TEMPLATES = {
             min-height: 100vh;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
-        /* Полупрозрачная подложка поверх фона */
         body::before {
             content: "";
             position: fixed;
@@ -620,13 +619,21 @@ TEMPLATES = {
             background: rgba({{ theme.bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.5);
             z-index: -1;
         }
-        /* Navbar – стеклянный эффект */
         .navbar {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.55) !important;
+            background: rgba(255, 255, 255, 0.75) !important;
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        .navbar-light .navbar-nav .nav-link {
+            color: #333;
+        }
+        .navbar-light .navbar-nav .nav-link:hover {
+            color: #000;
+        }
+        .navbar-light .navbar-brand {
+            color: #333;
         }
         .logo-icon {
             width: 38px;
@@ -672,12 +679,11 @@ TEMPLATES = {
         .nav-link.active::after {
             width: 100%;
         }
-        /* Карточки – стекло */
-        .card {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.65);
+        .card, .white-bg, .window {
+            background: rgba(255, 255, 255, 0.3) !important;
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
+            border: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 24px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             transition: transform 0.2s, box-shadow 0.2s;
@@ -692,63 +698,68 @@ TEMPLATES = {
             transition: all 0.25s;
             letter-spacing: 0.3px;
         }
-        .btn-primary {
-            background: linear-gradient(135deg, var(--accent), {{ theme.btn_hover }});
-            border: none;
-            box-shadow: 0 4px 12px rgba(var(--accent), 0.3);
+        .btn-success {
+            background-color: #22c55e;
+            border-color: #22c55e;
         }
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 18px rgba(var(--accent), 0.4);
+        .btn-success:hover {
+            background-color: #16a34a;
+            border-color: #16a34a;
         }
-        .btn-outline-secondary {
-            border: 1px solid var(--border);
-            color: var(--fg2);
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.4);
+        .btn-danger {
+            background-color: #ef4444;
+            border-color: #ef4444;
+        }
+        .btn-danger:hover {
+            background-color: #dc2626;
+            border-color: #dc2626;
+        }
+        .btn-outline-dark {
+            border: 1px solid #333;
+            color: #333;
+            background: rgba(255, 255, 255, 0.4);
             backdrop-filter: blur(4px);
         }
-        .btn-outline-secondary:hover {
-            background: rgba(var(--accent), 0.15);
-            border-color: var(--accent);
-            color: var(--accent);
+        .btn-outline-dark:hover {
+            background: #333;
+            color: white;
         }
-        /* Поля ввода – стеклянные */
         .form-control, .form-select {
-            background: rgba({{ theme.input_bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.7);
+            background: rgba(255, 255, 255, 0.6);
             backdrop-filter: blur(8px);
-            color: var(--fg);
-            border: 1px solid var(--border);
+            color: #333;
+            border: 1px solid rgba(0,0,0,0.2);
             border-radius: 14px;
             padding: 10px 15px;
             transition: all 0.3s;
         }
         .form-control:focus, .form-select:focus {
+            background: rgba(255, 255, 255, 0.8);
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(var(--accent), 0.2);
-            background: rgba({{ theme.input_bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.85);
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+            color: #111;
         }
         .alert {
             border-radius: 16px;
             font-weight: 500;
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.8);
+            background: rgba(255, 255, 255, 0.7);
             backdrop-filter: blur(8px);
-            border: 1px solid var(--border);
+            border: 1px solid rgba(0,0,0,0.1);
         }
-        /* Элементы списка истории */
         .list-group-item {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.6);
+            background: rgba(255, 255, 255, 0.5);
             backdrop-filter: blur(8px);
-            border: 1px solid var(--border);
+            border: 1px solid rgba(0,0,0,0.1);
             border-radius: 20px;
             margin-bottom: 10px;
             transition: all 0.25s;
         }
         .list-group-item:hover {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.8);
+            background: rgba(255, 255, 255, 0.7);
             transform: translateX(5px);
         }
         .chart-container {
-            background: rgba({{ theme.bg2|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.5);
+            background: rgba(255, 255, 255, 0.4);
             backdrop-filter: blur(8px);
             border-radius: 24px;
             padding: 15px;
@@ -767,15 +778,18 @@ TEMPLATES = {
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .input-group .btn-eye {
-            background: rgba({{ theme.input_bg|replace('#', '')|regex_replace('(..)(..)(..)', '\\1, \\2, \\3') }}, 0.7);
-            border: 1px solid var(--border);
-            color: var(--fg2);
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0,0,0,0.2);
+            color: #333;
             backdrop-filter: blur(4px);
         }
         .badge {
             border-radius: 20px;
             padding: 5px 12px;
             font-weight: 500;
+        }
+        .history-hidden {
+            display: none;
         }
         footer {
             margin-top: 3rem;
@@ -787,7 +801,7 @@ TEMPLATES = {
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg sticky-top">
+    <nav class="navbar navbar-expand-lg sticky-top navbar-light">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <img src="{{ url_for('static', filename='logo.png') }}" class="logo-icon" alt="Logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
@@ -867,6 +881,16 @@ TEMPLATES = {
                 </div>
             </div>
             <form id="calcForm">
+                <div class="mb-3">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="mode" value="consumption" checked>
+                        <label class="form-check-label">{{ tr('calc_mode_consumption') }}</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="mode" value="cost">
+                        <label class="form-check-label">{{ tr('calc_mode_cost') }}</label>
+                    </div>
+                </div>
                 <div class="mb-2">
                     <label class="form-label"><i class="fas fa-road me-1"></i>{{ tr('distance_label') }}, км</label>
                     <input type="number" step="any" name="distance" id="distance" class="form-control" required>
@@ -883,18 +907,8 @@ TEMPLATES = {
                     <label class="form-label"><i class="fas fa-coins me-1"></i>{{ tr('fuel_price') }}, {{ currency_symbol }}/л</label>
                     <input type="number" step="any" name="price" id="price" class="form-control" required>
                 </div>
-                <div class="mb-3">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="mode" value="consumption" checked>
-                        <label class="form-check-label">{{ tr('calc_mode_consumption') }}</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="mode" value="cost">
-                        <label class="form-check-label">{{ tr('calc_mode_cost') }}</label>
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary me-2"><i class="fas fa-play me-1"></i>{{ tr('calculate') }}</button>
-                <button type="button" id="clearBtn" class="btn btn-outline-secondary"><i class="fas fa-undo me-1"></i>{{ tr('clear') }}</button>
+                <button type="submit" class="btn btn-success me-2"><i class="fas fa-play me-1"></i>{{ tr('calculate') }}</button>
+                <button type="button" id="clearBtn" class="btn btn-danger"><i class="fas fa-undo me-1"></i>{{ tr('clear') }}</button>
             </form>
             <div id="result" class="mt-3 alert alert-success" style="display:none;"></div>
         </div>
@@ -923,7 +937,7 @@ TEMPLATES = {
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4><i class="fas fa-history me-2"></i>{{ tr('history_title') }}</h4>
         {% if user %}
-        <button id="clearHistoryBtn" class="btn btn-outline-danger" onclick="clearAllHistory()"><i class="fas fa-trash-alt me-1"></i>{{ tr('clear_all') }}</button>
+        <button id="clearHistoryBtn" class="btn btn-outline-dark" onclick="clearAllHistory()"><i class="fas fa-trash-alt me-1"></i>{{ tr('clear_all') }}</button>
         {% endif %}
     </div>
     <div id="historyContainer">
@@ -1027,11 +1041,13 @@ TEMPLATES = {
     loadChart();
     document.getElementById('chartDays').addEventListener('change', () => loadChart(document.getElementById('carSelect').value));
 
+    let currentVisible = 10;
     async function loadHistory() {
         const car = document.getElementById('carSelect').value;
         const res = await fetch(`/history_html?car=${encodeURIComponent(car)}`);
         const html = await res.text();
         document.getElementById('historyContainer').innerHTML = html;
+        currentVisible = 10;
     }
 
     async function clearAllHistory() {
@@ -1055,17 +1071,31 @@ TEMPLATES = {
         });
     }
 
-    function toggleHistory() {
-        const items = document.querySelectorAll('.history-item.history-hidden');
+    window.toggleHistory = function() {
+        const items = document.querySelectorAll('.history-item');
+        const total = items.length;
         const btn = document.getElementById('toggleHistoryBtn');
-        if (items.length > 0 && items[0].style.display !== 'block') {
-            items.forEach(item => item.style.display = 'block');
-            btn.textContent = '{{ tr("show_less") }}';
+        if (!btn) return;
+
+        if (currentVisible >= total) {
+            // Свернуть: оставить только первые 10
+            const newVisible = 10;
+            for (let i = newVisible; i < currentVisible; i++) {
+                if (items[i]) items[i].classList.add('history-hidden');
+            }
+            currentVisible = newVisible;
         } else {
-            items.forEach(item => item.style.display = 'none');
-            btn.textContent = '{{ tr("show_more") }}';
+            // Показать ещё 10
+            const nextLimit = Math.min(currentVisible + 10, total);
+            for (let i = currentVisible; i < nextLimit; i++) {
+                if (items[i]) items[i].classList.remove('history-hidden');
+            }
+            currentVisible = nextLimit;
         }
-    }
+
+        // Обновить текст кнопки
+        btn.textContent = (currentVisible >= total) ? '{{ tr("show_less") }}' : '{{ tr("show_more") }}';
+    };
 </script>
 {% endblock %}''',
 
@@ -1073,7 +1103,7 @@ TEMPLATES = {
     {% if history %}
         <div class="list-group" id="historyList">
         {% for entry in history %}
-            <div class="list-group-item d-flex align-items-center p-3 history-item {% if loop.index > 5 %}history-hidden{% endif %}">
+            <div class="list-group-item d-flex align-items-center p-3 history-item {% if loop.index > 10 %}history-hidden{% endif %}">
                 {% if entry.photo %}
                 <img src="{{ url_for('static', filename='uploads/' + entry.photo) }}" class="car-photo-small me-3">
                 {% else %}
@@ -1099,9 +1129,9 @@ TEMPLATES = {
             </div>
         {% endfor %}
         </div>
-        {% if history|length > 5 %}
+        {% if history|length > 10 %}
         <div class="text-center mt-3">
-            <button id="toggleHistoryBtn" class="btn btn-outline-secondary" onclick="toggleHistory()">{{ tr('show_more') }}</button>
+            <button id="toggleHistoryBtn" class="btn btn-outline-dark" onclick="toggleHistory()">{{ tr('show_more') }}</button>
         </div>
         {% endif %}
     {% else %}
@@ -1142,7 +1172,7 @@ TEMPLATES = {
                                 </button>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">{{ tr('login_account') }}</button>
+                        <button type="submit" class="btn btn-outline-dark w-100">{{ tr('login_account') }}</button>
                     </form>
                 </div>
                 <div class="tab-pane fade" id="register-pane" role="tabpanel">
@@ -1170,7 +1200,7 @@ TEMPLATES = {
                                 </button>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">{{ tr('create_account') }}</button>
+                        <button type="submit" class="btn btn-outline-dark w-100">{{ tr('create_account') }}</button>
                     </form>
                 </div>
             </div>
@@ -1184,9 +1214,12 @@ TEMPLATES = {
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="fas fa-user-circle me-2"></i>{{ tr('profile') }}</h2>
     <div class="d-flex gap-2">
-        <a href="/logout" class="btn btn-outline-secondary"><i class="fas fa-sign-out-alt me-1"></i>{{ tr('logout') }}</a>
+        <button id="togglePasswordBtn" class="btn btn-outline-dark" onclick="toggleChangePassword()">
+            <i class="fas fa-lock me-1"></i>{{ tr('change_password') }}
+        </button>
+        <a href="/logout" class="btn btn-outline-dark"><i class="fas fa-sign-out-alt me-1"></i>{{ tr('logout') }}</a>
         <form method="post" action="/delete_account" onsubmit="return confirm('{{ tr('delete_account_msg') }}')" class="m-0">
-            <button class="btn btn-outline-danger"><i class="fas fa-user-times me-1"></i>{{ tr('delete_account') }}</button>
+            <button class="btn btn-danger"><i class="fas fa-user-times me-1"></i>{{ tr('delete_account') }}</button>
         </form>
     </div>
 </div>
@@ -1194,7 +1227,7 @@ TEMPLATES = {
     <p><i class="fas fa-envelope me-2"></i><strong>{{ user }}</strong></p>
 </div>
 
-<div class="card p-4 mb-4">
+<div class="card p-4 mb-4" id="changePasswordCard" style="display:none;">
     <h5><i class="fas fa-lock me-2"></i>{{ tr('change_password') }}</h5>
     <form method="post" action="/change_password" onsubmit="submitChangePassword(event)">
         <div class="mb-2">
@@ -1224,7 +1257,7 @@ TEMPLATES = {
                 </button>
             </div>
         </div>
-        <button type="submit" class="btn btn-primary">{{ tr('change_password_btn') }}</button>
+        <button type="submit" class="btn btn-outline-dark">{{ tr('change_password_btn') }}</button>
     </form>
 </div>
 
@@ -1234,6 +1267,15 @@ TEMPLATES = {
 {% endblock %}
 {% block scripts %}
 <script>
+function toggleChangePassword() {
+    const card = document.getElementById('changePasswordCard');
+    if (card.style.display === 'none') {
+        card.style.display = 'block';
+    } else {
+        card.style.display = 'none';
+    }
+}
+
 async function submitChangePassword(e) {
     e.preventDefault();
     const form = e.target;
@@ -1265,6 +1307,19 @@ async function deleteCar(name) {
 {% endblock %}''',
 
     "profile_cars.html": r'''<h5><i class="fas fa-car me-2"></i>{{ tr('my_cars') }}</h5>
+<h6 class="mt-2"><i class="fas fa-plus-circle me-1"></i>{{ tr('add_car_title') }}</h6>
+<form onsubmit="addCar(event)" enctype="multipart/form-data" class="row g-2 mb-4">
+    <div class="col-md-5">
+        <input type="text" name="name" class="form-control" placeholder="{{ tr('car_name') }}" required>
+    </div>
+    <div class="col-md-5">
+        <input type="file" name="photo" class="form-control" accept="image/*">
+    </div>
+    <div class="col-md-2">
+        <button type="submit" class="btn btn-success w-100">{{ tr('save') }}</button>
+    </div>
+</form>
+
 <div class="row">
     {% for car in cars %}
     <div class="col-md-4 mb-4">
@@ -1294,37 +1349,13 @@ async function deleteCar(name) {
     {% else %}
     <div class="col-12"><p>{{ tr('no_cars') }}</p></div>
     {% endfor %}
-</div>
-
-<h6 class="mt-3"><i class="fas fa-plus-circle me-1"></i>{{ tr('add_car_title') }}</h6>
-<form onsubmit="addCar(event)" enctype="multipart/form-data" class="row g-2">
-    <div class="col-md-5">
-        <input type="text" name="name" class="form-control" placeholder="{{ tr('car_name') }}" required>
-    </div>
-    <div class="col-md-5">
-        <input type="file" name="photo" class="form-control" accept="image/*">
-    </div>
-    <div class="col-md-2">
-        <button type="submit" class="btn btn-primary w-100">{{ tr('save') }}</button>
-    </div>
-</form>''',
+</div>''',
 
     "settings.html": r'''{% extends "base.html" %}
 {% block content %}
 <h2 class="mb-4"><i class="fas fa-sliders-h me-2"></i>{{ tr('settings_title') }}</h2>
-<div class="card p-4">
+<div class="card p-4" style="background: transparent !important;">
     <form id="settingsForm" onsubmit="submitSettings(event)">
-        <div class="mb-4">
-            <label class="form-label fw-bold"><i class="fas fa-palette me-2"></i>{{ tr('theme') }}</label>
-            <div class="form-check">
-                <input class="form-check-input" type="radio" name="theme" value="light" id="themeLight" {% if settings.theme == 'light' %}checked{% endif %}>
-                <label class="form-check-label" for="themeLight"><i class="fas fa-sun me-1"></i>{{ tr('light_theme') }}</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="radio" name="theme" value="dark" id="themeDark" {% if settings.theme == 'dark' %}checked{% endif %}>
-                <label class="form-check-label" for="themeDark"><i class="fas fa-moon me-1"></i>{{ tr('dark_theme') }}</label>
-            </div>
-        </div>
         <div class="mb-4">
             <label class="form-label fw-bold"><i class="fas fa-globe me-2"></i>{{ tr('language_setting') }}</label>
             <select name="language" class="form-select">
@@ -1674,10 +1705,9 @@ def settings():
         flash(tr('login_for_history'), 'warning')
         return redirect(url_for('auth'))
     if request.method == 'POST':
-        theme = request.form.get('theme', 'light')
+        theme = session.get('theme', 'light')
         lang = request.form.get('language', 'ru')
         currency = request.form.get('currency', '₽ RUB')
-        session['theme'] = theme
         session['language'] = lang
         session['currency'] = currency
         db_update_settings(session['user'], theme, lang, currency)
@@ -1699,6 +1729,3 @@ if __name__ == '__main__':
         app.run(debug=True)
     else:
         print("Не удалось подключиться к PostgreSQL. Проверьте настройки DB_CONFIG.")
-
-        
-Измени стиль всех элементов с классом card, white-bg, window — установи для них полупрозрачный белый фон #ffffff с alpha-каналом 0.5.
