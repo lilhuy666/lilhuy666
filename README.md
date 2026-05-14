@@ -1699,3 +1699,6 @@ if __name__ == '__main__':
         app.run(debug=True)
     else:
         print("Не удалось подключиться к PostgreSQL. Проверьте настройки DB_CONFIG.")
+
+        
+Измени стиль всех элементов с классом card, white-bg, window — установи для них полупрозрачный белый фон #ffffff с alpha-каналом 0.5.
