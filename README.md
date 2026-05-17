@@ -1,23 +1,18 @@
 import os, hashlib, re
 from datetime import datetime
 from contextlib import contextmanager
-
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.utils import secure_filename
 import psycopg2
 from psycopg2 import pool
 from jinja2 import DictLoader
-
-# Пробуем Pillow для сжатия фото, но если нет — работаем без него
 try:
     from PIL import Image
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
 
-# ═════════════════════════════════════════════════════════════════════
 # НАСТРОЙКИ ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ
-# ═════════════════════════════════════════════════════════════════════
 DB_CONFIG = {
     'dbname': 'fuel_calc',
     'user': 'postgres',
@@ -30,10 +25,14 @@ connection_pool = None
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'ico'}
 MAX_IMAGE_SIZE = (1200, 1200)
 
-# ═════════════════════════════════════════════════════════════════════
-# ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
-# ═════════════════════════════════════════════════════════════════════
+# Курсы валют (примерные, можно обновлять)
+EXCHANGE_RATES = {
+    '₽ RUB': 1.0,
+    '$ USD': 0.011,  # 1 RUB ≈ 0.011 USD
+    '€ EUR': 0.010   # 1 RUB ≈ 0.010 EUR
+}
 
+# ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
 def init_db_pool():
     """Создаёт пул соединений с PostgreSQL (от 1 до 20 соединений)"""
     global connection_pool
@@ -65,7 +64,7 @@ def get_db_connection():
 def db_exec(sql, params=None, fetch=False):
     """
     Единая функция для всех SQL-запросов.
-    sql    – строка запроса
+    sql– строка запроса
     params – параметры (кортеж)
     fetch  – True, если нужен результат SELECT
     """
@@ -116,11 +115,7 @@ def create_tables():
         conn.commit()
     print("✓ Таблицы БД проверены/созданы")
 
-
-# ═════════════════════════════════════════════════════════════════════
 # РАБОТА С ИЗОБРАЖЕНИЯМИ
-# ═════════════════════════════════════════════════════════════════════
-
 def allowed_file(filename):
     """Проверяет расширение файла"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -165,13 +160,8 @@ def save_car_photo(photo_file, old_photo_path=None):
     process_image(file_path)
     return new_name
 
-
-# ═════════════════════════════════════════════════════════════════════
 # CRUD — ОПЕРАЦИИ С БАЗОЙ ДАННЫХ
-# ═════════════════════════════════════════════════════════════════════
-
 # --- Пользователи ---
-
 def db_create_user(email, pw_hash):
     db_exec("INSERT INTO users VALUES (%s,%s)", (email, pw_hash))
     db_exec("INSERT INTO settings (email) VALUES (%s)", (email,))
@@ -196,7 +186,6 @@ def db_delete_user(email):
     db_exec("DELETE FROM users WHERE email=%s", (email,))
 
 # --- Автомобили ---
-
 def db_get_cars(email):
     rows = db_exec(
         "SELECT name, photo_path, avg_consumption FROM cars WHERE email=%s ORDER BY id",
@@ -233,7 +222,6 @@ def db_update_avg(email, car_name):
                 (round(rows[0][0], 2), email, car_name))
 
 # --- История ---
-
 def db_add_history(email, entry):
     db_exec(
         """INSERT INTO history (email,car_name,distance,fuel,price,currency,consumption,cost,date)
@@ -290,11 +278,7 @@ def db_get_car_stats(email, car_name):
                 'avg_consumption': round(rows[0][2], 2)}
     return {'total_distance': 0, 'total_cost': 0, 'avg_consumption': 0}
 
-
-# ═════════════════════════════════════════════════════════════════════
 # ЛОКАЛИЗАЦИЯ (русский + английский)
-# ═════════════════════════════════════════════════════════════════════
-
 TRANSLATIONS = {
     "ru": {
         "app_title": "FullCalcPro",
@@ -525,11 +509,7 @@ TRANSLATIONS = {
 
 CURRENCIES = {"₽ RUB": "₽", "$ USD": "$", "€ EUR": "€"}
 
-
-# ═════════════════════════════════════════════════════════════════════
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-# ═════════════════════════════════════════════════════════════════════
-
 def tr(key):
     """Возвращает перевод ключа на текущий язык сессии"""
     lang = session.get('language', 'ru')
@@ -540,6 +520,15 @@ def hash_pw(pw):
 
 def is_valid_email(e):
     return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", e) is not None
+
+def convert_currency(amount, from_currency, to_currency):
+    """Конвертирует сумму из одной валюты в другую через рубли"""
+    if from_currency == to_currency:
+        return amount
+    # Переводим в рубли
+    rub_amount = amount / EXCHANGE_RATES.get(from_currency, 1.0)
+    # Переводим в целевую валюту
+    return round(rub_amount * EXCHANGE_RATES.get(to_currency, 1.0), 2)
 
 def render_profile_cars():
     """Рендерит блок с авто для AJAX-обновления в профиле"""
@@ -552,11 +541,7 @@ def render_profile_cars():
                            lang=session.get('language', 'ru'), user=session['user'],
                            currency_symbol=CURRENCIES.get(session.get('currency', '₽ RUB'), '₽'))
 
-
-# ═════════════════════════════════════════════════════════════════════
 # HTML-ШАБЛОНЫ (хранятся в словаре, рендерятся через DictLoader)
-# ═════════════════════════════════════════════════════════════════════
-
 TEMPLATES = {
 
     "base.html": r'''<!DOCTYPE html><html lang="{{ lang }}">
@@ -615,6 +600,10 @@ TEMPLATES = {
     .feature-card i{font-size:1.5rem;color:#0071e3;margin-bottom:0.5rem}
     .feature-card h6{font-size:1rem;margin-bottom:0.4rem}
     .feature-card p{font-size:0.85rem;color:rgba(255,255,255,0.75);margin:0}
+    .nav-tabs .nav-link{color:rgba(255,255,255,0.7)!important;font-weight:600;border:none;padding:10px 20px;border-radius:12px;margin-right:5px}
+    .nav-tabs .nav-link.active{color:white!important;background:rgba(255,255,255,0.2)!important;border:none}
+    .nav-tabs .nav-link:hover{color:white!important;background:rgba(255,255,255,0.15)!important}
+    .nav-tabs{border-bottom:1px solid rgba(255,255,255,0.2)!important}
 </style></head>
 <body>
 <nav class="navbar navbar-expand-lg sticky-top"><div class="container">
@@ -669,7 +658,7 @@ document.getElementById('confirmModalBtn').addEventListener('click',()=>{if(conf
 {% else %}<div class="lock-overlay"><div class="lock-content"><i class="fas fa-lock fa-3x mb-3"></i><p>{{ tr('lock_history') }}</p><a href="/auth" class="btn btn-primary">{{ tr('login_register') }}</a></div></div>{% endif %}
 </div></div>{% endblock %}
 {% block scripts %}<script>
-const INIT=10;let current=INIT,isLoggedIn={{ 'true' if user else 'false' }},isCalc=false;
+const INIT=10;let current=INIT,isLoggedIn={{ 'true' if user else 'false' }},isCalc=false,currentCurrency='{{ currency_symbol }}';
 document.querySelectorAll('.mode-btn').forEach(b=>{b.addEventListener('click',function(){document.querySelectorAll('.mode-btn').forEach(x=>x.classList.remove('active'));this.classList.add('active');let m=this.dataset.mode;document.getElementById('modeInput').value=m;document.getElementById('fuelField').style.display=m==='consumption'?'block':'none';document.getElementById('avgField').style.display=m==='consumption'?'none':'block';if(m==='cost'){let o=document.getElementById('carSelect'),v=o.options[o.selectedIndex].getAttribute('data-avg');if(v)document.getElementById('avgConsumption').value=v}})});
 document.getElementById('carSelect').addEventListener('change',function(){let o=this.options[this.selectedIndex],u=o.getAttribute('data-photo'),img=document.getElementById('carPhotoPreview');img.style.display=u&&u!=='None'?'block':'none';if(u&&u!=='None')img.src=u;if(document.getElementById('modeInput').value==='cost'){let v=o.getAttribute('data-avg');if(v)document.getElementById('avgConsumption').value=v}if(isLoggedIn)loadHistory(this.value)});
 document.getElementById('calcForm').addEventListener('submit',async function(e){e.preventDefault();if(isCalc)return;let btn=document.getElementById('calculateBtn');isCalc=true;btn.disabled=true;btn.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>';let fd=new FormData(this);fd.append('car',isLoggedIn?document.getElementById('carSelect').value:'{{ tr("no_car") }}');try{let r=await fetch('/calculate',{method:'POST',body:fd});let d=await r.json(),div=document.getElementById('result');if(d.error){div.className='mt-3 alert alert-danger result-alert';div.innerText=d.error}else{div.className='mt-3 alert alert-success result-alert';div.innerText=d.mode==='consumption'?`{{ tr('fuel_consumption') }}: ${d.consumption} {{ tr('fuel_unit') }}/100{{ tr('km') }}, {{ tr('cost') }}: ${d.cost} ${d.currency}`:`{{ tr('trip_cost') }}: ${d.cost} ${d.currency}`}div.style.display='block';if(isLoggedIn)loadHistory(document.getElementById('carSelect').value)}catch(err){console.error(err)}finally{isCalc=false;btn.disabled=false;btn.innerHTML='{{ tr("calculate") }}'}});
@@ -700,13 +689,13 @@ new MutationObserver(()=>apply()).observe(document.getElementById('historyContai
     # ── Авторизация ──
     "auth.html": r'''{% extends "base.html" %}{% block content %}<div class="row justify-content-center"><div class="col-md-5"><div class="card p-4">
 <h2 class="mb-4 text-center fw-bold">{{ tr('login_register') }}</h2>
-<ul class="nav nav-tabs mb-3" style="border-bottom:1px solid rgba(255,255,255,0.2)"><li><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#login-pane" style="font-weight:600;color:white;background:rgba(255,255,255,0.1)">{{ tr('login') }}</button></li><li><button class="nav-link" data-bs-toggle="tab" data-bs-target="#register-pane" style="font-weight:600;color:white">{{ tr('register') }}</button></li></ul>
-<div class="tab-content"><div class="tab-pane fade show active" id="login-pane">
+<ul class="nav nav-tabs mb-3" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#login-pane" type="button" role="tab">{{ tr('login') }}</button></li><li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#register-pane" type="button" role="tab">{{ tr('register') }}</button></li></ul>
+<div class="tab-content"><div class="tab-pane fade show active" id="login-pane" role="tabpanel">
 <form method="post" action="/auth"><input type="hidden" name="form_type" value="login">
 <div class="mb-3"><label class="form-label fw-semibold">{{ tr('email') }}</label><input type="email" name="email" class="form-control" required></div>
 <div class="mb-3"><label class="form-label fw-semibold">{{ tr('password') }}</label><div class="input-group"><input type="password" name="password" class="form-control" required><button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)" style="border-radius:0 12px 12px 0"><i class="fas fa-eye"></i></button></div></div>
 <button type="submit" class="btn btn-primary w-100">{{ tr('login_account') }}</button></form></div>
-<div class="tab-pane fade" id="register-pane"><form method="post" action="/auth"><input type="hidden" name="form_type" value="register">
+<div class="tab-pane fade" id="register-pane" role="tabpanel"><form method="post" action="/auth"><input type="hidden" name="form_type" value="register">
 <div class="mb-3"><label class="form-label fw-semibold">{{ tr('email') }}</label><input type="email" name="email" class="form-control" required></div>
 <div class="mb-3"><label class="form-label fw-semibold">{{ tr('password') }}</label><div class="input-group"><input type="password" name="password" class="form-control" required><button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)" style="border-radius:0 12px 12px 0"><i class="fas fa-eye"></i></button></div></div>
 <div class="mb-3"><label class="form-label fw-semibold">{{ tr('repeat_password') }}</label><div class="input-group"><input type="password" name="password2" class="form-control" required><button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)" style="border-radius:0 12px 12px 0"><i class="fas fa-eye"></i></button></div></div>
@@ -800,11 +789,7 @@ function deleteCar(name){showConfirm('{{ tr("delete_car_confirm") }}','{{ tr("de
 {% endblock %}'''
 }
 
-
-# ═════════════════════════════════════════════════════════════════════
 # ИНИЦИАЛИЗАЦИЯ FLASK
-# ═════════════════════════════════════════════════════════════════════
-
 app = Flask(__name__)
 app.jinja_loader = DictLoader(TEMPLATES)
 app.secret_key = os.urandom(24)
@@ -818,10 +803,7 @@ app.add_template_global(tr, 'tr')
 app.add_template_global(CURRENCIES, 'currencies')
 
 
-# ═════════════════════════════════════════════════════════════════════
 # МАРШРУТЫ
-# ═════════════════════════════════════════════════════════════════════
-
 @app.route('/')
 def index():
     cars, history = [], []
@@ -848,7 +830,8 @@ def calculate():
 
     mode = request.form.get('mode', 'consumption')
     car_name = request.form.get('car', tr('no_car')) if 'user' in session else tr('no_car')
-    currency = CURRENCIES.get(session.get('currency', '₽ RUB'), '₽') if 'user' in session else '₽'
+    currency = session.get('currency', '₽ RUB') if 'user' in session else '₽ RUB'
+    currency_symbol = CURRENCIES.get(currency, '₽')
 
     if mode == 'consumption':
         try: fuel = float(request.form.get('fuel', 0))
@@ -865,14 +848,14 @@ def calculate():
         try:
             db_add_history(session['user'], {
                 'date': datetime.now().strftime("%d.%m.%Y %H:%M"), 'car': car_name,
-                'distance': dist, 'fuel': round(fuel, 2), 'price': price, 'currency': currency,
+                'distance': dist, 'fuel': round(fuel, 2), 'price': price, 'currency': currency_symbol,
                 'consumption': round(consumption, 2), 'cost': round(cost, 2)
             })
             if car_name not in (tr('no_car'), '-- No car --'):
                 db_update_avg(session['user'], car_name)
         except: pass
 
-    return jsonify({'consumption': round(consumption, 2), 'fuel': round(fuel, 2), 'cost': round(cost, 2), 'mode': mode, 'currency': currency})
+    return jsonify({'consumption': round(consumption, 2), 'fuel': round(fuel, 2), 'cost': round(cost, 2), 'mode': mode, 'currency': currency_symbol})
 
 @app.route('/history_html')
 def history_html():
@@ -1005,11 +988,7 @@ def settings():
 def about():
     return render_template("about.html", lang=session.get('language', 'ru'), user=session.get('user'))
 
-
-# ═════════════════════════════════════════════════════════════════════
 # ТОЧКА ВХОДА
-# ═════════════════════════════════════════════════════════════════════
-
 if __name__ == '__main__':
     if init_db_pool():
         create_tables()
