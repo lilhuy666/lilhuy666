@@ -6,8 +6,10 @@ from werkzeug.utils import secure_filename
 import psycopg2
 from psycopg2 import pool
 from jinja2 import DictLoader
+
 try:
     from PIL import Image
+
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
@@ -21,20 +23,25 @@ DB_CONFIG = {
     'port': 5432,
 }
 
+# АДМИН НАСТРОЙКИ
+ADMIN_CONFIG = {
+    'email': 'admin@fullcalcpro.com',
+    'password': 'admin123456',
+    'name': 'Administrator'
+}
+
 connection_pool = None
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'ico'}
 MAX_IMAGE_SIZE = (1200, 1200)
 
-# Курсы валют (примерные, можно обновлять)
 EXCHANGE_RATES = {
     '₽ RUB': 1.0,
-    '$ USD': 0.011,  # 1 RUB ≈ 0.011 USD
-    '€ EUR': 0.010   # 1 RUB ≈ 0.010 EUR
+    '$ USD': 0.011,
+    '€ EUR': 0.010
 }
 
-# ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
+
 def init_db_pool():
-    """Создаёт пул соединений с PostgreSQL (от 1 до 20 соединений)"""
     global connection_pool
     try:
         connection_pool = pool.SimpleConnectionPool(1, 20, **DB_CONFIG)
@@ -47,10 +54,6 @@ def init_db_pool():
 
 @contextmanager
 def get_db_connection():
-    """
-    Контекстный менеджер: берёт соединение из пула,
-    при ошибке делает rollback, в конце возвращает в пул.
-    """
     conn = connection_pool.getconn()
     try:
         yield conn
@@ -62,12 +65,6 @@ def get_db_connection():
 
 
 def db_exec(sql, params=None, fetch=False):
-    """
-    Единая функция для всех SQL-запросов.
-    sql– строка запроса
-    params – параметры (кортеж)
-    fetch  – True, если нужен результат SELECT
-    """
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
@@ -77,7 +74,6 @@ def db_exec(sql, params=None, fetch=False):
 
 
 def create_tables():
-    """Создаёт таблицы, если их ещё нет"""
     with psycopg2.connect(**DB_CONFIG) as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -111,18 +107,92 @@ def create_tables():
                     language TEXT DEFAULT 'ru',
                     currency TEXT DEFAULT '₽ RUB'
                 );
+                CREATE TABLE IF NOT EXISTS admin_logs (
+                    id SERIAL PRIMARY KEY,
+                    admin_email TEXT,
+                    action TEXT,
+                    target_email TEXT,
+                    details TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
             """)
+
+            try:
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_by TEXT")
+                print("✓ Столбцы users проверены/добавлены")
+            except Exception as e:
+                print(f"⚠ Предупреждение при добавлении столбцов: {e}")
+
         conn.commit()
     print("✓ Таблицы БД проверены/созданы")
 
-# РАБОТА С ИЗОБРАЖЕНИЯМИ
+
+def create_admin():
+    try:
+        exists = db_exec("SELECT 1 FROM users WHERE email=%s AND deleted_at IS NULL", (ADMIN_CONFIG['email'],),
+                         fetch=True)
+
+        if not exists:
+            try:
+                db_exec("""
+                    INSERT INTO users (email, password, is_admin, is_active) 
+                    VALUES (%s, %s, TRUE, TRUE)
+                """, (ADMIN_CONFIG['email'], hash_pw(ADMIN_CONFIG['password'])))
+            except:
+                db_exec("INSERT INTO users (email, password) VALUES (%s, %s)",
+                        (ADMIN_CONFIG['email'], hash_pw(ADMIN_CONFIG['password'])))
+                try:
+                    db_exec("UPDATE users SET is_admin=TRUE, is_active=TRUE WHERE email=%s",
+                            (ADMIN_CONFIG['email'],))
+                except:
+                    pass
+
+            settings_exist = db_exec("SELECT 1 FROM settings WHERE email=%s", (ADMIN_CONFIG['email'],), fetch=True)
+            if not settings_exist:
+                db_exec("INSERT INTO settings (email) VALUES (%s)", (ADMIN_CONFIG['email'],))
+
+            print(f"✓ Администратор создан: {ADMIN_CONFIG['email']}")
+        else:
+            try:
+                db_exec(
+                    "UPDATE users SET is_admin=TRUE, is_active=TRUE, deleted_at=NULL, deleted_by=NULL WHERE email=%s",
+                    (ADMIN_CONFIG['email'],))
+            except:
+                pass
+            db_exec("UPDATE users SET password=%s WHERE email=%s",
+                    (hash_pw(ADMIN_CONFIG['password']), ADMIN_CONFIG['email']))
+            settings_exist = db_exec("SELECT 1 FROM settings WHERE email=%s", (ADMIN_CONFIG['email'],), fetch=True)
+            if not settings_exist:
+                db_exec("INSERT INTO settings (email) VALUES (%s)", (ADMIN_CONFIG['email'],))
+            print(f"✓ Администратор обновлён: {ADMIN_CONFIG['email']}")
+
+        print(f"  Пароль: {ADMIN_CONFIG['password']}")
+        return True
+    except Exception as e:
+        print(f"✗ Ошибка создания админа: {e}")
+        return False
+
+
+def log_admin_action(admin_email, action, target_email=None, details=None):
+    try:
+        db_exec("""
+            INSERT INTO admin_logs (admin_email, action, target_email, details)
+            VALUES (%s, %s, %s, %s)
+        """, (admin_email, action, target_email, details))
+    except Exception as e:
+        print(f"⚠ Ошибка логирования: {e}")
+
+
 def allowed_file(filename):
-    """Проверяет расширение файла"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def process_image(image_path):
-    """Сжимает большое изображение для экономии места на диске"""
     if not PILLOW_AVAILABLE:
         return True
     try:
@@ -139,18 +209,12 @@ def process_image(image_path):
 
 
 def save_car_photo(photo_file, old_photo_path=None):
-    """
-    Сохраняет фото авто в static/uploads/.
-    Если передан old_photo_path — удаляет старый файл.
-    Возвращает имя нового файла или None.
-    """
     if not photo_file or not allowed_file(photo_file.filename):
         return None
     if old_photo_path:
         old_path = os.path.join('static', 'uploads', old_photo_path)
         if os.path.exists(old_path):
             os.remove(old_path)
-    # Генерируем уникальное имя: car_датавремя_хэш.расширение
     safe_name = secure_filename(photo_file.filename)
     name_part, ext = os.path.splitext(safe_name)
     hash_part = hashlib.md5(name_part.encode()).hexdigest()[:8]
@@ -160,32 +224,223 @@ def save_car_photo(photo_file, old_photo_path=None):
     process_image(file_path)
     return new_name
 
-# CRUD — ОПЕРАЦИИ С БАЗОЙ ДАННЫХ
-# --- Пользователи ---
-def db_create_user(email, pw_hash):
-    db_exec("INSERT INTO users VALUES (%s,%s)", (email, pw_hash))
+
+def db_create_user(email, pw_hash, is_admin=False):
+    try:
+        db_exec("INSERT INTO users (email, password, is_admin) VALUES (%s,%s,%s)", (email, pw_hash, is_admin))
+    except:
+        db_exec("INSERT INTO users (email, password) VALUES (%s,%s)", (email, pw_hash))
+        if is_admin:
+            try:
+                db_exec("UPDATE users SET is_admin=TRUE WHERE email=%s", (email,))
+            except:
+                pass
     db_exec("INSERT INTO settings (email) VALUES (%s)", (email,))
 
+
 def db_get_user(email):
-    rows = db_exec("SELECT password FROM users WHERE email=%s", (email,), fetch=True)
+    rows = db_exec("SELECT password FROM users WHERE email=%s AND deleted_at IS NULL", (email,), fetch=True)
     return rows[0][0] if rows else None
 
+
 def db_user_exists(email):
-    return bool(db_exec("SELECT 1 FROM users WHERE email=%s", (email,), fetch=True))
+    return bool(db_exec("SELECT 1 FROM users WHERE email=%s AND deleted_at IS NULL", (email,), fetch=True))
+
+
+def db_is_user_active(email):
+    try:
+        rows = db_exec("SELECT is_active FROM users WHERE email=%s AND deleted_at IS NULL", (email,), fetch=True)
+        if rows and rows[0][0] is not None:
+            return rows[0][0]
+        return True
+    except:
+        return True
+
+
+def db_is_user_admin(email):
+    try:
+        rows = db_exec("SELECT is_admin FROM users WHERE email=%s AND deleted_at IS NULL", (email,), fetch=True)
+        if rows and rows[0][0] is not None:
+            return rows[0][0]
+        return False
+    except:
+        return False
+
+
+def db_is_user_deleted(email):
+    try:
+        rows = db_exec("SELECT deleted_at, deleted_by FROM users WHERE email=%s", (email,), fetch=True)
+        if rows and rows[0][0] is not None:
+            return True, rows[0][1]
+        return False, None
+    except:
+        return False, None
+
 
 def db_update_password(email, pw_hash):
-    db_exec("UPDATE users SET password=%s WHERE email=%s", (pw_hash, email))
+    db_exec("UPDATE users SET password=%s WHERE email=%s AND deleted_at IS NULL", (pw_hash, email))
+
 
 def db_delete_user(email):
-    # Удаляем файлы фото перед каскадным удалением
-    for (photo,) in db_exec("SELECT photo_path FROM cars WHERE email=%s", (email,), fetch=True):
-        if photo:
-            fp = os.path.join('static', 'uploads', photo)
-            if os.path.exists(fp):
-                os.remove(fp)
-    db_exec("DELETE FROM users WHERE email=%s", (email,))
+    """Мягкое удаление пользователем самого себя"""
+    db_exec("""
+        UPDATE users 
+        SET deleted_at = CURRENT_TIMESTAMP, 
+            is_active = FALSE,
+            deleted_by = NULL
+        WHERE email = %s
+    """, (email,))
 
-# --- Автомобили ---
+
+def db_restore_user(email):
+    """Восстановление удалённого пользователя"""
+    db_exec("""
+        UPDATE users 
+        SET deleted_at = NULL, 
+            is_active = TRUE,
+            deleted_by = NULL
+        WHERE email = %s
+    """, (email,))
+
+
+def db_get_all_users():
+    try:
+        rows = db_exec("""
+            SELECT u.email, u.created_at, u.is_admin, u.is_active, u.last_login,
+                   u.deleted_at, u.deleted_by,
+                   COUNT(DISTINCT c.id) as car_count,
+                   COUNT(DISTINCT h.id) as history_count
+            FROM users u
+            LEFT JOIN cars c ON u.email = c.email
+            LEFT JOIN history h ON u.email = h.email
+            WHERE (u.is_admin = FALSE OR u.is_admin IS NULL)
+              AND u.deleted_at IS NULL
+            GROUP BY u.email, u.created_at, u.is_admin, u.is_active, u.last_login, u.deleted_at, u.deleted_by
+            ORDER BY u.created_at DESC
+        """, fetch=True)
+    except:
+        rows = db_exec("""
+            SELECT u.email, NULL, FALSE, TRUE, NULL, NULL, NULL,
+                   COUNT(DISTINCT c.id) as car_count,
+                   COUNT(DISTINCT h.id) as history_count
+            FROM users u
+            LEFT JOIN cars c ON u.email = c.email
+            LEFT JOIN history h ON u.email = h.email
+            WHERE u.deleted_at IS NULL
+            GROUP BY u.email
+            ORDER BY u.email
+        """, fetch=True)
+
+    return [
+        {
+            'email': r[0],
+            'created_at': r[1].strftime("%d.%m.%Y %H:%M") if r[1] else "N/A",
+            'is_admin': r[2] if r[2] is not None else False,
+            'is_active': r[3] if r[3] is not None else True,
+            'last_login': r[4].strftime("%d.%m.%Y %H:%M") if r[4] else "Never",
+            'deleted_at': r[5].strftime("%d.%m.%Y %H:%M") if r[5] else None,
+            'deleted_by': r[6],
+            'car_count': r[7],
+            'history_count': r[8]
+        } for r in rows
+    ]
+
+
+def db_get_deleted_users():
+    try:
+        rows = db_exec("""
+            SELECT u.email, u.created_at, u.deleted_at,
+                   COUNT(DISTINCT c.id) as car_count,
+                   COUNT(DISTINCT h.id) as history_count
+            FROM users u
+            LEFT JOIN cars c ON u.email = c.email
+            LEFT JOIN history h ON u.email = h.email
+            WHERE u.deleted_at IS NOT NULL
+              AND (u.is_admin = FALSE OR u.is_admin IS NULL)
+            GROUP BY u.email, u.created_at, u.deleted_at
+            ORDER BY u.deleted_at DESC
+        """, fetch=True)
+    except:
+        return []
+
+    return [
+        {
+            'email': r[0],
+            'created_at': r[1].strftime("%d.%m.%Y %H:%M") if r[1] else "N/A",
+            'deleted_at': r[2].strftime("%d.%m.%Y %H:%M") if r[2] else "N/A",
+            'car_count': r[3],
+            'history_count': r[4]
+        } for r in rows
+    ]
+
+
+def db_get_user_cars(email):
+    return db_get_cars(email)
+
+
+def db_get_user_history(email):
+    return db_get_history(email)
+
+
+def db_delete_car_photo(email, car_name):
+    rows = db_exec("SELECT photo_path FROM cars WHERE email=%s AND name=%s", (email, car_name), fetch=True)
+    if rows and rows[0][0]:
+        fp = os.path.join('static', 'uploads', rows[0][0])
+        if os.path.exists(fp):
+            os.remove(fp)
+    db_exec("UPDATE cars SET photo_path=NULL WHERE email=%s AND name=%s", (email, car_name))
+
+
+def db_get_system_stats():
+    stats = {}
+    try:
+        stats['total_users'] = \
+        db_exec("SELECT COUNT(*) FROM users WHERE (is_admin = FALSE OR is_admin IS NULL) AND deleted_at IS NULL",
+                fetch=True)[0][0]
+        stats['active_users'] = db_exec("""
+            SELECT COUNT(*) FROM users 
+            WHERE (is_active = TRUE OR is_active IS NULL)
+            AND (is_admin = FALSE OR is_admin IS NULL)
+            AND deleted_at IS NULL
+        """, fetch=True)[0][0]
+        stats['blocked_users'] = db_exec("""
+            SELECT COUNT(*) FROM users 
+            WHERE is_active = FALSE
+            AND (is_admin = FALSE OR is_admin IS NULL)
+            AND deleted_at IS NULL
+        """, fetch=True)[0][0]
+        stats['deleted_users'] = \
+        db_exec("SELECT COUNT(*) FROM users WHERE deleted_at IS NOT NULL AND (is_admin = FALSE OR is_admin IS NULL)",
+                fetch=True)[0][0]
+    except:
+        stats['total_users'] = db_exec("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL", fetch=True)[0][0]
+        stats['active_users'] = stats['total_users']
+        stats['blocked_users'] = 0
+        stats['deleted_users'] = 0
+
+    stats['total_cars'] = db_exec("SELECT COUNT(*) FROM cars", fetch=True)[0][0]
+    stats['total_history'] = db_exec("SELECT COUNT(*) FROM history", fetch=True)[0][0]
+    result = db_exec("SELECT COALESCE(SUM(distance),0) FROM history", fetch=True)[0][0]
+    stats['total_distance'] = round(result, 1)
+    result = db_exec("SELECT COALESCE(SUM(cost),0) FROM history", fetch=True)[0][0]
+    stats['total_cost'] = round(result, 2)
+    return stats
+
+
+def db_block_user(email):
+    try:
+        db_exec("UPDATE users SET is_active = FALSE WHERE email = %s AND deleted_at IS NULL", (email,))
+    except:
+        pass
+
+
+def db_unblock_user(email):
+    try:
+        db_exec("UPDATE users SET is_active = TRUE WHERE email = %s AND deleted_at IS NULL", (email,))
+    except:
+        pass
+
+
 def db_get_cars(email):
     rows = db_exec(
         "SELECT name, photo_path, avg_consumption FROM cars WHERE email=%s ORDER BY id",
@@ -193,8 +448,10 @@ def db_get_cars(email):
     )
     return [{"name": r[0], "photo": r[1], "avg_consumption": r[2]} for r in rows]
 
+
 def db_add_car(email, name, photo=None):
     db_exec("INSERT INTO cars (email,name,photo_path) VALUES (%s,%s,%s)", (email, name, photo))
+
 
 def db_update_car(email, old_name, new_name, photo=None):
     if photo:
@@ -202,6 +459,7 @@ def db_update_car(email, old_name, new_name, photo=None):
                 (new_name, photo, email, old_name))
     else:
         db_exec("UPDATE cars SET name=%s WHERE email=%s AND name=%s", (new_name, email, old_name))
+
 
 def db_delete_car(email, name):
     rows = db_exec("SELECT photo_path FROM cars WHERE email=%s AND name=%s", (email, name), fetch=True)
@@ -211,8 +469,8 @@ def db_delete_car(email, name):
             os.remove(fp)
     db_exec("DELETE FROM cars WHERE email=%s AND name=%s", (email, name))
 
+
 def db_update_avg(email, car_name):
-    """Пересчитывает и сохраняет средний расход авто по истории"""
     rows = db_exec(
         "SELECT AVG(consumption) FROM history WHERE email=%s AND car_name=%s AND consumption IS NOT NULL",
         (email, car_name), fetch=True
@@ -221,7 +479,7 @@ def db_update_avg(email, car_name):
         db_exec("UPDATE cars SET avg_consumption=%s WHERE email=%s AND name=%s",
                 (round(rows[0][0], 2), email, car_name))
 
-# --- История ---
+
 def db_add_history(email, entry):
     db_exec(
         """INSERT INTO history (email,car_name,distance,fuel,price,currency,consumption,cost,date)
@@ -230,6 +488,7 @@ def db_add_history(email, entry):
          entry.get('currency'), entry['consumption'], entry['cost'],
          datetime.strptime(entry['date'], "%d.%m.%Y %H:%M"))
     )
+
 
 def db_get_history(email, car_name=None):
     query = """
@@ -250,14 +509,15 @@ def db_get_history(email, car_name=None):
         for r in rows
     ]
 
+
 def db_clear_history(email):
     db_exec("DELETE FROM history WHERE email=%s", (email,))
+
 
 def db_delete_history_entry(email, eid):
     if db_exec("SELECT 1 FROM history WHERE id=%s AND email=%s", (eid, email), fetch=True):
         db_exec("DELETE FROM history WHERE email=%s AND id=%s", (email, eid))
 
-# --- Настройки и статистика ---
 
 def db_get_settings(email):
     rows = db_exec("SELECT theme,language,currency FROM settings WHERE email=%s", (email,), fetch=True)
@@ -265,8 +525,10 @@ def db_get_settings(email):
         return {'theme': rows[0][0], 'language': rows[0][1], 'currency': rows[0][2]}
     return {'theme': 'light', 'language': 'ru', 'currency': '₽ RUB'}
 
+
 def db_update_settings(email, theme, lang, cur):
     db_exec("UPDATE settings SET theme=%s,language=%s,currency=%s WHERE email=%s", (theme, lang, cur, email))
+
 
 def db_get_car_stats(email, car_name):
     rows = db_exec(
@@ -278,7 +540,7 @@ def db_get_car_stats(email, car_name):
                 'avg_consumption': round(rows[0][2], 2)}
     return {'total_distance': 0, 'total_cost': 0, 'avg_consumption': 0}
 
-# ЛОКАЛИЗАЦИЯ (русский + английский)
+
 TRANSLATIONS = {
     "ru": {
         "app_title": "FullCalcPro",
@@ -288,6 +550,7 @@ TRANSLATIONS = {
         "history": "История",
         "about": "О приложении",
         "settings": "Настройки",
+        "admin_panel": "Админ-панель",
         "no_car": "-- Без авто --",
         "car": "Автомобиль",
         "avg_consumption": "Средний расход",
@@ -317,6 +580,8 @@ TRANSLATIONS = {
         "passwords_mismatch": "Пароли не совпадают",
         "user_exists": "Пользователь уже существует",
         "wrong_credentials": "Неверный email или пароль",
+        "account_blocked": "Ваш аккаунт заблокирован администратором.",
+        "account_deleted": "Ваш аккаунт был удалён. Для восстановления обратитесь к администратору.",
         "logout": "Выйти",
         "delete_account": "Удалить аккаунт",
         "change_password": "Сменить пароль",
@@ -348,7 +613,7 @@ TRANSLATIONS = {
         "clear_history_confirm": "Очистить историю?",
         "clear_history_msg": "Удалить всю историю?",
         "delete_account_confirm": "Удалить аккаунт?",
-        "delete_account_msg": "Все данные будут удалены безвозвратно!",
+        "delete_account_msg": "Ваш аккаунт будет деактивирован. Данные сохранятся в базе данных.",
         "settings_title": "Настройки",
         "currency_setting": "Валюта",
         "language_setting": "Язык",
@@ -373,7 +638,21 @@ TRANSLATIONS = {
         "clear_form_msg": "Вы уверены?",
         "login_required": "Войдите в систему для сохранения расчётов",
         "lock_history": "Войдите для просмотра истории",
-        # Контент для страницы "О приложении"
+        "admin_users": "Пользователи",
+        "admin_stats": "Статистика",
+        "admin_actions": "Действия",
+        "admin_delete_photo": "Удалить фото",
+        "admin_view_cars": "Авто",
+        "admin_view_history": "История",
+        "admin_total_users": "Всего пользователей",
+        "admin_total_cars": "Всего авто",
+        "admin_total_history": "Всего записей",
+        "admin_active_users": "Активных",
+        "admin_blocked_users": "Заблокировано",
+        "admin_deleted_users": "Удалено",
+        "block_user": "Заблокировать",
+        "unblock_user": "Разблокировать",
+        "deleted_users_title": "Удалённые пользователи",
         "about_intro": "FullCalcPro — это профессиональный инструмент для точного учёта расхода топлива и затрат на поездки. Приложение создано для водителей, которые хотят контролировать свои расходы и вести статистику по каждому автомобилю.",
         "about_features_title": "Основные возможности",
         "about_feature_1": "Два режима расчёта — по фактически потраченному топливу или по среднему расходу. Выбирайте нужный режим в зависимости от того, какие данные у вас есть.",
@@ -392,146 +671,26 @@ TRANSLATIONS = {
         "about_tech_2": "База данных: PostgreSQL",
         "about_tech_3": "Интерфейс: современный стеклянный дизайн с анимациями",
         "about_tech_4": "Адаптивная вёрстка — удобно пользоваться и с компьютера, и с телефона",
-    },
-    "en": {
-        "app_title": "FullCalcPro",
-        "calculator": "Calculator",
-        "profile": "Profile",
-        "login_register": "Login / Register",
-        "history": "History",
-        "about": "About",
-        "settings": "Settings",
-        "no_car": "-- No car --",
-        "car": "Vehicle",
-        "avg_consumption": "Avg. consumption",
-        "distance": "Distance",
-        "fuel": "Fuel",
-        "cost": "Cost",
-        "calculate": "Calculate",
-        "clear": "Clear",
-        "fuel_consumption": "Fuel consumption",
-        "trip_cost": "Trip cost",
-        "distance_label": "Distance",
-        "fuel_used": "Fuel used",
-        "fuel_price": "Fuel price per litre",
-        "avg_consumption_label": "Avg. consumption",
-        "calc_mode_consumption": "Consumption per 100 km",
-        "calc_mode_cost": "Trip cost",
-        "login": "Login",
-        "register": "Register",
-        "create_account": "Create Account",
-        "login_account": "Sign In",
-        "email": "Email",
-        "password": "Password",
-        "repeat_password": "Repeat password",
-        "fill_all": "Fill in all fields",
-        "invalid_email": "Enter a valid email",
-        "password_short": "Password too short (min. 6)",
-        "passwords_mismatch": "Passwords do not match",
-        "user_exists": "User already exists",
-        "wrong_credentials": "Invalid email or password",
-        "logout": "Logout",
-        "delete_account": "Delete account",
-        "change_password": "Change password",
-        "old_password": "Current password",
-        "new_password": "New password",
-        "repeat_new_password": "Repeat new password",
-        "change_password_btn": "Change password",
-        "my_cars": "My vehicles",
-        "add_car": "+ Add vehicle",
-        "no_cars": "No vehicles added",
-        "delete": "Delete",
-        "edit": "Edit",
-        "copy": "Copy",
-        "car_name": "Vehicle name",
-        "save": "Save",
-        "cancel": "Cancel",
-        "enter_name": "Enter name",
-        "add_car_title": "Add vehicle",
-        "edit_car_title": "Edit vehicle",
-        "history_title": "Calculation history",
-        "login_for_history": "Log in to view history",
-        "clear_all": "Clear all",
-        "history_empty": "History is empty",
-        "copied": "Copied!",
-        "delete_confirm": "Delete?",
-        "delete_car_confirm": "Delete this vehicle?",
-        "delete_history_confirm": "Delete entry?",
-        "delete_history_msg": "Are you sure?",
-        "clear_history_confirm": "Clear history?",
-        "clear_history_msg": "Delete all history?",
-        "delete_account_confirm": "Delete account?",
-        "delete_account_msg": "All data will be permanently deleted!",
-        "settings_title": "Settings",
-        "currency_setting": "Currency",
-        "language_setting": "Language",
-        "error": "Error",
-        "enter_numbers": "Enter valid numbers!",
-        "distance_positive": "Distance must be greater than 0!",
-        "distance_positive2": "Distance and Avg must be greater than 0!",
-        "fuel_unit": "L",
-        "km": "km",
-        "about_title": "About",
-        "version": "Version 1.0  •  2026",
-        "footer": "© 2026 FullCalcPro",
-        "database_error": "Database connection error",
-        "old_password_wrong": "Current password is incorrect",
-        "date": "Date",
-        "show_more": "Show more",
-        "show_less": "Show less",
-        "password_changed": "Password changed successfully!",
-        "total_distance": "Total distance",
-        "total_cost": "Total cost",
-        "clear_form_confirm": "Clear form?",
-        "clear_form_msg": "Are you sure?",
-        "login_required": "Log in to save calculations",
-        "lock_history": "Log in to view history",
-        "about_intro": "FullCalcPro is a professional tool for accurate fuel consumption tracking and trip cost calculation. Built for drivers who want to control expenses and maintain statistics for each vehicle.",
-        "about_features_title": "Key Features",
-        "about_feature_1": "Two calculation modes — by actual fuel used or by average consumption. Choose the mode that fits your available data.",
-        "about_feature_2": "Vehicle garage — add unlimited cars with photos. Average consumption is automatically calculated for each vehicle based on trip history.",
-        "about_feature_3": "Complete history — every calculation is saved in the database. View date, distance, fuel volume, price, consumption and total cost anytime. Filter by vehicle.",
-        "about_feature_4": "Vehicle statistics — total distance, total fuel costs and average consumption over time. See which car is most economical.",
-        "about_feature_5": "Multi-currency — supports ruble (₽), dollar ($) and euro (€). Switch in settings with one click.",
-        "about_feature_6": "Bilingual interface — Russian and English. Switch without page reload.",
-        "about_feature_7": "Data copy — copy any calculation or vehicle statistics to clipboard with a single tap.",
-        "about_security_title": "Security",
-        "about_security_1": "Passwords are hashed with SHA-256 algorithm and never stored in plain text.",
-        "about_security_2": "All data is stored in a reliable PostgreSQL database on your own server.",
-        "about_security_3": "No data is transmitted to third parties — the application runs completely locally.",
-        "about_tech_title": "Technical Details",
-        "about_tech_1": "Backend: Python + Flask",
-        "about_tech_2": "Database: PostgreSQL",
-        "about_tech_3": "Interface: modern glassmorphism design with animations",
-        "about_tech_4": "Responsive layout — works great on both desktop and mobile",
     }
 }
 
 CURRENCIES = {"₽ RUB": "₽", "$ USD": "$", "€ EUR": "€"}
 
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+
 def tr(key):
-    """Возвращает перевод ключа на текущий язык сессии"""
     lang = session.get('language', 'ru')
     return TRANSLATIONS.get(lang, TRANSLATIONS['ru']).get(key, key)
+
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
+
 def is_valid_email(e):
     return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", e) is not None
 
-def convert_currency(amount, from_currency, to_currency):
-    """Конвертирует сумму из одной валюты в другую через рубли"""
-    if from_currency == to_currency:
-        return amount
-    # Переводим в рубли
-    rub_amount = amount / EXCHANGE_RATES.get(from_currency, 1.0)
-    # Переводим в целевую валюту
-    return round(rub_amount * EXCHANGE_RATES.get(to_currency, 1.0), 2)
 
 def render_profile_cars():
-    """Рендерит блок с авто для AJAX-обновления в профиле"""
     try:
         cars = db_get_cars(session['user'])
         car_stats = {c['name']: db_get_car_stats(session['user'], c['name']) for c in cars}
@@ -541,100 +700,211 @@ def render_profile_cars():
                            lang=session.get('language', 'ru'), user=session['user'],
                            currency_symbol=CURRENCIES.get(session.get('currency', '₽ RUB'), '₽'))
 
-# HTML-ШАБЛОНЫ (хранятся в словаре, рендерятся через DictLoader)
-TEMPLATES = {
 
-    "base.html": r'''<!DOCTYPE html><html lang="{{ lang }}">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ tr('app_title') }}</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<style>
-    body{background-image:url('{{ url_for('static', filename='images/background.jpg') }}');background-size:cover;background-position:center;background-attachment:fixed;min-height:100vh;font-family:'Inter',sans-serif;font-size:15px}
-    body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,rgba(20,30,48,0.85),rgba(36,59,85,0.75));z-index:-1}
-    *{transition:all 0.2s ease}
-    .navbar{background:rgba(255,255,255,0.15)!important;backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,0.2);padding:12px 0}
-    .navbar-brand{font-weight:700;font-size:1.5rem;color:white!important;text-decoration:none}
-    .logo-img{width:36px;height:36px;border-radius:10px;object-fit:cover;margin-right:10px}
-    .nav-link{font-weight:500;padding:8px 18px!important;color:rgba(255,255,255,0.85)!important;font-size:0.9rem;border-radius:12px}
-    .nav-link:hover{background:rgba(255,255,255,0.2);color:white!important}
-    .card,.list-group-item,.modal-content,.lock-overlay{background:rgba(255,255,255,0.2);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.25);border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,0.1);color:white}
-    .list-group-item{margin-bottom:10px;border-radius:16px!important}
-    .list-group-item:hover{background:rgba(255,255,255,0.3);transform:translateY(-2px)}
-    .btn{border-radius:12px;font-weight:600;font-size:0.85rem;padding:8px 16px}
-    .btn-primary{background:linear-gradient(135deg,#0071e3,#005bb5);border:none;color:white!important}
-    .btn-outline-secondary{border:1px solid rgba(255,255,255,0.4);color:white;background:rgba(255,255,255,0.1)}
-    .btn-outline-secondary:hover{background:rgba(255,255,255,0.25);color:white}
-    .btn-outline-danger{border:1px solid rgba(255,59,48,0.6);color:#ff6b6b;background:rgba(255,59,48,0.1)}
-    .btn-outline-danger:hover{background:rgba(255,59,48,0.8);color:white}
-    .form-control,.form-select{background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.25);border-radius:12px;padding:10px 14px}
-    .form-control:focus,.form-select:focus{border-color:rgba(255,255,255,0.6);box-shadow:0 0 0 3px rgba(0,113,227,0.3);background:rgba(255,255,255,0.2);color:white}
-    .form-label{color:white;font-weight:600}.form-select option{background:#1a2a3a;color:white}
-    .alert{border-radius:16px;background:rgba(255,255,255,0.25);backdrop-filter:blur(12px);color:white}
-    .alert-success{background:rgba(52,199,89,0.25)}.alert-danger{background:rgba(255,59,48,0.25)}
-    h1,h2,h3,h4,h5,h6{color:white;font-weight:700}.text-muted{color:rgba(255,255,255,0.7)!important}
-    .mode-selector{display:flex;gap:12px;margin-bottom:20px}
-    .mode-btn{flex:1;text-align:center;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:white;cursor:pointer;font-weight:600}
-    .mode-btn.active{border-color:white;background:rgba(255,255,255,0.25)}
-    .modal-content{background:rgba(30,40,50,0.95);backdrop-filter:blur(16px);border-radius:24px}
-    .modal-header{border-bottom:1px solid rgba(255,255,255,0.15)}.modal-footer{border-top:1px solid rgba(255,255,255,0.15)}
-    .btn-close{filter:brightness(0) invert(1)}
-    .car-photo-small{width:56px;height:56px;object-fit:cover;border-radius:14px;border:2px solid rgba(255,255,255,0.3)}
-    .car-photo-medium{height:160px;object-fit:cover;border-radius:16px;border:2px solid rgba(255,255,255,0.3)}
-    .lock-overlay{min-height:200px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);backdrop-filter:blur(12px);border-radius:20px}
-    .lock-content{text-align:center;padding:2rem;color:white}
-    .badge{border-radius:30px;padding:6px 14px;font-weight:600;font-size:0.8rem;background:linear-gradient(135deg,#0071e3,#005bb5);color:white}
-    footer{margin-top:4rem;text-align:center;padding:2rem;font-size:0.85rem;color:rgba(255,255,255,0.6)}
-    .card{animation:fadeInUp 0.4s ease-out}@keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-    a{color:rgba(255,255,255,0.9);text-decoration:none}a:hover{color:white}
-    .result-alert{font-size:1.2rem;font-weight:600;text-align:center}
-    .car-photo-preview{max-width:300px;max-height:200px;border-radius:16px;border:2px solid rgba(255,255,255,0.3);object-fit:cover}
-    .car-actions .btn{width:100%;margin-bottom:4px}
-    .about-section{margin-bottom:2rem}
-    .about-section h5{color:#fff;margin-bottom:0.8rem;font-size:1.2rem}
-    .about-section p,.about-section li{color:rgba(255,255,255,0.85);font-size:0.95rem;line-height:1.6}
-    .about-section ul{list-style:none;padding-left:0}
-    .about-section ul li::before{content:"•";color:#0071e3;font-weight:bold;margin-right:8px}
-    .feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;margin:1.5rem 0}
-    .feature-card{background:rgba(255,255,255,0.1);border-radius:16px;padding:1.2rem;border:1px solid rgba(255,255,255,0.15)}
-    .feature-card i{font-size:1.5rem;color:#0071e3;margin-bottom:0.5rem}
-    .feature-card h6{font-size:1rem;margin-bottom:0.4rem}
-    .feature-card p{font-size:0.85rem;color:rgba(255,255,255,0.75);margin:0}
-    .nav-tabs .nav-link{color:rgba(255,255,255,0.7)!important;font-weight:600;border:none;padding:10px 20px;border-radius:12px;margin-right:5px}
-    .nav-tabs .nav-link.active{color:white!important;background:rgba(255,255,255,0.2)!important;border:none}
-    .nav-tabs .nav-link:hover{color:white!important;background:rgba(255,255,255,0.15)!important}
-    .nav-tabs{border-bottom:1px solid rgba(255,255,255,0.2)!important}
-</style></head>
+# HTML ШАБЛОНЫ
+TEMPLATES = {
+    "base.html": '''<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ tr('app_title') }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body{
+            background-image: url('{{ url_for('static', filename='images/background.jpg') }}');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+        }
+        body::before{
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(20,30,48,0.85), rgba(36,59,85,0.75));
+            z-index: -1;
+        }
+        *{transition:all 0.2s ease}
+        .navbar{
+            background: rgba(255,255,255,0.15) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding: 12px 0;
+        }
+        .navbar-brand{
+            font-weight: 700;
+            font-size: 1.5rem;
+            color: white !important;
+            text-decoration: none;
+        }
+        .logo-img{
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            object-fit: cover;
+            margin-right: 10px;
+        }
+        .nav-link{
+            font-weight: 500;
+            padding: 8px 18px !important;
+            color: rgba(255,255,255,0.85) !important;
+            font-size: 0.9rem;
+            border-radius: 12px;
+        }
+        .nav-link:hover{
+            background: rgba(255,255,255,0.2);
+            color: white !important;
+        }
+        .card, .modal-content, .list-group-item{
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            color: white;
+        }
+        .btn{
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            padding: 8px 16px;
+            white-space: nowrap;
+        }
+        .btn-primary{background: linear-gradient(135deg, #0071e3, #005bb5); border: none; color: white !important;}
+        .btn-outline-secondary{border: 1px solid rgba(255,255,255,0.4); color: white; background: rgba(255,255,255,0.1);}
+        .btn-outline-secondary:hover{background: rgba(255,255,255,0.25); color: white;}
+        .btn-success{background: linear-gradient(135deg, #34c759, #28a745); border: none; color: white !important;}
+        .btn-warning{background: linear-gradient(135deg, #ffcc00, #ff9500); border: none; color: #1a2a3a !important;}
+        .btn-danger{background: linear-gradient(135deg, #ff3b30, #dc3545); border: none; color: white !important;}
+        .btn-info{background: linear-gradient(135deg, #5ac8fa, #007aff); border: none; color: white !important;}
+        .form-control, .form-select{background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.25); border-radius: 12px; padding: 10px 14px;}
+        .form-control:focus, .form-select:focus{border-color: rgba(255,255,255,0.6); box-shadow: 0 0 0 3px rgba(0,113,227,0.3); background: rgba(255,255,255,0.2); color: white;}
+        .form-label{color: white; font-weight: 600;}
+        .form-select option{background: #1a2a3a; color: white;}
+        .alert{border-radius: 16px; background: rgba(255,255,255,0.25); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: white; border: 1px solid rgba(255,255,255,0.3);}
+        .alert-success{background: rgba(52,199,89,0.3);}
+        .alert-danger{background: rgba(255,59,48,0.3);}
+        .alert-info{background: rgba(0,113,227,0.3);}
+        h1,h2,h3,h4,h5,h6{color: white; font-weight: 700;}
+        .text-muted{color: rgba(255,255,255,0.7) !important;}
+        .modal-content{background: rgba(30,40,50,0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-radius: 24px;}
+        .modal-header{border-bottom: 1px solid rgba(255,255,255,0.15);}
+        .modal-footer{border-top: 1px solid rgba(255,255,255,0.15);}
+        .btn-close{filter: brightness(0) invert(1);}
+        .badge{border-radius: 30px; padding: 6px 14px; font-weight: 600; font-size: 0.8rem;}
+        .badge-success{background: linear-gradient(135deg, #34c759, #28a745); color: white;}
+        .badge-danger{background: linear-gradient(135deg, #ff3b30, #dc3545); color: white;}
+        .badge-warning{background: linear-gradient(135deg, #ffcc00, #ff9500); color: #1a2a3a;}
+        .badge-info{background: linear-gradient(135deg, #0071e3, #005bb5); color: white;}
+        footer{margin-top: 4rem; text-align: center; padding: 2rem; font-size: 0.85rem; color: rgba(255,255,255,0.6);}
+        .card{animation: fadeInUp 0.4s ease-out;}
+        @keyframes fadeInUp{from{opacity: 0; transform: translateY(20px);}to{opacity: 1; transform: translateY(0);}}
+        a{color: rgba(255,255,255,0.9); text-decoration: none;}a:hover{color: white;}
+        .stats-card{text-align: center; padding: 20px;}
+        .stats-card .stats-number{font-size: 2.5rem; font-weight: 800;}
+        .stats-card .stats-label{font-size: 0.9rem; opacity: 0.8;}
+        .user-card{transition: all 0.3s ease;}
+        .user-card:hover{transform: translateY(-5px); box-shadow: 0 12px 40px rgba(0,0,0,0.3);}
+        .admin-header{background: rgba(255,255,255,0.15); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; padding: 20px; margin-bottom: 20px;}
+        .lock-overlay{background: rgba(255,255,255,0.15); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.1); color: white;}
+        .car-photo-preview{max-width: 300px; max-height: 200px; border-radius: 16px; border: 2px solid rgba(255,255,255,0.3); object-fit: cover;}
+        .mode-btn{flex: 1; text-align: center; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-weight: 600;}
+        .mode-btn.active{border-color: white; background: rgba(255,255,255,0.25);}
+        .result-alert{font-size: 1.2rem; font-weight: 600; text-align: center;}
+        .feature-grid{display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin: 1.5rem 0;}
+        .feature-card{background: rgba(255,255,255,0.1); border-radius: 16px; padding: 1.2rem; border: 1px solid rgba(255,255,255,0.15);}
+        .feature-card i{font-size: 1.5rem; color: #0071e3; margin-bottom: 0.5rem;}
+        .feature-card h6{font-size: 1rem; margin-bottom: 0.4rem;}
+        .feature-card p{font-size: 0.85rem; color: rgba(255,255,255,0.75); margin: 0;}
+        .nav-tabs .nav-link{color: rgba(255,255,255,0.7) !important; font-weight: 600; border: none; padding: 10px 20px; border-radius: 12px; margin-right: 5px; background: transparent;}
+        .nav-tabs .nav-link.active{color: white !important; background: rgba(255,255,255,0.2) !important; border: none;}
+        .nav-tabs .nav-link:hover{color: white !important; background: rgba(255,255,255,0.15) !important;}
+        .nav-tabs{border-bottom: 1px solid rgba(255,255,255,0.2) !important;}
+    </style>
+</head>
 <body>
-<nav class="navbar navbar-expand-lg sticky-top"><div class="container">
-<a class="navbar-brand" href="/"><img src="{{ url_for('static', filename='logo.png') }}" class="logo-img" alt="Logo" onerror="this.style.display='none'">{{ tr('app_title') }}</a>
-<button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarNav" style="border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1)"><span class="navbar-toggler-icon" style="filter:brightness(0) invert(1)"></span></button>
-<div class="collapse navbar-collapse" id="navbarNav"><ul class="navbar-nav ms-auto">
-<li class="nav-item"><a class="nav-link" href="/">{{ tr('calculator') }}</a></li>
-{% if user %}<li class="nav-item"><a class="nav-link" href="/profile">{{ tr('profile') }}</a></li>
-<li class="nav-item"><a class="nav-link" href="/settings">{{ tr('settings') }}</a></li>
-{% else %}<li class="nav-item"><a class="nav-link" href="/auth">{{ tr('login_register') }}</a></li>{% endif %}
-<li class="nav-item"><a class="nav-link" href="/about">{{ tr('about') }}</a></li></ul></div></div></nav>
+<nav class="navbar navbar-expand-lg sticky-top">
+    <div class="container">
+        <a class="navbar-brand" href="/">
+            <img src="{{ url_for('static', filename='logo.png') }}" class="logo-img" alt="Logo" onerror="this.style.display='none'">
+            {{ tr('app_title') }}
+        </a>
+        <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+                style="border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.1);">
+            <span class="navbar-toggler-icon" style="filter:brightness(0) invert(1)"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                {% if user %}
+                    {% if is_admin %}
+                        <li class="nav-item"><a class="nav-link" href="/admin">{{ tr('admin_panel') }}</a></li>
+                    {% else %}
+                        <li class="nav-item"><a class="nav-link" href="/">{{ tr('calculator') }}</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/profile">{{ tr('profile') }}</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/settings">{{ tr('settings') }}</a></li>
+                    {% endif %}
+                {% else %}
+                    <li class="nav-item"><a class="nav-link" href="/auth">{{ tr('login_register') }}</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/settings">{{ tr('settings') }}</a></li>
+                {% endif %}
+                {% if not is_admin %}
+                <li class="nav-item"><a class="nav-link" href="/about">{{ tr('about') }}</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</nav>
+
 <div class="container mt-4">
-{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
-{% for cat, msg in messages %}<div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}<button class="btn-close" data-bs-dismiss="alert"></button></div>{% endfor %}
-{% endif %}{% endwith %}
-{% block content %}{% endblock %}</div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for cat, msg in messages %}
+                <div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}<button class="btn-close" data-bs-dismiss="alert"></button></div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+</div>
+
 <div class="modal fade" id="confirmModal"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
 <div class="modal-header"><h5 class="modal-title fw-bold" id="confirmModalTitle"></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
 <div class="modal-body" id="confirmModalBody" style="color:white"></div>
-<div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ tr('cancel') }}</button><button class="btn btn-danger" id="confirmModalBtn"></button></div></div></div></div>
+<div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button class="btn btn-danger" id="confirmModalBtn"></button></div>
+</div></div></div>
+
+<div class="modal fade" id="userCarsModal"><div class="modal-dialog modal-lg"><div class="modal-content">
+<div class="modal-header"><h5 class="modal-title fw-bold">Автомобили пользователя</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal-body" id="userCarsContent" style="color:white"></div>
+</div></div></div>
+
+<div class="modal fade" id="userHistoryModal"><div class="modal-dialog modal-lg"><div class="modal-content">
+<div class="modal-header"><h5 class="modal-title fw-bold">История расчётов</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal-body" id="userHistoryContent" style="color:white; max-height:500px; overflow-y:auto;"></div>
+</div></div></div>
+
 <footer>{{ tr('footer') }}</footer>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function togglePassword(b){let i=b.parentElement.querySelector('input'),ic=b.querySelector('i');i.type=i.type==='password'?'text':'password';ic.classList.toggle('fa-eye');ic.classList.toggle('fa-eye-slash')}
 let confirmCallback=null;const confirmModal=new bootstrap.Modal(document.getElementById('confirmModal'));
 function showConfirm(t,m,b,c){document.getElementById('confirmModalTitle').textContent=t;document.getElementById('confirmModalBody').textContent=m;document.getElementById('confirmModalBtn').textContent=b;confirmCallback=c;confirmModal.show()}
 document.getElementById('confirmModalBtn').addEventListener('click',()=>{if(confirmCallback)confirmCallback();confirmModal.hide();confirmCallback=null});
-</script>{% block scripts %}{% endblock %}</body></html>''',
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>''',
 
-    # ── Главная (калькулятор) ──
-    "index.html": r'''{% extends "base.html" %}{% block content %}
+    "index.html": '''{% extends "base.html" %}{% block content %}
 <div style="max-width:540px;margin:0 auto">
 <h2 class="mb-4 text-center">{{ tr('calculator') }}</h2>
 {% if not user %}<div class="alert alert-info mb-4 text-center">{{ tr('login_required') }} <a href="/auth" style="color:white;text-decoration:underline">{{ tr('login_register') }}</a></div>{% endif %}
@@ -645,7 +915,7 @@ document.getElementById('confirmModalBtn').addEventListener('click',()=>{if(conf
 </select></div>
 <div class="text-center mb-3"><img id="carPhotoPreview" src="" class="car-photo-preview" style="display:none"></div>
 <form id="calcForm">
-<div class="mode-selector"><button type="button" class="mode-btn active" data-mode="consumption">{{ tr('calc_mode_consumption') }}</button><button type="button" class="mode-btn" data-mode="cost">{{ tr('calc_mode_cost') }}</button></div>
+<div class="mode-selector" style="display:flex;gap:12px;margin-bottom:20px"><button type="button" class="mode-btn active" data-mode="consumption">{{ tr('calc_mode_consumption') }}</button><button type="button" class="mode-btn" data-mode="cost">{{ tr('calc_mode_cost') }}</button></div>
 <input type="hidden" name="mode" value="consumption" id="modeInput">
 <div class="mb-3"><label class="form-label fw-semibold">{{ tr('distance_label') }}, км</label><input type="number" step="any" name="distance" id="distance" class="form-control" required></div>
 <div id="fuelField" class="mb-3"><label class="form-label fw-semibold">{{ tr('fuel_used') }}, л</label><input type="number" step="any" name="fuel" id="fuel" class="form-control"></div>
@@ -655,7 +925,7 @@ document.getElementById('confirmModalBtn').addEventListener('click',()=>{if(conf
 </form><div id="result" class="mt-3 alert result-alert" style="display:none"></div></div>
 <div class="mt-5"><h4 class="fw-bold mb-3 text-center">{{ tr('history_title') }}</h4>
 {% if user %}<div id="historyContainer">{% include 'history_list.html' %}</div>
-{% else %}<div class="lock-overlay"><div class="lock-content"><i class="fas fa-lock fa-3x mb-3"></i><p>{{ tr('lock_history') }}</p><a href="/auth" class="btn btn-primary">{{ tr('login_register') }}</a></div></div>{% endif %}
+{% else %}<div class="lock-overlay"><i class="fas fa-lock fa-3x mb-3" style="color:white"></i><p class="mb-3" style="color:white">{{ tr('lock_history') }}</p><a href="/auth" class="btn btn-primary">{{ tr('login_register') }}</a></div>{% endif %}
 </div></div>{% endblock %}
 {% block scripts %}<script>
 const INIT=10;let current=INIT,isLoggedIn={{ 'true' if user else 'false' }},isCalc=false,currentCurrency='{{ currency_symbol }}';
@@ -673,12 +943,11 @@ function copyEntry(btn){navigator.clipboard.writeText(btn.getAttribute('data-tex
 new MutationObserver(()=>apply()).observe(document.getElementById('historyContainer'),{childList:true,subtree:true});apply();
 {% endif %}</script>{% endblock %}''',
 
-    # ── История (AJAX-фрагмент) ──
-    "history_list.html": r'''{% if user %}<div class="d-flex justify-content-end mb-3"><button class="btn btn-outline-danger" onclick="clearAllHistory()">{{ tr('clear_all') }}</button></div>
+    "history_list.html": '''{% if user %}<div class="d-flex justify-content-end mb-3"><button class="btn btn-outline-danger" onclick="clearAllHistory()">{{ tr('clear_all') }}</button></div>
 {% if history %}<div class="list-group" id="historyList">{% for e in history %}
 <div class="list-group-item d-flex align-items-center p-3 history-item">
-{% if e.photo %}<img src="{{ url_for('static', filename='uploads/' + e.photo) }}" class="car-photo-small me-3">
-{% else %}<div class="car-photo-small me-3 d-flex align-items-center justify-content-center" style="background:rgba(255,255,255,0.1);border-radius:14px"><i class="fas fa-car" style="color:rgba(255,255,255,0.7)"></i></div>{% endif %}
+{% if e.photo %}<img src="{{ url_for('static', filename='uploads/' + e.photo) }}" style="width:56px;height:56px;object-fit:cover;border-radius:14px;border:2px solid rgba(255,255,255,0.3);margin-right:15px">
+{% else %}<div style="width:56px;height:56px;background:rgba(255,255,255,0.1);border-radius:14px;margin-right:15px;display:flex;align-items:center;justify-content:center"><i class="fas fa-car" style="color:rgba(255,255,255,0.7)"></i></div>{% endif %}
 <div class="flex-grow-1"><div class="fw-semibold mb-1">{{ e.date }} – {{ e.car or tr('no_car') }}</div>
 <div class="small" style="color:rgba(255,255,255,0.7)"><span class="me-3"><i class="fas fa-road me-1"></i>{{ e.distance }} {{ tr('km') }}</span><span class="me-3"><i class="fas fa-gas-pump me-1"></i>{{ e.fuel }} {{ tr('fuel_unit') }}</span><span class="me-3"><i class="fas fa-tachometer-alt me-1"></i>{{ e.consumption }} {{ tr('fuel_unit') }}/100{{ tr('km') }}</span><span><i class="fas fa-coins me-1"></i>{{ "%.2f"|format(e.cost) }} {{ currency_symbol }}</span></div></div>
 <div class="ms-auto d-flex flex-column align-items-end"><button class="btn btn-sm btn-outline-secondary mb-1" onclick="copyEntry(this)" data-text="{{ tr('date') }}: {{ e.date }}, {{ tr('car') }}: {{ e.car or tr('no_car') }}, {{ tr('fuel_consumption') }}: {{ e.consumption }} {{ tr('fuel_unit') }}/100{{ tr('km') }}, {{ tr('cost') }}: {{ '%.2f'|format(e.cost) }} {{ currency_symbol }}"><i class="fas fa-copy"></i></button><button class="btn btn-sm btn-outline-danger" onclick="deleteHistoryEntry({{ e.id }})"><i class="fas fa-trash"></i></button></div></div>{% endfor %}</div>
@@ -686,10 +955,12 @@ new MutationObserver(()=>apply()).observe(document.getElementById('historyContai
 {% else %}<div class="card p-4 text-center">{{ tr('history_empty') }}</div>{% endif %}
 {% else %}<div class="card p-4 text-center">{{ tr('login_for_history') }}</div>{% endif %}''',
 
-    # ── Авторизация ──
-    "auth.html": r'''{% extends "base.html" %}{% block content %}<div class="row justify-content-center"><div class="col-md-5"><div class="card p-4">
+    "auth.html": '''{% extends "base.html" %}{% block content %}<div class="row justify-content-center"><div class="col-md-5"><div class="card p-4">
 <h2 class="mb-4 text-center fw-bold">{{ tr('login_register') }}</h2>
-<ul class="nav nav-tabs mb-3" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#login-pane" type="button" role="tab">{{ tr('login') }}</button></li><li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#register-pane" type="button" role="tab">{{ tr('register') }}</button></li></ul>
+<ul class="nav nav-tabs mb-3" role="tablist">
+<li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#login-pane" type="button" role="tab">{{ tr('login') }}</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#register-pane" type="button" role="tab">{{ tr('register') }}</button></li>
+</ul>
 <div class="tab-content"><div class="tab-pane fade show active" id="login-pane" role="tabpanel">
 <form method="post" action="/auth"><input type="hidden" name="form_type" value="login">
 <div class="mb-3"><label class="form-label fw-semibold">{{ tr('email') }}</label><input type="email" name="email" class="form-control" required></div>
@@ -701,10 +972,11 @@ new MutationObserver(()=>apply()).observe(document.getElementById('historyContai
 <div class="mb-3"><label class="form-label fw-semibold">{{ tr('repeat_password') }}</label><div class="input-group"><input type="password" name="password2" class="form-control" required><button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)" style="border-radius:0 12px 12px 0"><i class="fas fa-eye"></i></button></div></div>
 <button type="submit" class="btn btn-primary w-100">{{ tr('create_account') }}</button></form></div></div></div></div></div>{% endblock %}''',
 
-    # ── Профиль ──
-    "profile.html": r'''{% extends "base.html" %}{% block content %}
+    "profile.html": '''{% extends "base.html" %}{% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2"><h2 class="fw-bold">{{ tr('profile') }}</h2>
-<div class="d-flex gap-2"><button class="btn btn-outline-secondary" onclick="openChangePasswordModal()">{{ tr('change_password') }}</button><a href="/logout" class="btn btn-outline-secondary">{{ tr('logout') }}</a><form method="post" action="/delete_account" onsubmit="return confirm('{{ tr('delete_account_msg') }}')" class="m-0"><button class="btn btn-outline-danger">{{ tr('delete_account') }}</button></form></div></div>
+<div class="d-flex gap-2"><button class="btn btn-outline-secondary" onclick="openChangePasswordModal()">{{ tr('change_password') }}</button><a href="/logout" class="btn btn-outline-secondary">{{ tr('logout') }}</a>
+<form method="post" action="/delete_account" onsubmit="return confirm('{{ tr('delete_account_msg') }}')" class="m-0"><button class="btn btn-outline-danger">{{ tr('delete_account') }}</button></form>
+</div></div>
 <div class="card p-4 mb-4"><p class="mb-0"><i class="fas fa-envelope me-2"></i><strong>{{ user }}</strong></p></div>
 <div class="card p-4" id="carsSection">{% include 'profile_cars.html' %}</div>
 <div class="modal fade" id="editCarModal"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header border-0"><h5 class="modal-title fw-bold">{{ tr('edit_car_title') }}</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="editCarForm" onsubmit="submitEditCar(event)" enctype="multipart/form-data"><input type="hidden" name="old_name" id="editOldName"><div class="mb-3"><label class="form-label fw-semibold">{{ tr('car_name') }}</label><input type="text" name="new_name" id="editNewName" class="form-control" required></div><div class="mb-3"><label class="form-label fw-semibold">Фото</label><input type="file" name="photo" class="form-control" accept="image/*"><small class="text-muted">Оставьте пустым, чтобы не менять фото</small></div><button type="submit" class="btn btn-primary w-100">{{ tr('save') }}</button></form></div></div></div></div>
@@ -720,73 +992,200 @@ function copyCarData(name,distance,cost,avg){let text=`{{ tr('car') }}: ${name}\
 function deleteCar(name){showConfirm('{{ tr("delete_car_confirm") }}','{{ tr("delete_car_confirm") }}','{{ tr("delete") }}',async()=>{try{let r=await fetch('/delete_car/'+name,{method:'POST'});document.getElementById('carsSection').innerHTML=await r.text()}catch(e){alert('{{ tr("error") }}')}})}
 </script>{% endblock %}''',
 
-    # ── Карточки авто (AJAX-фрагмент) ──
-    "profile_cars.html": r'''<h5 class="fw-bold mb-3">{{ tr('add_car_title') }}</h5>
+    "profile_cars.html": '''<h5 class="fw-bold mb-3">{{ tr('add_car_title') }}</h5>
 <form onsubmit="addCar(event)" enctype="multipart/form-data" class="row g-3 mb-4"><div class="col-md-5"><input type="text" name="name" class="form-control" placeholder="{{ tr('car_name') }}" required></div><div class="col-md-5"><input type="file" name="photo" class="form-control" accept="image/*"></div><div class="col-md-2"><button type="submit" class="btn btn-primary w-100">{{ tr('save') }}</button></div></form>
 <h5 class="fw-bold">{{ tr('my_cars') }}</h5>
 <div class="row">{% for car in cars %}<div class="col-md-4 mb-4 d-flex"><div class="card p-3 w-100" style="border-radius:20px">
-{% if car.photo %}<img src="{{ url_for('static', filename='uploads/' + car.photo) }}" class="car-photo-medium w-100 mb-3" style="object-fit:cover;height:160px;border-radius:16px">
-{% else %}<div class="d-flex align-items-center justify-content-center w-100 mb-3" style="height:160px;background:rgba(255,255,255,0.1);border-radius:16px"><i class="fas fa-car fa-4x" style="color:rgba(255,255,255,0.5)"></i></div>{% endif %}
+{% if car.photo %}<img src="{{ url_for('static', filename='uploads/' + car.photo) }}" style="height:160px; width:100%; object-fit:cover; border-radius:16px; margin-bottom:1rem;">
+{% else %}<div class="d-flex align-items-center justify-content-center w-100 mb-3" style="height:160px; background:rgba(255,255,255,0.1); border-radius:16px;"><i class="fas fa-car fa-4x" style="color:rgba(255,255,255,0.5)"></i></div>{% endif %}
 <div class="text-center d-flex flex-column flex-grow-1"><h6 class="fw-bold">{{ car.name }}</h6>
-{% if car.avg_consumption %}<span class="badge mb-2">{{ "%.1f"|format(car.avg_consumption) }} {{ tr('fuel_unit') }}/100{{ tr('km') }}</span>{% endif %}
+{% if car.avg_consumption %}<span class="badge badge-info mb-2">{{ "%.1f"|format(car.avg_consumption) }} {{ tr('fuel_unit') }}/100{{ tr('km') }}</span>{% endif %}
 <div class="mt-auto"><div class="mt-2 small" style="color:rgba(255,255,255,0.7)">{% set s = car_stats.get(car.name, {}) %}
 <div>{{ tr('total_distance') }}: {{ s.total_distance }} {{ tr('km') }}</div><div>{{ tr('total_cost') }}: {{ s.total_cost }} {{ currency_symbol }}</div><div>{{ tr('avg_consumption') }}: {{ s.avg_consumption }} {{ tr('fuel_unit') }}/100{{ tr('km') }}</div></div>
-<div class="mt-3 car-actions"><button class="btn btn-sm btn-outline-secondary" onclick="editCar('{{ car.name }}')">{{ tr('edit') }}</button><button class="btn btn-sm btn-outline-secondary" onclick="copyCarData('{{ car.name }}','{{ s.total_distance }}','{{ s.total_cost }}','{{ s.avg_consumption }}')">{{ tr('copy') }}</button><button class="btn btn-sm btn-outline-danger" onclick="deleteCar('{{ car.name }}')">{{ tr('delete') }}</button></div></div></div></div></div>{% else %}<div class="col-12"><p class="text-muted">{{ tr('no_cars') }}</p></div>{% endfor %}</div>''',
+<div class="mt-3 car-actions"><button class="btn btn-sm btn-outline-secondary mb-1 w-100" onclick="editCar('{{ car.name }}')">{{ tr('edit') }}</button><button class="btn btn-sm btn-outline-secondary mb-1 w-100" onclick="copyCarData('{{ car.name }}','{{ s.total_distance }}','{{ s.total_cost }}','{{ s.avg_consumption }}')">{{ tr('copy') }}</button><button class="btn btn-sm btn-outline-danger w-100" onclick="deleteCar('{{ car.name }}')">{{ tr('delete') }}</button></div></div></div></div></div>{% else %}<div class="col-12"><p class="text-muted">{{ tr('no_cars') }}</p></div>{% endfor %}</div>''',
 
-    # ── Настройки ──
-    "settings.html": r'''{% extends "base.html" %}{% block content %}<h2 class="mb-4 fw-bold">{{ tr('settings_title') }}</h2><div class="card p-4"><form id="settingsForm" onsubmit="submitSettings(event)"><div class="mb-4"><label class="form-label fw-bold">{{ tr('language_setting') }}</label><select name="language" class="form-select" style="max-width:300px"><option value="ru" {% if settings.language=='ru' %}selected{% endif %}>Русский</option><option value="en" {% if settings.language=='en' %}selected{% endif %}>English</option></select></div><div class="mb-4"><label class="form-label fw-bold">{{ tr('currency_setting') }}</label><select name="currency" class="form-select" style="max-width:200px">{% for k,s in currencies.items() %}<option value="{{ k }}" {% if settings.currency==k %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div><button type="submit" class="btn btn-primary">{{ tr('save') }}</button></form></div>{% endblock %}{% block scripts %}<script>async function submitSettings(e){e.preventDefault();try{let r=await fetch('/settings',{method:'POST',body:new FormData(e.target)});if(r.ok)location.reload()}catch(e){}}</script>{% endblock %}''',
+    "settings.html": '''{% extends "base.html" %}{% block content %}<h2 class="mb-4 fw-bold">{{ tr('settings_title') }}</h2><div class="card p-4"><form id="settingsForm" onsubmit="submitSettings(event)"><div class="mb-4"><label class="form-label fw-bold">{{ tr('language_setting') }}</label><select name="language" class="form-select" style="max-width:300px"><option value="ru" {% if settings.language=='ru' %}selected{% endif %}>Русский</option><option value="en" {% if settings.language=='en' %}selected{% endif %}>English</option></select></div><div class="mb-4"><label class="form-label fw-bold">{{ tr('currency_setting') }}</label><select name="currency" class="form-select" style="max-width:200px">{% for k,s in currencies.items() %}<option value="{{ k }}" {% if settings.currency==k %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div><button type="submit" class="btn btn-primary">{{ tr('save') }}</button></form></div>{% endblock %}{% block scripts %}<script>async function submitSettings(e){e.preventDefault();try{let r=await fetch('/settings',{method:'POST',body:new FormData(e.target)});if(r.ok)location.reload()}catch(e){}}</script>{% endblock %}''',
 
-    # ── О приложении (красивое оформление) ──
-    "about.html": r'''{% extends "base.html" %}{% block content %}
+    "about.html": '''{% extends "base.html" %}{% block content %}
 <h2 class="mb-4 fw-bold text-center">{{ tr('about_title') }}</h2>
+<div class="card p-4 mb-4 text-center"><p class="mb-0" style="font-size:1.1rem;line-height:1.7">{{ tr('about_intro') }}</p></div>
+<div class="card p-4 mb-4"><h4 class="fw-bold mb-3">{{ tr('about_features_title') }}</h4><div class="feature-grid">
+<div class="feature-card"><i class="fas fa-exchange-alt"></i><h6>{{ tr('calc_mode_consumption') }} / {{ tr('calc_mode_cost') }}</h6><p>{{ tr('about_feature_1') }}</p></div>
+<div class="feature-card"><i class="fas fa-car"></i><h6>{{ tr('my_cars') }}</h6><p>{{ tr('about_feature_2') }}</p></div>
+<div class="feature-card"><i class="fas fa-history"></i><h6>{{ tr('history') }}</h6><p>{{ tr('about_feature_3') }}</p></div>
+<div class="feature-card"><i class="fas fa-chart-bar"></i><h6>{{ tr('total_distance') }} / {{ tr('total_cost') }}</h6><p>{{ tr('about_feature_4') }}</p></div>
+<div class="feature-card"><i class="fas fa-coins"></i><h6>{{ tr('currency_setting') }}</h6><p>{{ tr('about_feature_5') }}</p></div>
+<div class="feature-card"><i class="fas fa-globe"></i><h6>{{ tr('language_setting') }}</h6><p>{{ tr('about_feature_6') }}</p></div>
+<div class="feature-card"><i class="fas fa-copy"></i><h6>{{ tr('copy') }}</h6><p>{{ tr('about_feature_7') }}</p></div>
+</div></div>
+<div class="row"><div class="col-md-6 mb-4"><div class="card p-4 h-100"><h4 class="fw-bold mb-3"><i class="fas fa-shield-alt me-2"></i>{{ tr('about_security_title') }}</h4>
+<ul style="list-style:none;padding:0"><li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-check-circle me-2" style="color:#34c759"></i>{{ tr('about_security_1') }}</li><li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-check-circle me-2" style="color:#34c759"></i>{{ tr('about_security_2') }}</li><li style="color:rgba(255,255,255,0.85)"><i class="fas fa-check-circle me-2" style="color:#34c759"></i>{{ tr('about_security_3') }}</li></ul></div></div>
+<div class="col-md-6 mb-4"><div class="card p-4 h-100"><h4 class="fw-bold mb-3"><i class="fas fa-cogs me-2"></i>{{ tr('about_tech_title') }}</h4>
+<ul style="list-style:none;padding:0"><li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-server me-2" style="color:#0071e3"></i>{{ tr('about_tech_1') }}</li><li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-database me-2" style="color:#0071e3"></i>{{ tr('about_tech_2') }}</li><li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-paint-brush me-2" style="color:#0071e3"></i>{{ tr('about_tech_3') }}</li><li style="color:rgba(255,255,255,0.85)"><i class="fas fa-mobile-alt me-2" style="color:#0071e3"></i>{{ tr('about_tech_4') }}</li></ul></div></div></div>
+<hr style="border-color:rgba(255,255,255,0.1)"><p class="text-muted text-center">{{ tr('version') }}</p>{% endblock %}''',
 
-<!-- Вступление -->
-<div class="card p-4 mb-4 text-center">
-    <p class="mb-0" style="font-size:1.1rem;line-height:1.7">{{ tr('about_intro') }}</p>
-</div>
-
-<!-- Возможности — сетка карточек -->
-<div class="card p-4 mb-4">
-    <h4 class="fw-bold mb-3">{{ tr('about_features_title') }}</h4>
-    <div class="feature-grid">
-        <div class="feature-card"><i class="fas fa-exchange-alt"></i><h6>{{ tr('calc_mode_consumption') }} / {{ tr('calc_mode_cost') }}</h6><p>{{ tr('about_feature_1') }}</p></div>
-        <div class="feature-card"><i class="fas fa-car"></i><h6>{{ tr('my_cars') }}</h6><p>{{ tr('about_feature_2') }}</p></div>
-        <div class="feature-card"><i class="fas fa-history"></i><h6>{{ tr('history') }}</h6><p>{{ tr('about_feature_3') }}</p></div>
-        <div class="feature-card"><i class="fas fa-chart-bar"></i><h6>{{ tr('total_distance') }} / {{ tr('total_cost') }}</h6><p>{{ tr('about_feature_4') }}</p></div>
-        <div class="feature-card"><i class="fas fa-coins"></i><h6>{{ tr('currency_setting') }}</h6><p>{{ tr('about_feature_5') }}</p></div>
-        <div class="feature-card"><i class="fas fa-globe"></i><h6>{{ tr('language_setting') }}</h6><p>{{ tr('about_feature_6') }}</p></div>
-        <div class="feature-card"><i class="fas fa-copy"></i><h6>{{ tr('copy') }}</h6><p>{{ tr('about_feature_7') }}</p></div>
+    "admin.html": '''{% extends "base.html" %}{% block content %}
+<div class="admin-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0"><i class="fas fa-user-shield me-2"></i>{{ user }}</h4>
+        <span class="badge badge-warning">Администратор</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/admin/deleted_users" class="btn btn-outline-secondary"><i class="fas fa-archive me-1"></i>Удалённые</a>
+        <button class="btn btn-outline-secondary" onclick="openChangePasswordModal()"><i class="fas fa-key me-1"></i>{{ tr('change_password') }}</button>
+        <a href="/logout" class="btn btn-outline-secondary"><i class="fas fa-sign-out-alt me-1"></i>{{ tr('logout') }}</a>
     </div>
 </div>
 
-<!-- Безопасность + Технические детали — две колонки -->
+<h2 class="mb-3 fw-bold">{{ tr('admin_panel') }}</h2>
+
+<div class="row mb-4">
+<div class="col-md-3 mb-3"><div class="card stats-card"><div class="stats-number text-primary">{{ stats.total_users }}</div><div class="stats-label">{{ tr('admin_total_users') }}</div></div></div>
+<div class="col-md-3 mb-3"><div class="card stats-card"><div class="stats-number text-success">{{ stats.active_users }}</div><div class="stats-label">{{ tr('admin_active_users') }}</div></div></div>
+<div class="col-md-3 mb-3"><div class="card stats-card"><div class="stats-number text-danger">{{ stats.blocked_users }}</div><div class="stats-label">{{ tr('admin_blocked_users') }}</div></div></div>
+<div class="col-md-3 mb-3"><div class="card stats-card"><div class="stats-number text-info">{{ stats.total_history }}</div><div class="stats-label">{{ tr('admin_total_history') }}</div></div></div>
+</div>
+
+<h4 class="fw-bold mb-3">{{ tr('admin_users') }}</h4>
 <div class="row">
-    <div class="col-md-6 mb-4">
-        <div class="card p-4 h-100">
-            <h4 class="fw-bold mb-3"><i class="fas fa-shield-alt me-2"></i>{{ tr('about_security_title') }}</h4>
-            <ul style="list-style:none;padding:0">
-                <li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-check-circle me-2" style="color:#34c759"></i>{{ tr('about_security_1') }}</li>
-                <li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-check-circle me-2" style="color:#34c759"></i>{{ tr('about_security_2') }}</li>
-                <li style="color:rgba(255,255,255,0.85)"><i class="fas fa-check-circle me-2" style="color:#34c759"></i>{{ tr('about_security_3') }}</li>
-            </ul>
-        </div>
+{% for user in users %}
+<div class="col-md-6 col-lg-4 mb-4">
+<div class="card p-4 user-card h-100">
+<div class="d-flex justify-content-between align-items-start mb-3">
+<div style="flex:1;min-width:0">
+<h5 class="mb-1 text-truncate">{{ user.email }}</h5>
+<small class="text-muted">{{ tr('admin_created') }}: {{ user.created_at }}</small>
+</div>
+<div style="margin-left:10px">
+{% if user.is_active %}
+<span class="badge badge-success">Активен</span>
+{% else %}
+<span class="badge badge-danger">Заблокирован</span>
+{% endif %}
+</div>
+</div>
+<hr style="border-color:rgba(255,255,255,0.1);margin:10px 0">
+<div class="row text-center mb-3">
+<div class="col-6"><div style="font-size:1.5rem;font-weight:700">{{ user.car_count }}</div><small class="text-muted">{{ tr('admin_view_cars') }}</small></div>
+<div class="col-6"><div style="font-size:1.5rem;font-weight:700">{{ user.history_count }}</div><small class="text-muted">{{ tr('admin_view_history') }}</small></div>
+</div>
+<div class="d-flex flex-wrap gap-2 justify-content-center">
+<button class="btn btn-sm btn-outline-secondary" onclick="viewUserCars('{{ user.email }}')"><i class="fas fa-car me-1"></i>Авто</button>
+<button class="btn btn-sm btn-outline-secondary" onclick="viewUserHistory('{{ user.email }}')"><i class="fas fa-history me-1"></i>История</button>
+{% if user.is_active %}
+<button class="btn btn-sm btn-warning" onclick="blockUser('{{ user.email }}')" title="Заблокировать пользователя"><i class="fas fa-ban me-1"></i>Заблокировать</button>
+{% else %}
+<button class="btn btn-sm btn-success" onclick="unblockUser('{{ user.email }}')" title="Разблокировать пользователя"><i class="fas fa-check-circle me-1"></i>Разблокировать</button>
+{% endif %}
+</div>
+</div>
+</div>
+{% else %}
+<div class="col-12"><div class="card p-4 text-center">Нет зарегистрированных пользователей</div></div>
+{% endfor %}
+</div>
+
+<div class="modal fade" id="changePasswordModal"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header border-0"><h5 class="modal-title fw-bold">{{ tr('change_password') }}</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="changePasswordForm" onsubmit="submitChangePassword(event)"><div class="mb-3"><label class="form-label fw-semibold">{{ tr('old_password') }}</label><div class="input-group"><input type="password" name="old_password" class="form-control" required><button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)" style="border-radius:0 12px 12px 0"><i class="fas fa-eye"></i></button></div></div><div class="mb-3"><label class="form-label fw-semibold">{{ tr('new_password') }}</label><div class="input-group"><input type="password" name="new_password" class="form-control" required><button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)" style="border-radius:0 12px 12px 0"><i class="fas fa-eye"></i></button></div></div><div class="mb-3"><label class="form-label fw-semibold">{{ tr('repeat_new_password') }}</label><div class="input-group"><input type="password" name="new_password2" class="form-control" required><button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)" style="border-radius:0 12px 12px 0"><i class="fas fa-eye"></i></button></div></div><button type="submit" class="btn btn-primary w-100 mt-2">{{ tr('change_password_btn') }}</button></form></div></div></div></div>
+{% endblock %}
+{% block scripts %}<script>
+const userCarsModal = new bootstrap.Modal(document.getElementById('userCarsModal'));
+const userHistoryModal = new bootstrap.Modal(document.getElementById('userHistoryModal'));
+let passwordModal;document.addEventListener('DOMContentLoaded',()=>{passwordModal=new bootstrap.Modal(document.getElementById('changePasswordModal'))});
+function openChangePasswordModal(){passwordModal.show()}
+async function submitChangePassword(e){e.preventDefault();let fd=new FormData(e.target);try{let r=await fetch('/change_password',{method:'POST',body:fd});let d=await r.json();alert(d.message);if(d.success){e.target.reset();passwordModal.hide()}}catch(e){alert('Ошибка')}}
+
+async function viewUserCars(email){try{let r=await fetch('/admin/user_cars/'+email);let html=await r.text();document.getElementById('userCarsContent').innerHTML=html;userCarsModal.show()}catch(e){alert('Ошибка загрузки')}}
+async function viewUserHistory(email){try{let r=await fetch('/admin/user_history/'+email);let html=await r.text();document.getElementById('userHistoryContent').innerHTML=html;userHistoryModal.show()}catch(e){alert('Ошибка загрузки')}}
+
+async function blockUser(email){showConfirm('Заблокировать пользователя?','Пользователь '+email+' не сможет войти в систему.','Заблокировать',async()=>{try{let r=await fetch('/admin/block_user/'+email,{method:'POST'});if(r.ok)location.reload()}catch(e){alert('Ошибка')}})}
+async function unblockUser(email){try{let r=await fetch('/admin/unblock_user/'+email,{method:'POST'});if(r.ok)location.reload()}catch(e){alert('Ошибка')}}
+
+async function deleteCarPhoto(userEmail,carName){if(confirm('Удалить фото этого автомобиля?')){try{let r=await fetch('/admin/delete_car_photo',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'email='+encodeURIComponent(userEmail)+'&car_name='+encodeURIComponent(carName)});if(r.ok)viewUserCars(userEmail)}catch(e){alert('Ошибка')}}}
+async function deleteUserCar(userEmail,carName){if(confirm('Удалить автомобиль '+carName+'?')){try{let r=await fetch('/admin/delete_user_car',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'email='+encodeURIComponent(userEmail)+'&car_name='+encodeURIComponent(carName)});if(r.ok){viewUserCars(userEmail);setTimeout(()=>location.reload(),500)}}catch(e){alert('Ошибка')}}}
+</script>{% endblock %}''',
+
+    "admin_deleted.html": '''{% extends "base.html" %}{% block content %}
+<div class="admin-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0"><i class="fas fa-user-shield me-2"></i>{{ user }}</h4>
+        <span class="badge badge-warning">Администратор</span>
     </div>
-    <div class="col-md-6 mb-4">
-        <div class="card p-4 h-100">
-            <h4 class="fw-bold mb-3"><i class="fas fa-cogs me-2"></i>{{ tr('about_tech_title') }}</h4>
-            <ul style="list-style:none;padding:0">
-                <li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-server me-2" style="color:#0071e3"></i>{{ tr('about_tech_1') }}</li>
-                <li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-database me-2" style="color:#0071e3"></i>{{ tr('about_tech_2') }}</li>
-                <li class="mb-2" style="color:rgba(255,255,255,0.85)"><i class="fas fa-paint-brush me-2" style="color:#0071e3"></i>{{ tr('about_tech_3') }}</li>
-                <li style="color:rgba(255,255,255,0.85)"><i class="fas fa-mobile-alt me-2" style="color:#0071e3"></i>{{ tr('about_tech_4') }}</li>
-            </ul>
-        </div>
+    <div class="d-flex gap-2">
+        <a href="/admin" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Назад</a>
+        <a href="/logout" class="btn btn-outline-secondary"><i class="fas fa-sign-out-alt me-1"></i>Выйти</a>
     </div>
 </div>
 
-<hr style="border-color:rgba(255,255,255,0.1)">
-<p class="text-muted text-center">{{ tr('version') }}</p>
-{% endblock %}'''
+<h2 class="mb-3 fw-bold">{{ tr('deleted_users_title') }}</h2>
+<p class="text-muted mb-4">Пользователи, которые удалили свой аккаунт. Данные сохранены в базе данных.</p>
+
+<div class="row">
+{% for user in deleted_users %}
+<div class="col-md-6 col-lg-4 mb-4">
+<div class="card p-4 user-card h-100">
+<div class="mb-3">
+<h5 class="mb-1 text-truncate">{{ user.email }}</h5>
+<small class="text-muted">Зарегистрирован: {{ user.created_at }}</small>
+</div>
+<hr style="border-color:rgba(255,255,255,0.1);margin:10px 0">
+<div class="mb-3">
+<div class="mb-2"><i class="fas fa-trash me-2" style="color:#ff3b30"></i>Удалён: {{ user.deleted_at }}</div>
+</div>
+<div class="row text-center mb-3">
+<div class="col-6"><div style="font-size:1.5rem;font-weight:700">{{ user.car_count }}</div><small class="text-muted">Авто</small></div>
+<div class="col-6"><div style="font-size:1.5rem;font-weight:700">{{ user.history_count }}</div><small class="text-muted">Записей</small></div>
+</div>
+<button class="btn btn-sm btn-success w-100" onclick="restoreUser('{{ user.email }}')"><i class="fas fa-undo me-1"></i>Восстановить</button>
+</div>
+</div>
+{% else %}
+<div class="col-12"><div class="card p-4 text-center">Нет удалённых пользователей</div></div>
+{% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}<script>
+async function restoreUser(email){if(confirm('Восстановить пользователя '+email+'?')){try{let r=await fetch('/admin/restore_user/'+email,{method:'POST'});if(r.ok)location.reload();else alert('Ошибка восстановления')}catch(e){alert('Ошибка')}}}
+</script>{% endblock %}''',
+
+    "admin_user_cars.html": '''<div class="row">
+{% if cars %}
+{% for car in cars %}
+<div class="col-md-6 mb-4">
+<div class="card p-3" style="background:rgba(255,255,255,0.1)">
+{% if car.photo %}
+<img src="{{ url_for('static', filename='uploads/' + car.photo) }}" style="width:100%;height:200px;object-fit:cover;border-radius:12px;margin-bottom:10px">
+{% else %}
+<div style="width:100%;height:200px;background:rgba(255,255,255,0.1);border-radius:12px;margin-bottom:10px;display:flex;align-items:center;justify-content:center"><i class="fas fa-car fa-4x" style="color:rgba(255,255,255,0.3)"></i></div>
+{% endif %}
+<h6 class="fw-bold text-center">{{ car.name }}</h6>
+{% if car.avg_consumption %}<div class="text-center mb-2"><span class="badge badge-info">{{ "%.1f"|format(car.avg_consumption) }} л/100км</span></div>{% endif %}
+<div class="d-flex justify-content-center gap-2">
+{% if car.photo %}<button class="btn btn-sm btn-outline-warning" onclick="deleteCarPhoto('{{ user_email }}', '{{ car.name }}')"><i class="fas fa-image me-1"></i>Удалить фото</button>{% endif %}
+<button class="btn btn-sm btn-outline-danger" onclick="deleteUserCar('{{ user_email }}', '{{ car.name }}')"><i class="fas fa-trash me-1"></i>Удалить авто</button>
+</div>
+</div>
+</div>
+{% endfor %}
+{% else %}
+<div class="col-12 text-center"><p>У пользователя нет автомобилей</p></div>
+{% endif %}
+</div>''',
+
+    "admin_user_history.html": '''{% if history %}
+{% for e in history %}
+<div class="card mb-3 p-3" style="background:rgba(255,255,255,0.1)">
+<div class="fw-semibold mb-2">{{ e.date }} – {{ e.car or 'Без авто' }}</div>
+<div class="row small text-muted">
+<div class="col-6"><i class="fas fa-road me-1"></i>{{ e.distance }} км</div>
+<div class="col-6"><i class="fas fa-gas-pump me-1"></i>{{ e.fuel }} л</div>
+<div class="col-6"><i class="fas fa-tachometer-alt me-1"></i>{{ e.consumption }} л/100км</div>
+<div class="col-6"><i class="fas fa-coins me-1"></i>{{ "%.2f"|format(e.cost) }} {{ e.currency }}</div>
+</div>
+</div>
+{% endfor %}
+{% else %}
+<div class="text-center"><p>История расчётов пуста</p></div>
+{% endif %}'''
 }
 
 # ИНИЦИАЛИЗАЦИЯ FLASK
@@ -796,6 +1195,7 @@ app.secret_key = os.urandom(24)
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(os.path.join('static', 'images'), exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
@@ -803,9 +1203,22 @@ app.add_template_global(tr, 'tr')
 app.add_template_global(CURRENCIES, 'currencies')
 
 
+def is_admin():
+    if 'user' not in session:
+        return False
+    return db_is_user_admin(session['user'])
+
+
+@app.context_processor
+def inject_admin():
+    return {'is_admin': is_admin()}
+
+
 # МАРШРУТЫ
 @app.route('/')
 def index():
+    if 'user' in session and is_admin():
+        return redirect(url_for('admin'))
     cars, history = [], []
     if 'user' in session:
         try:
@@ -817,6 +1230,7 @@ def index():
                            lang=session.get('language', 'ru'),
                            currency_symbol=CURRENCIES.get(session.get('currency', '₽ RUB'), '₽'),
                            user=session.get('user'))
+
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -834,13 +1248,17 @@ def calculate():
     currency_symbol = CURRENCIES.get(currency, '₽')
 
     if mode == 'consumption':
-        try: fuel = float(request.form.get('fuel', 0))
-        except: return jsonify({'error': tr('enter_numbers')}), 400
+        try:
+            fuel = float(request.form.get('fuel', 0))
+        except:
+            return jsonify({'error': tr('enter_numbers')}), 400
         if fuel <= 0: return jsonify({'error': 'Расход топлива должен быть больше 0'}), 400
         consumption, cost = (fuel / dist) * 100, fuel * price
     else:
-        try: avg_input = float(request.form.get('avg_consumption', 0))
-        except: return jsonify({'error': tr('enter_numbers')}), 400
+        try:
+            avg_input = float(request.form.get('avg_consumption', 0))
+        except:
+            return jsonify({'error': tr('enter_numbers')}), 400
         if avg_input <= 0: return jsonify({'error': tr('distance_positive2')}), 400
         consumption, fuel, cost = avg_input, (avg_input / 100) * dist, ((avg_input / 100) * dist) * price
 
@@ -853,9 +1271,12 @@ def calculate():
             })
             if car_name not in (tr('no_car'), '-- No car --'):
                 db_update_avg(session['user'], car_name)
-        except: pass
+        except:
+            pass
 
-    return jsonify({'consumption': round(consumption, 2), 'fuel': round(fuel, 2), 'cost': round(cost, 2), 'mode': mode, 'currency': currency_symbol})
+    return jsonify({'consumption': round(consumption, 2), 'fuel': round(fuel, 2), 'cost': round(cost, 2), 'mode': mode,
+                    'currency': currency_symbol})
+
 
 @app.route('/history_html')
 def history_html():
@@ -864,56 +1285,96 @@ def history_html():
                            lang=session.get('language', 'ru'), user=session['user'],
                            currency_symbol=CURRENCIES.get(session.get('currency', '₽ RUB'), '₽'))
 
+
 @app.route('/auth', methods=['GET', 'POST'])
 def auth():
-    if 'user' in session: return redirect(url_for('profile'))
+    if 'user' in session:
+        if is_admin():
+            return redirect(url_for('admin'))
+        return redirect(url_for('profile'))
+
     if request.method == 'POST':
-        email, pw = request.form['email'].strip().lower(), request.form['password']
+        email = request.form['email'].strip().lower()
+        pw = request.form['password']
+
         if request.form.get('form_type') == 'register':
             pw2 = request.form['password2']
-            if not email or not pw: flash(tr('fill_all'), 'error')
-            elif not is_valid_email(email): flash(tr('invalid_email'), 'error')
-            elif len(pw) < 6: flash(tr('password_short'), 'error')
-            elif pw != pw2: flash(tr('passwords_mismatch'), 'error')
-            elif db_user_exists(email): flash(tr('user_exists'), 'error')
+            if not email or not pw:
+                flash(tr('fill_all'), 'error')
+            elif not is_valid_email(email):
+                flash(tr('invalid_email'), 'error')
+            elif len(pw) < 6:
+                flash(tr('password_short'), 'error')
+            elif pw != pw2:
+                flash(tr('passwords_mismatch'), 'error')
+            elif db_user_exists(email):
+                flash(tr('user_exists'), 'error')
             else:
                 try:
                     db_create_user(email, hash_pw(pw))
-                    session['user'], session['language'], session['currency'] = email, 'ru', '₽ RUB'
-                    return redirect(url_for('profile'))
-                except: flash(tr('database_error'), 'error')
-        else:
-            if not is_valid_email(email): flash(tr('invalid_email'), 'error')
-            else:
-                stored = db_get_user(email)
-                if stored and stored == hash_pw(pw):
                     session['user'] = email
-                    s = db_get_settings(email); session['language'], session['currency'] = s['language'], s['currency']
+                    session['language'] = 'ru'
+                    session['currency'] = '₽ RUB'
+                    return redirect(url_for('profile'))
+                except Exception as e:
+                    flash(f'{tr("database_error")}: {str(e)}', 'error')
+        else:
+            if not is_valid_email(email):
+                flash(tr('invalid_email'), 'error')
+            else:
+                # Проверяем, удалён ли аккаунт
+                is_deleted, deleted_by = db_is_user_deleted(email)
+                if is_deleted:
+                    flash(tr('account_deleted'), 'error')
+                    return render_template("auth.html", lang=session.get('language', 'ru'))
+
+                stored_password = db_get_user(email)
+                if stored_password and stored_password == hash_pw(pw):
+                    is_active = db_is_user_active(email)
+                    is_user_admin = db_is_user_admin(email)
+
+                    if not is_active and not is_user_admin:
+                        flash(tr('account_blocked'), 'error')
+                        return render_template("auth.html", lang=session.get('language', 'ru'))
+
+                    session['user'] = email
+                    s = db_get_settings(email)
+                    session['language'] = s['language']
+                    session['currency'] = s['currency']
+
+                    if is_user_admin:
+                        return redirect(url_for('admin'))
                     return redirect(url_for('profile'))
                 flash(tr('wrong_credentials'), 'error')
+
     return render_template("auth.html", lang=session.get('language', 'ru'))
+
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('index'))
 
+
 @app.route('/profile')
 def profile():
     if 'user' not in session: return redirect(url_for('auth'))
+    if is_admin(): return redirect(url_for('admin'))
     try:
         cars = db_get_cars(session['user'])
         car_stats = {c['name']: db_get_car_stats(session['user'], c['name']) for c in cars}
     except:
-        cars, car_stats = [], []
+        cars, car_stats = [], {}
     return render_template("profile.html", cars=cars, car_stats=car_stats,
                            lang=session.get('language', 'ru'), user=session['user'],
                            currency_symbol=CURRENCIES.get(session.get('currency', '₽ RUB'), '₽'))
+
 
 @app.route('/profile_cars_html')
 def profile_cars_html():
     if 'user' not in session: return ''
     return render_profile_cars()
+
 
 @app.route('/add_car', methods=['POST'])
 def add_car():
@@ -922,9 +1383,12 @@ def add_car():
     if not name: return redirect(url_for('profile'))
     photo = request.files.get('photo')
     photo_name = save_car_photo(photo) if photo and photo.filename else None
-    try: db_add_car(session['user'], name, photo_name)
-    except: flash(tr('database_error'), 'error')
+    try:
+        db_add_car(session['user'], name, photo_name)
+    except:
+        flash(tr('database_error'), 'error')
     return render_profile_cars()
+
 
 @app.route('/edit_car', methods=['POST'])
 def edit_car():
@@ -935,16 +1399,22 @@ def edit_car():
     old_photo = next((c['photo'] for c in cars if c['name'] == old), None)
     photo = request.files.get('photo')
     photo_name = save_car_photo(photo, old_photo) if photo and photo.filename else None
-    try: db_update_car(session['user'], old, new, photo_name)
-    except: flash(tr('database_error'), 'error')
+    try:
+        db_update_car(session['user'], old, new, photo_name)
+    except:
+        flash(tr('database_error'), 'error')
     return render_profile_cars()
+
 
 @app.route('/delete_car/<name>', methods=['POST'])
 def delete_car(name):
     if 'user' not in session: return redirect(url_for('auth'))
-    try: db_delete_car(session['user'], name)
-    except: flash(tr('database_error'), 'error')
+    try:
+        db_delete_car(session['user'], name)
+    except:
+        flash(tr('database_error'), 'error')
     return render_profile_cars()
+
 
 @app.route('/change_password', methods=['POST'])
 def change_password():
@@ -953,50 +1423,197 @@ def change_password():
     if not old or not new: return jsonify({'success': False, 'message': tr('fill_all')})
     if len(new) < 6: return jsonify({'success': False, 'message': tr('password_short')})
     if new != new2: return jsonify({'success': False, 'message': tr('passwords_mismatch')})
-    if db_get_user(session['user']) != hash_pw(old): return jsonify({'success': False, 'message': tr('old_password_wrong')})
-    try: db_update_password(session['user'], hash_pw(new)); return jsonify({'success': True, 'message': tr('password_changed')})
-    except: return jsonify({'success': False, 'message': tr('database_error')})
+    if db_get_user(session['user']) != hash_pw(old): return jsonify(
+        {'success': False, 'message': tr('old_password_wrong')})
+    try:
+        db_update_password(session['user'], hash_pw(new)); return jsonify(
+            {'success': True, 'message': tr('password_changed')})
+    except:
+        return jsonify({'success': False, 'message': tr('database_error')})
+
 
 @app.route('/delete_account', methods=['POST'])
 def delete_account():
     if 'user' not in session: return redirect(url_for('auth'))
-    try: db_delete_user(session['user']); session.clear()
-    except: flash(tr('database_error'), 'error')
+    try:
+        db_delete_user(session['user'])
+        session.clear()
+        flash('Ваш аккаунт деактивирован. Данные сохранены согласно политике хранения.', 'info')
+    except:
+        flash(tr('database_error'), 'error')
     return redirect(url_for('index'))
+
 
 @app.route('/clear_history', methods=['POST'])
 def clear_history():
     if 'user' not in session: return '', 401
-    db_clear_history(session['user']); return '', 200
+    db_clear_history(session['user']);
+    return '', 200
+
 
 @app.route('/delete_history/<int:eid>', methods=['POST'])
 def delete_history(eid):
     if 'user' not in session: return '', 401
-    db_delete_history_entry(session['user'], eid); return '', 200
+    db_delete_history_entry(session['user'], eid);
+    return '', 200
+
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
-    if 'user' not in session: return redirect(url_for('auth'))
     if request.method == 'POST':
-        lang, cur = request.form.get('language', 'ru'), request.form.get('currency', '₽ RUB')
-        session['language'], session['currency'] = lang, cur
-        db_update_settings(session['user'], 'light', lang, cur); return redirect(url_for('settings'))
-    return render_template("settings.html", settings=db_get_settings(session['user']),
+        if 'user' in session:
+            lang = request.form.get('language', 'ru')
+            cur = request.form.get('currency', '₽ RUB')
+            session['language'] = lang
+            session['currency'] = cur
+            db_update_settings(session['user'], 'light', lang, cur)
+        else:
+            session['language'] = request.form.get('language', 'ru')
+            session['currency'] = request.form.get('currency', '₽ RUB')
+        return redirect(url_for('settings'))
+
+    settings_data = {'theme': 'light', 'language': session.get('language', 'ru'),
+                     'currency': session.get('currency', '₽ RUB')}
+    if 'user' in session:
+        settings_data = db_get_settings(session['user'])
+
+    return render_template("settings.html", settings=settings_data,
                            currencies=CURRENCIES, lang=session.get('language', 'ru'), user=session.get('user'))
+
 
 @app.route('/about')
 def about():
     return render_template("about.html", lang=session.get('language', 'ru'), user=session.get('user'))
 
+
+# АДМИН-МАРШРУТЫ
+@app.route('/admin')
+def admin():
+    if not is_admin():
+        flash('Доступ запрещён', 'error')
+        return redirect(url_for('index'))
+
+    try:
+        stats = db_get_system_stats()
+        users = db_get_all_users()
+    except Exception as e:
+        flash(f'Ошибка загрузки данных: {e}', 'error')
+        stats = {'total_users': 0, 'active_users': 0, 'blocked_users': 0, 'deleted_users': 0, 'total_cars': 0,
+                 'total_history': 0}
+        users = []
+
+    return render_template("admin.html", stats=stats, users=users,
+                           lang=session.get('language', 'ru'), user=session['user'])
+
+
+@app.route('/admin/deleted_users')
+def admin_deleted_users():
+    if not is_admin():
+        flash('Доступ запрещён', 'error')
+        return redirect(url_for('index'))
+
+    deleted_users = db_get_deleted_users()
+    return render_template("admin_deleted.html", deleted_users=deleted_users,
+                           lang=session.get('language', 'ru'), user=session['user'])
+
+
+@app.route('/admin/user_cars/<email>')
+def admin_user_cars(email):
+    if not is_admin():
+        return 'Доступ запрещён', 403
+    cars = db_get_user_cars(email)
+    return render_template("admin_user_cars.html", cars=cars, user_email=email)
+
+
+@app.route('/admin/user_history/<email>')
+def admin_user_history(email):
+    if not is_admin():
+        return 'Доступ запрещён', 403
+    history = db_get_user_history(email)
+    return render_template("admin_user_history.html", history=history)
+
+
+@app.route('/admin/delete_car_photo', methods=['POST'])
+def admin_delete_car_photo():
+    if not is_admin():
+        return jsonify({'error': 'Доступ запрещён'}), 403
+    email = request.form.get('email')
+    car_name = request.form.get('car_name')
+    if email and car_name:
+        db_delete_car_photo(email, car_name)
+        log_admin_action(session['user'], 'delete_car_photo', email, f'Удаление фото авто: {car_name}')
+        return jsonify({'success': True})
+    return jsonify({'error': 'Неверные параметры'}), 400
+
+
+@app.route('/admin/delete_user_car', methods=['POST'])
+def admin_delete_user_car():
+    if not is_admin():
+        return jsonify({'error': 'Доступ запрещён'}), 403
+    email = request.form.get('email')
+    car_name = request.form.get('car_name')
+    if email and car_name:
+        db_delete_car(email, car_name)
+        log_admin_action(session['user'], 'delete_car', email, f'Удаление авто: {car_name}')
+        return jsonify({'success': True})
+    return jsonify({'error': 'Неверные параметры'}), 400
+
+
+@app.route('/admin/block_user/<email>', methods=['POST'])
+def admin_block_user(email):
+    if not is_admin():
+        return jsonify({'error': 'Доступ запрещён'}), 403
+    if email == session['user']:
+        return jsonify({'error': 'Нельзя заблокировать себя'}), 400
+    try:
+        db_block_user(email)
+        log_admin_action(session['user'], 'block_user', email)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/unblock_user/<email>', methods=['POST'])
+def admin_unblock_user(email):
+    if not is_admin():
+        return jsonify({'error': 'Доступ запрещён'}), 403
+    try:
+        db_unblock_user(email)
+        log_admin_action(session['user'], 'unblock_user', email)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/restore_user/<email>', methods=['POST'])
+def admin_restore_user(email):
+    if not is_admin():
+        return jsonify({'error': 'Доступ запрещён'}), 403
+    try:
+        db_restore_user(email)
+        log_admin_action(session['user'], 'restore_user', email)
+        return jsonify({'success': True, 'message': 'Пользователь восстановлен'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ТОЧКА ВХОДА
 if __name__ == '__main__':
+    os.makedirs(os.path.join('static', 'uploads'), exist_ok=True)
+    os.makedirs(os.path.join('static', 'images'), exist_ok=True)
+
     if init_db_pool():
         create_tables()
-        print("\n" + "=" * 50)
-        print("  FullCalcPro запущен!")
-        print("  Открой в браузере: http://127.0.0.1:5000")
-        print("=" * 50 + "\n")
-        app.run(debug=False, host='127.0.0.1', port=5000)
+        if create_admin():
+            print("\n" + "=" * 60)
+            print("  FullCalcPro успешно запущен!")
+            print("  Открой в браузере: http://127.0.0.1:5000")
+            print(f"  Админ-панель: http://127.0.0.1:5000/admin")
+            print(f"  Логин админа: {ADMIN_CONFIG['email']}")
+            print(f"  Пароль админа: {ADMIN_CONFIG['password']}")
+            print("=" * 60 + "\n")
+            app.run(debug=True, host='127.0.0.1', port=5000)
+        else:
+            print("\n!!! ОШИБКА СОЗДАНИЯ АДМИНИСТРАТОРА !!!")
     else:
         print("\n!!! НЕ УДАЛОСЬ ПОДКЛЮЧИТЬСЯ К POSTGRESQL !!!")
-        print("Проверь DB_CONFIG в начале файла\n")
