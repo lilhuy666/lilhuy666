@@ -1,232 +1,150 @@
-from flask import Flask, request, redirect, url_for, session
-import psycopg2
-from psycopg2.extras import RealDictCursor
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    quantity INTEGER DEFAULT 0,
+    photo VARCHAR(500) DEFAULT '/static/default.jpg'
+);
+
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    customer_name VARCHAR(100) NOT NULL,
+    total DECIMAL(10,2) DEFAULT 0,
+    paid BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO products (name, price, quantity, photo) VALUES
+('Ноутбук', 59999.99, 10, 'https://picsum.photos/200/150?random=1'),
+('Смартфон', 34999.99, 15, 'https://picsum.photos/200/150?random=2'),
+('Наушники', 4999.99, 30, 'https://picsum.photos/200/150?random=3');
+
+
+
+from flask import Flask, render_template_string, request, redirect, session
+import psycopg2, random, string
 
 app = Flask(__name__)
-app.secret_key = 'exam2026'
+app.secret_key = 'secret'
 
-# ТВОИ НАСТРОЙКИ ПОДКЛЮЧЕНИЯ
-DB_CONFIG = {
-    'dbname': 'fuel_calc',
-    'user': 'postgres',
-    'password': '12345',
-    'host': 'localhost',
-    'port': 5432,
-}
+DB = {'dbname': 'shop', 'user': 'postgres', 'password': 'postgres', 'host': 'localhost'}
 
-def get_db():
-    return psycopg2.connect(**DB_CONFIG)
+def db(): return psycopg2.connect(**DB)
 
-# СОЗДАНИЕ БД
-def init():
-    conn = get_db()
+HTML = '''
+<!DOCTYPE html><html><head><title>Магазин</title>
+<style>
+body{font-family:Arial;max-width:800px;margin:0 auto;padding:20px}
+.product{border:1px solid #ddd;padding:10px;margin:10px 0;border-radius:5px}
+.product img{width:200px;height:150px;object-fit:cover}
+.btn{padding:8px 15px;border:none;border-radius:3px;cursor:pointer;color:white;text-decoration:none}
+.btn-add{background:#007bff}.btn-del{background:#dc3545}.btn-pay{background:#28a745}.btn-order{background:#ffc107;color:black}
+.cart-item{background:#f9f9f9;padding:10px;margin:5px 0;border-radius:5px;display:flex;justify-content:space-between}
+</style></head><body>
+<h1>🛒 Интернет-магазин</h1>
+{% if paid %}<div style="background:#d4edda;padding:15px;border-radius:5px"><h2>✅ Заказ #{{order_id}} оплачен!</h2><p>Чек отправлен на email</p><a href="/">В магазин</a></div>
+{% elif pay_page %}
+<h2>Оплата заказа #{{order_id}}</h2><p>Сумма: {{total}} ₽</p>
+<form method="POST" action="/pay">
+<input type="hidden" name="order_id" value="{{order_id}}">
+<input name="card" placeholder="Номер карты" required style="padding:10px;width:100%;margin:10px 0">
+<input name="cvv" placeholder="CVV" required style="padding:10px;width:100px;margin:10px 0">
+<button class="btn btn-pay">Оплатить {{total}} ₽</button>
+</form>
+{% else %}
+<h2>Товары</h2>
+{% for p in products %}<div class="product">
+<img src="{{p[4]}}" alt="{{p[1]}}" onerror="this.src='https://via.placeholder.com/200x150'">
+<h3>{{p[1]}}</h3><p>Цена: {{p[2]}} ₽ | В наличии: {{p[3]}} шт.</p>
+{% if p[3]>0 %}<form method="POST" action="/add"><input type="hidden" name="id" value="{{p[0]}}">
+<input name="qty" value="1" min="1" max="{{p[3]}}" style="width:50px">
+<button class="btn btn-add">В корзину</button></form>{% else %}<p style="color:red">Нет в наличии</p>{% endif %}
+</div>{% endfor %}
+
+{% if cart %}<h2>Корзина</h2>
+{% for item in cart %}<div class="cart-item">
+<span>{{item[1]}} x{{item[2]}} = {{item[2]*item[3]}} ₽</span>
+<a href="/del/{{loop.index0}}" class="btn btn-del">Удалить</a>
+</div>{% endfor %}
+<h3>Итого: {{total}} ₽</h3>
+<form method="POST" action="/order">
+<input name="name" placeholder="Ваше имя" required style="padding:10px;margin:10px 0">
+<button class="btn btn-order">Оформить заказ</button></form>{% endif %}
+{% endif %}</body></html>'''
+
+@app.route('/')
+def index():
+    conn = db()
     cur = conn.cursor()
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            login TEXT UNIQUE,
-            password TEXT,
-            role TEXT,
-            full_name TEXT
-        );
-        CREATE TABLE IF NOT EXISTS products (
-            id SERIAL PRIMARY KEY,
-            name TEXT,
-            price REAL,
-            quantity INTEGER,
-            discount REAL
-        );
-        DELETE FROM users;
-        INSERT INTO users (login, password, role, full_name) VALUES 
-            ('admin', '1', 'admin', 'Админ'),
-            ('manager', '1', 'manager', 'Менеджер'),
-            ('client', '1', 'client', 'Клиент');
-    ''')
-    conn.commit()
-    conn.close()
-    print("База данных готова!")
+    cur.execute("SELECT * FROM products WHERE quantity>0")
+    products = cur.fetchall()
+    cur.close(); conn.close()
+    cart = session.get('cart', [])
+    total = sum(i[2]*i[3] for i in cart)
+    return render_template_string(HTML, products=products, cart=cart, total=total, pay_page=False)
 
-# ЗАПУСК
-try:
-    init()
-except Exception as e:
-    print(f"Ошибка: {e}")
-    print("Проверьте: 1) PostgreSQL запущен 2) БД fuel_calc создана")
-
-@app.route('/', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        conn = get_db()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute('SELECT * FROM users WHERE login=%s AND password=%s', 
-                   (request.form['login'], request.form['password']))
-        user = cur.fetchone()
-        conn.close()
-        if user:
-            session['user_id'] = user['id']
-            session['role'] = user['role']
-            session['name'] = user['full_name']
-            return redirect('/products')
-        return 'Ошибка входа'
-    
-    return '''
-    <style>
-        body { font-family: Arial; margin: 50px; }
-        input { padding: 8px; margin: 5px; width: 200px; }
-        button { padding: 8px 20px; background: blue; color: white; border: none; cursor: pointer; }
-    </style>
-    <h2>Авторизация</h2>
-    <form method="POST">
-        <input name="login" placeholder="Логин" required><br>
-        <input name="password" type="password" placeholder="Пароль" required><br>
-        <button>Войти</button>
-    </form>
-    <p><strong>Тестовые:</strong> admin/1 | manager/1 | client/1</p>
-    <a href="/products">Войти как гость</a>
-    '''
-
-@app.route('/products')
-def products():
-    role = session.get('role', 'guest')
-    
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute('SELECT * FROM products')
-    items = cur.fetchall()
-    conn.close()
-    
-    for p in items:
-        p['final_price'] = round(p['price'] * (1 - p['discount']/100), 2)
-        p['class'] = ''
-        if p['discount'] > 15:
-            p['class'] = 'discount-high'
-        if p['quantity'] == 0:
-            p['class'] = 'out-of-stock'
-    
-    html = f'''
-    <style>
-        body {{ font-family: Arial; margin: 20px; }}
-        .discount-high {{ background: #2E8B57; color: white; }}
-        .out-of-stock {{ background: #add8e6; }}
-        .old-price {{ text-decoration: line-through; color: red; margin-right: 8px; }}
-        table {{ border-collapse: collapse; width: 100%; }}
-        th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
-        .btn {{ padding: 5px 10px; text-decoration: none; border-radius: 3px; }}
-        .edit {{ background: orange; color: black; }}
-        .delete {{ background: red; color: white; }}
-        .add {{ background: green; color: white; display: inline-block; margin: 10px 0; padding: 8px 15px; }}
-        .logout {{ float: right; }}
-    </style>
-    <div>
-        <strong>{session.get('name', 'Гость')} ({role})</strong>
-        <a href="/logout" class="logout">Выйти</a>
-    </div>
-    <h2>Товары</h2>
-    '''
-    
-    if role == 'admin':
-        html += '<a href="/add" class="add">+ Добавить товар</a>'
-    
-    html += '<table>'
-    html += '<tr><th>Название</th><th>Цена</th><th>Кол-во</th><th>Скидка</th>'
-    if role in ['admin', 'manager']:
-        html += '<th>Действия</th>'
-    html += '</tr>'
-    
-    for p in items:
-        if p['discount'] > 0:
-            price_html = f'<span class="old-price">{p["price"]}₽</span> {p["final_price"]}₽'
-        else:
-            price_html = f'{p["price"]}₽'
-        
-        html += f'<tr class="{p["class"]}">'
-        html += f'<td>{p["name"]}</td>'
-        html += f'<td>{price_html}</td>'
-        html += f'<td>{p["quantity"]}</td>'
-        html += f'<td>{p["discount"]}%</td>'
-        
-        if role == 'admin':
-            html += f'<td><a href="/edit/{p["id"]}" class="btn edit">Ред</a> <a href="/delete/{p["id"]}" class="btn delete" onclick="return confirm(\'Удалить?\')">Уд</a></td>'
-        elif role == 'manager':
-            html += '<td><span style="color:gray;">просмотр</span></td>'
-        html += '</tr>'
-    
-    html += '</table>'
-    return html
-
-@app.route('/add', methods=['GET', 'POST'])
+@app.route('/add', methods=['POST'])
 def add():
-    if session.get('role') != 'admin':
-        return redirect('/products')
-    
-    if request.method == 'POST':
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute('INSERT INTO products (name, price, quantity, discount) VALUES (%s,%s,%s,%s)',
-                   (request.form['name'], float(request.form['price']), 
-                    int(request.form['quantity']), float(request.form['discount'])))
-        conn.commit()
-        conn.close()
-        return redirect('/products')
-    
-    return '''
-    <form method="POST">
-        <input name="name" placeholder="Название" required><br>
-        <input name="price" type="number" step="0.01" placeholder="Цена" required><br>
-        <input name="quantity" type="number" placeholder="Количество" required><br>
-        <input name="discount" type="number" step="0.1" placeholder="Скидка %"><br>
-        <button>Сохранить</button>
-    </form>
-    <a href="/products">Назад</a>
-    '''
-
-@app.route('/edit/<int:id>', methods=['GET', 'POST'])
-def edit(id):
-    if session.get('role') != 'admin':
-        return redirect('/products')
-    
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    
-    if request.method == 'POST':
-        cur.execute('UPDATE products SET name=%s, price=%s, quantity=%s, discount=%s WHERE id=%s',
-                   (request.form['name'], float(request.form['price']),
-                    int(request.form['quantity']), float(request.form['discount']), id))
-        conn.commit()
-        conn.close()
-        return redirect('/products')
-    
-    cur.execute('SELECT * FROM products WHERE id=%s', (id,))
-    p = cur.fetchone()
-    conn.close()
-    
-    return f'''
-    <form method="POST">
-        <input name="name" value="{p["name"]}" required><br>
-        <input name="price" type="number" step="0.01" value="{p["price"]}" required><br>
-        <input name="quantity" type="number" value="{p["quantity"]}" required><br>
-        <input name="discount" type="number" step="0.1" value="{p["discount"]}"><br>
-        <button>Сохранить</button>
-    </form>
-    <a href="/products">Назад</a>
-    '''
-
-@app.route('/delete/<int:id>')
-def delete(id):
-    if session.get('role') != 'admin':
-        return redirect('/products')
-    
-    conn = get_db()
+    pid = int(request.form['id'])
+    qty = int(request.form['qty'])
+    conn = db()
     cur = conn.cursor()
-    cur.execute('DELETE FROM products WHERE id=%s', (id,))
-    conn.commit()
-    conn.close()
-    return redirect('/products')
-
-@app.route('/logout')
-def logout():
-    session.clear()
+    cur.execute("SELECT id, name, price FROM products WHERE id=%s", (pid,))
+    p = cur.fetchone()
+    cur.close(); conn.close()
+    if p:
+        cart = session.get('cart', [])
+        for i in cart:
+            if i[0]==p[0]: i[2]+=qty; session['cart']=cart; return redirect('/')
+        cart.append([p[0], p[1], qty, p[2]])
+        session['cart'] = cart
     return redirect('/')
+
+@app.route('/del/<int:idx>')
+def delete(idx):
+    cart = session.get('cart', [])
+    if idx < len(cart): cart.pop(idx); session['cart']=cart
+    return redirect('/')
+
+@app.route('/order', methods=['POST'])
+def order():
+    cart = session.get('cart', [])
+    if not cart: return redirect('/')
+    total = sum(i[2]*i[3] for i in cart)
+    name = request.form['name']
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (customer_name, total) VALUES (%s,%s) RETURNING id", (name, total))
+    oid = cur.fetchone()[0]
+    for i in cart:
+        cur.execute("UPDATE products SET quantity=quantity-%s WHERE id=%s", (i[2], i[0]))
+    conn.commit()
+    cur.close(); conn.close()
+    session['cart'] = []
+    return redirect(f'/pay/{oid}')
+
+@app.route('/pay/<int:oid>')
+def pay_page(oid):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM orders WHERE id=%s", (oid,))
+    order = cur.fetchone()
+    cur.close(); conn.close()
+    if order:
+        return render_template_string(HTML, pay_page=True, order_id=oid, total=order[2])
+    return redirect('/')
+
+@app.route('/pay', methods=['POST'])
+def pay():
+    oid = request.form['order_id']
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("UPDATE orders SET paid=TRUE WHERE id=%s", (oid,))
+    conn.commit()
+    cur.execute("SELECT total FROM orders WHERE id=%s", (oid,))
+    total = cur.fetchone()[0]
+    cur.close(); conn.close()
+    return render_template_string(HTML, paid=True, order_id=oid, total=total)
 
 if __name__ == '__main__':
     app.run(debug=True)
