@@ -14,6 +14,7 @@ DB_CONFIG = {
     'user': 'root',             # имя пользователя MySQL
     'password': '12345',        # твой пароль MySQL (ОБЯЗАТЕЛЬНО ПОМЕНЯЙ!)
     'database': 'mydb',         # название базы данных
+    'port': 3306,               # порт (ОБЯЗАТЕЛЬНО ЧИСЛО, не строка!)
     'charset': 'utf8mb4',       # кодировка
     'cursorclass': pymysql.cursors.Cursor
 }
@@ -39,16 +40,33 @@ def create_connection():
     """
     try:
         print("🔄 Подключение к MySQL...")
-        conn = pymysql.connect(**DB_CONFIG)
+        print(f"   Хост: {DB_CONFIG['host']}:{DB_CONFIG['port']}")
+        print(f"   База данных: {DB_CONFIG['database']}")
+        
+        # ВАЖНО: port должен быть числом!
+        conn = pymysql.connect(
+            host=DB_CONFIG['host'],
+            user=DB_CONFIG['user'],
+            password=DB_CONFIG['password'],
+            database=DB_CONFIG['database'],
+            port=DB_CONFIG['port'],              # ← число, не строка!
+            charset=DB_CONFIG['charset'],
+            cursorclass=DB_CONFIG['cursorclass']
+        )
+        
         print("✅ Успешное подключение к MySQL!")
         return conn
+        
     except pymysql.Error as e:
         print(f"❌ Ошибка подключения: {e}")
         print("\n📋 ВОЗМОЖНЫЕ ПРИЧИНЫ:")
         print("1. MySQL сервер не запущен")
         print("2. Неправильный пароль")
         print("3. База данных не существует")
-        print("4. Порт занят другой программой")
+        print("4. Порт заблокирован или занят")
+        return None
+    except Exception as e:
+        print(f"❌ Непредвиденная ошибка: {e}")
         return None
 
 def create_database(cursor):
@@ -175,7 +193,7 @@ def show_all_users(cursor):
         # Данные
         for user in users:
             print(f"{user[0]:<5} {user[1]:<20} {user[2]:<18} {user[3]:<22} "
-                  f"{user[4]:<8} {user[5]:<15} {user[6]}")
+                  f"{user[4] if user[4] else 'N/A':<8} {user[5] if user[5] else 'N/A':<15} {user[6]}")
             
         print(f"\n📊 Всего пользователей: {len(users)}")
         
@@ -343,7 +361,7 @@ def delete_user(cursor):
         # Подтверждение
         confirm = input(f"⚠️ Вы уверены, что хотите удалить '{user[0]}'? (да/нет): ").strip().lower()
         
-        if confirm in ['да', 'yes', 'y']:
+        if confirm in ['да', 'yes', 'y', 'д', 'lf']:
             cursor.execute("DELETE FROM users WHERE id = %s", (int(user_id),))
             print(f"✅ Пользователь '{user[0]}' удален!")
         else:
@@ -385,7 +403,10 @@ def show_statistics(cursor):
         top_city = cursor.fetchone()
         
         print(f"👥 Всего пользователей: {user_count}")
-        print(f"🎂 Средний возраст: {avg_age:.1f} лет" if avg_age else "🎂 Средний возраст: нет данных")
+        if avg_age:
+            print(f"🎂 Средний возраст: {avg_age:.1f} лет")
+        else:
+            print("🎂 Средний возраст: нет данных")
         print(f"🏙️ Количество городов: {city_count}")
         if top_city:
             print(f"🌟 Самый популярный город: {top_city[0]} ({top_city[1]} чел.)")
@@ -446,6 +467,7 @@ def main():
     if conn is None:
         print("\n❌ Не удалось подключиться к базе данных.")
         print("Проверьте настройки в DB_CONFIG и запустите MySQL сервер.")
+        input("\nНажмите Enter для выхода...")
         sys.exit(1)
     
     cursor = conn.cursor()
