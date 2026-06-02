@@ -1,5 +1,5 @@
 1 Модуль: отредактируй таблицы, импартируй их, нарисуй бд, напиши отчёт(сохранять в пдф). 
-Алгоритм разработки приложения:
+Алгоритм разработки приложения(сохрани в пдф):
                                                                 Начало (в овале)
                                                                 Анализ требований и документов предоставленных заказчиком, для проектирования и создания БД(в прямоугольнику)
                                                                 Проектирование ER диаграммы в 3 НФ (в прямоугольнике)
@@ -68,5 +68,94 @@
         <Label x:Name="LoginInfo" Grid.Row="0" Style="{StaticResource MainLbl}" Margin="715,33,25,96" Width="400"/>
         <Label Content="000 Обувь" Grid.Row="0" FontSize="40" FontWeight="Bold" FontFamily="Times New Roman" Margin="180,54,675,35"/>
         <Frame x:Name="DesktopFrame" Grid.Row="1" NavigationUIVisibility="Hidden" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+    </Grid>
+</Window>
+
+
+
+
+Код с окном входа в систему:
+<Window x:Class="WpfApp1.Windows.Desktop"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="ООО Обувь" 
+        MinHeight="900" MinWidth="1140" 
+        MaxHeight="900" MaxWidth="1140" 
+        Icon="/WpfApp1;component/Windows/Icon.png" 
+        WindowStartupLocation="CenterScreen">
+
+    <Grid>
+        <!-- 1. ОПРЕДЕЛЕНИЕ СТРОК ДЛЯ ГЛАВНОЙ СЕТКИ -->
+        <Grid.RowDefinitions>
+            <RowDefinition Height="159*"/>
+            <!-- Для верхней панели -->
+            <RowDefinition Height="725*"/>
+            <!-- Для зоны входа и фрейма -->
+        </Grid.RowDefinitions>
+
+        <!-- Верхняя часть (Логотип, кнопки, информация) -->
+        <Grid Grid.Row="0">
+            <Image Source="/WpfApp1;component/Resources/Icon.JPG" Stretch="Fill" Margin="23,6,966,17"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                <Button x:Name="BackBtn" Content="Назад" Click="BackBtn_Click" Style="{StaticResource MainBtn}" Margin="0,102,25,27" Width="200"/>
+                <Button x:Name="ToDesktopBtn" Content="На главную" Click="ToDesktopBtn_Click" Style="{StaticResource MainBtn}" Margin="25,102,25,27" Width="200"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <Label x:Name="LoginInfo" Style="{StaticResource MainLbl}" Margin="715,33,25,96" Width="400"/>
+                <Label Content="ООО Обувь" FontSize="40" FontWeight="Bold" FontFamily="Times New Roman" Margin="180,54,675,35"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Нижняя часть (Зона входа или основной фрейм) -->
+        <Grid Grid.Row="1">
+            <!-- Зона входа в систему (по умолчанию видима) -->
+            <Border x:Name="LoginZone"
+                    Background="#AAFFFFFF"
+                    CornerRadius="15"
+                    Padding="30"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center">
+
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="Выполнение входа в систему"
+                               FontSize="24"
+                               FontWeight="Bold"
+                               Margin="0,0,0,20"
+                               HorizontalAlignment="Center"/>
+
+                    <Label Content="Логин:" Margin="0,10,0,5"/>
+                    <TextBox x:Name="LoginBox" Width="300" Height="35" Margin="0,0,0,15"/>
+
+                    <Label Content="Пароль:" Margin="0,10,0,5"/>
+                    <PasswordBox x:Name="PasswordBox" Width="300" Height="35" Margin="0,0,0,25"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="LoginBtn"
+                                Content="Войти"
+                                Width="120"
+                                Height="40"
+                                Margin="0,0,15,0"
+                                Click="LoginBtn_Click"/>
+                        <Button x:Name="GuestBtn"
+                                Content="Войти как гость"
+                                Width="180"
+                                Height="40"
+                                Click="GuestBtn_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Основной фрейм приложения (по умолчанию скрыт) -->
+            <Frame x:Name="DesktopFrame"
+                   NavigationUIVisibility="Hidden"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Center"
+                   Visibility="Collapsed"/>
+        </Grid>
     </Grid>
 </Window>
