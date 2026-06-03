@@ -19,6 +19,64 @@
                                                                 
                 
 2 Модуль: 
+
+Структура базы данных
+1. PickupPoints (Пункты выдачи)
+
+PickupPointId (первичный ключ)
+Address
+2. Users (Пользователи)
+
+UserId (первичный ключ)
+RoleId (ссылка на роль)
+UserName
+Login
+Password
+3. Roles (Роли)
+
+RoleId (первичный ключ)
+Name
+4. Orders (Заказы)
+
+OrderId (первичный ключ)
+OrderDate
+PickupPointId (ссылка на пункт выдачи)
+UserId (ссылка на пользователя)
+Code
+Status
+5. OrderDetails (Детали заказа)
+
+OrderDetailsId (первичный ключ)
+OrderId (ссылка на заказ)
+ProductId (ссылка на товар)
+Quantity
+6. Suppliers (Поставщики)
+
+SupplierId (первичный ключ)
+Name
+7. Manufacturers (Производители)
+
+ManufacturerId (первичный ключ)
+Name
+8. Categories (Категории)
+
+CategoryId (первичный ключ)
+Name
+9. Products (Товары)
+
+ProductId (первичный ключ)
+Article
+Title
+Units
+Price
+SupplierId (ссылка на поставщика)
+ManufacturerId (ссылка на производителя)
+CategoryId (ссылка на категорию)
+Discount
+Quantity
+Description
+Photo
+
 1.Удали маин виндоус, создай папки Codes, Pages, Resources, Windows. В папке Windows создай окно Desktop. Импартируй рисунки из задания в парку Resources.
 Выдели экран приловения и в свойствах замени иконку.
 Код для App: 
